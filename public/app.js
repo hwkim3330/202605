@@ -138,8 +138,8 @@ function renderPackets() {
   document.querySelectorAll('[data-packet-index]').forEach((row) => {
     row.addEventListener('click', () => {
       const packet = state.packets[Number(row.dataset.packetIndex)];
-      $('decoded').textContent = JSON.stringify(packet.decoded, null, 2);
-      $('hexdump').textContent = packet.hexdump || '';
+      $('captureDecoded').textContent = JSON.stringify(packet.decoded, null, 2);
+      $('captureHexdump').textContent = packet.hexdump || '';
     });
   });
 }
@@ -318,8 +318,11 @@ async function capture() {
   state.packets = frames;
   renderPackets();
   if (frames[0]) {
-    $('decoded').textContent = JSON.stringify(frames[0].decoded, null, 2);
-    $('hexdump').textContent = frames[0].hexdump || '';
+    $('captureDecoded').textContent = JSON.stringify(frames[0].decoded, null, 2);
+    $('captureHexdump').textContent = frames[0].hexdump || '';
+  } else {
+    $('captureDecoded').textContent = '';
+    $('captureHexdump').textContent = '';
   }
   setStatus(`Capture complete: ${frames.length} frame(s)`);
 }
@@ -348,6 +351,16 @@ async function scan() {
 
 document.querySelectorAll('[data-example]').forEach((button) => {
   button.addEventListener('click', () => setProfile(state.examples[button.dataset.example]));
+});
+
+document.querySelectorAll('[data-view]').forEach((button) => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('[data-view]').forEach((item) => item.classList.remove('active'));
+    document.querySelectorAll('.roleView').forEach((view) => view.classList.remove('active'));
+    button.classList.add('active');
+    $(button.dataset.view).classList.add('active');
+    if (button.dataset.view === 'discoveryView') renderTopology();
+  });
 });
 
 $('refreshInterfaces').addEventListener('click', () => loadInterfaces().catch((err) => {

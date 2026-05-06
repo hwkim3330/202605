@@ -23,10 +23,11 @@
       </header>
 
       <section class="toolbar">
-        <button id="capture" class="primaryAction">Start Capture</button>
-        <button id="send">Send Packet</button>
-        <button id="build">Preview Frame</button>
-        <button id="scan">Discover</button>
+        <div class="modeTabs">
+          <button class="modeTab active" data-view="senderView">Sender</button>
+          <button class="modeTab" data-view="captureView">Capture</button>
+          <button class="modeTab" data-view="discoveryView">Discovery</button>
+        </div>
         <div class="toolbarField">
           <span>Interface</span>
           <select id="interfaceSelect"></select>
@@ -34,127 +35,143 @@
         <div id="interfaceInfo" class="muted"></div>
       </section>
 
-      <section class="workspace wireshark">
-        <aside class="sidebar">
-          <h2>Interface</h2>
-          <div class="interfaceBox">
-            <div id="selectedInterfaceName">-</div>
-            <div id="selectedInterfaceMac" class="muted">-</div>
-          </div>
+      <section class="workspace">
+        <section id="senderView" class="roleView active">
+          <aside class="sidebar">
+            <h2>Selected Interface</h2>
+            <div class="interfaceBox">
+              <div id="selectedInterfaceName">-</div>
+              <div id="selectedInterfaceMac" class="muted">-</div>
+            </div>
 
-          <h2>Packet Template</h2>
-          <div class="buttonRow">
-            <button data-example="udp">UDP</button>
-            <button data-example="icmp">ICMP</button>
-            <button data-example="arp">ARP</button>
-          </div>
-          <label>
-            Protocol
-            <select id="protocol">
-              <option value="udp">UDP over IPv4</option>
-              <option value="icmp">ICMP Echo</option>
-              <option value="arp">ARP</option>
-              <option value="raw">Raw EtherType</option>
-            </select>
-          </label>
-          <label>
-            Destination MAC
-            <input id="dstMac" autocomplete="off">
-          </label>
-          <label>
-            Source MAC
-            <input id="srcMac" autocomplete="off">
-          </label>
-          <label>
-            Source IP
-            <input id="srcIp" autocomplete="off">
-          </label>
-          <label>
-            Destination IP
-            <input id="dstIp" autocomplete="off">
-          </label>
-          <div class="grid2">
+            <h2>Packet Template</h2>
+            <div class="buttonRow">
+              <button data-example="udp">UDP</button>
+              <button data-example="icmp">ICMP</button>
+              <button data-example="arp">ARP</button>
+            </div>
             <label>
-              Source Port
-              <input id="srcPort" type="number" min="1" max="65535">
+              Protocol
+              <select id="protocol">
+                <option value="udp">UDP over IPv4</option>
+                <option value="icmp">ICMP Echo</option>
+                <option value="arp">ARP</option>
+                <option value="raw">Raw EtherType</option>
+              </select>
             </label>
             <label>
-              Dest Port
-              <input id="dstPort" type="number" min="1" max="65535">
-            </label>
-          </div>
-          <label class="check">
-            <input id="vlanEnabled" type="checkbox">
-            <span>802.1Q VLAN</span>
-          </label>
-          <div class="grid2">
-            <label>
-              VLAN ID
-              <input id="vlanId" type="number" min="0" max="4095">
+              Destination MAC
+              <input id="dstMac" autocomplete="off">
             </label>
             <label>
-              Priority
-              <input id="vlanPriority" type="number" min="0" max="7">
-            </label>
-          </div>
-          <label>
-            Payload
-            <textarea id="payload" rows="5"></textarea>
-          </label>
-          <div class="grid2">
-            <label>
-              Count
-              <input id="count" type="number" min="1">
+              Source MAC
+              <input id="srcMac" autocomplete="off">
             </label>
             <label>
-              Interval ms
-              <input id="intervalMs" type="number" min="0">
+              Source IP
+              <input id="srcIp" autocomplete="off">
             </label>
-          </div>
+            <label>
+              Destination IP
+              <input id="dstIp" autocomplete="off">
+            </label>
+            <div class="grid2">
+              <label>
+                Source Port
+                <input id="srcPort" type="number" min="1" max="65535">
+              </label>
+              <label>
+                Dest Port
+                <input id="dstPort" type="number" min="1" max="65535">
+              </label>
+            </div>
+            <label class="check">
+              <input id="vlanEnabled" type="checkbox">
+              <span>802.1Q VLAN</span>
+            </label>
+            <div class="grid2">
+              <label>
+                VLAN ID
+                <input id="vlanId" type="number" min="0" max="4095">
+              </label>
+              <label>
+                Priority
+                <input id="vlanPriority" type="number" min="0" max="7">
+              </label>
+            </div>
+            <label>
+              Payload
+              <textarea id="payload" rows="5"></textarea>
+            </label>
+            <div class="grid2">
+              <label>
+                Count
+                <input id="count" type="number" min="1">
+              </label>
+              <label>
+                Interval ms
+                <input id="intervalMs" type="number" min="0">
+              </label>
+            </div>
+          </aside>
 
-          <h2>Capture Filter</h2>
-          <label>
-            Source MAC filter
-            <input id="captureSrcMac" autocomplete="off" placeholder="optional">
-          </label>
-          <label>
-            Destination MAC filter
-            <input id="captureDstMac" autocomplete="off" placeholder="optional">
-          </label>
-          <div class="grid2">
-            <label>
-              EtherType
-              <input id="captureEtherType" autocomplete="off" placeholder="0x0800">
-            </label>
-            <label>
-              Timeout sec
-              <input id="captureTimeout" type="number" min="1" value="10">
-            </label>
-          </div>
-          <label>
-            Max frames
-            <input id="captureMaxFrames" type="number" min="1" value="30">
-          </label>
+          <section class="workPane">
+            <div class="heroStrip senderStrip">
+              <div>
+                <strong>Sender</strong>
+                <span>Craft and transmit Ethernet II frames from the selected interface.</span>
+              </div>
+              <div class="heroActions">
+                <button id="send" class="primaryAction">Send Packet</button>
+                <button id="build">Preview Frame</button>
+              </div>
+            </div>
+            <section class="detailGrid tall">
+              <div class="detailPane">
+                <div class="sectionTitle">Frame Details</div>
+                <pre id="decoded"></pre>
+              </div>
+              <div class="detailPane">
+                <div class="sectionTitle">Frame Bytes</div>
+                <pre id="hexdump"></pre>
+              </div>
+            </section>
+          </section>
+        </section>
 
-          <h2>ARP Discovery</h2>
-          <label>
-            CIDR
-            <input id="scanCidr" autocomplete="off" placeholder="169.254.0.0/16">
-          </label>
-          <div class="grid2">
+        <section id="captureView" class="roleView">
+          <aside class="sidebar">
+            <h2>Capture Filter</h2>
             <label>
-              Timeout sec
-              <input id="scanTimeout" type="number" min="1" value="3">
+              Source MAC filter
+              <input id="captureSrcMac" autocomplete="off" placeholder="optional">
             </label>
             <label>
-              Max hosts
-              <input id="scanMaxHosts" type="number" min="1" max="4096" value="512">
+              Destination MAC filter
+              <input id="captureDstMac" autocomplete="off" placeholder="optional">
             </label>
-          </div>
-        </aside>
+            <div class="grid2">
+              <label>
+                EtherType
+                <input id="captureEtherType" autocomplete="off" placeholder="0x0800">
+              </label>
+              <label>
+                Timeout sec
+                <input id="captureTimeout" type="number" min="1" value="10">
+              </label>
+            </div>
+            <label>
+              Max frames
+              <input id="captureMaxFrames" type="number" min="1" value="30">
+            </label>
+            <button id="capture" class="primaryAction fullWidth">Start Capture</button>
+          </aside>
 
-        <section class="packetArea">
-          <section class="upperGrid">
+          <section class="workPane packetArea">
+            <div class="heroStrip captureStrip">
+              <strong>Capture</strong>
+              <span>Receive frames, inspect decoded fields, and compare raw bytes.</span>
+            </div>
             <div class="packetList">
               <div class="sectionTitle">Packet List</div>
               <table>
@@ -174,21 +191,48 @@
                 </tbody>
               </table>
             </div>
+            <section class="detailGrid">
+              <div class="detailPane">
+                <div class="sectionTitle">Packet Details</div>
+                <pre id="captureDecoded"></pre>
+              </div>
+              <div class="detailPane">
+                <div class="sectionTitle">Packet Bytes</div>
+                <pre id="captureHexdump"></pre>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section id="discoveryView" class="roleView">
+          <aside class="sidebar">
+            <h2>ARP Discovery</h2>
+            <label>
+              CIDR
+              <input id="scanCidr" autocomplete="off" placeholder="169.254.5.0/24">
+            </label>
+            <div class="grid2">
+              <label>
+                Timeout sec
+                <input id="scanTimeout" type="number" min="1" value="3">
+              </label>
+              <label>
+                Max hosts
+                <input id="scanMaxHosts" type="number" min="1" max="4096" value="512">
+              </label>
+            </div>
+            <button id="scan" class="primaryAction fullWidth">Discover Hosts</button>
+          </aside>
+
+          <section class="workPane discoveryPane">
+            <div class="heroStrip discoveryStrip">
+              <strong>Discovery</strong>
+              <span>Find ARP neighbors on the selected Ethernet segment.</span>
+            </div>
             <div class="topologyPane">
               <div class="sectionTitle">Discovery Map</div>
               <svg id="topology" role="img" aria-label="ARP discovery topology"></svg>
               <div id="scanResults" class="scanResults">No scan results yet</div>
-            </div>
-          </section>
-
-          <section class="detailGrid">
-            <div class="detailPane">
-              <div class="sectionTitle">Packet Details</div>
-              <pre id="decoded"></pre>
-            </div>
-            <div class="detailPane">
-              <div class="sectionTitle">Packet Bytes</div>
-              <pre id="hexdump"></pre>
             </div>
           </section>
         </section>

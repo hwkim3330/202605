@@ -111,14 +111,12 @@ textarea {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-  gap: 16px;
   padding: 16px;
   min-height: 0;
 }
 
 .sidebar,
+.workPane,
 .packetArea,
 .packetList,
 .topologyPane,
@@ -193,13 +191,33 @@ label textarea {
   background: #f8fafb;
 }
 
-.toolbar .primaryAction {
+.primaryAction {
   background: #14532d;
   border-color: #14532d;
 }
 
-.toolbar .primaryAction:hover {
+.primaryAction:hover {
   background: #0f3f22;
+}
+
+.modeTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 6px;
+  min-width: 370px;
+}
+
+.modeTab {
+  background: #ffffff;
+  color: #284253;
+  border-color: var(--line);
+}
+
+.modeTab:hover,
+.modeTab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
 }
 
 .toolbarField {
@@ -227,7 +245,7 @@ label textarea {
 
 .packetArea {
   display: grid;
-  grid-template-rows: minmax(280px, 1fr) minmax(240px, 0.95fr);
+  grid-template-rows: auto minmax(260px, 1fr) minmax(240px, 0.95fr);
   gap: 12px;
   min-height: 0;
   padding: 12px;
@@ -294,6 +312,94 @@ tbody tr:hover {
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
   gap: 12px;
   min-height: 0;
+}
+
+.detailGrid.tall {
+  height: calc(100vh - 250px);
+}
+
+.roleView {
+  display: none;
+  grid-template-columns: minmax(310px, 390px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.roleView.active {
+  display: grid;
+}
+
+.workPane {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+}
+
+.discoveryPane {
+  grid-template-rows: auto minmax(420px, 1fr);
+}
+
+.discoveryPane .topologyPane {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.discoveryPane #topology {
+  height: auto;
+  min-height: 420px;
+}
+
+.heroStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #233441;
+  background: #f8fafb;
+}
+
+.heroStrip strong {
+  display: block;
+  font-size: 18px;
+}
+
+.heroStrip span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.heroActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.senderStrip {
+  border-left: 5px solid var(--accent);
+}
+
+.captureStrip {
+  border-left: 5px solid #14532d;
+}
+
+.discoveryStrip {
+  border-left: 5px solid #b7791f;
+}
+
+.actionStack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.fullWidth {
+  width: 100%;
 }
 
 .split {
@@ -408,8 +514,7 @@ pre {
 }
 
 @media (max-width: 900px) {
-  .workspace,
-  .upperGrid,
+  .roleView,
   .detailGrid {
     grid-template-columns: 1fr;
   }
@@ -434,6 +539,17 @@ pre {
   .toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .heroStrip,
+  .heroActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modeTabs {
+    min-width: 0;
+    grid-template-columns: 1fr;
   }
 
   .topActions {

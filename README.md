@@ -71,14 +71,20 @@ http://169.254.5.7:8080
 
 ## Lab Flow
 
-1. Select the test interface.
-2. On the receiver PC, press `Start Capture`.
-3. On the sender PC, choose UDP, ICMP, or ARP.
-4. Set destination MAC/IP and payload.
-5. Press `Send Packet`.
-6. Use `Discover` to find ARP neighbors on the selected link.
+The UI is split into three work modes:
 
-`Preview Frame` only generates and decodes the frame locally. It does not transmit anything.
+- `Sender`: choose UDP, ICMP, ARP, or raw EtherType, then press `Send Packet`.
+- `Capture`: set optional MAC/EtherType filters, then press `Start Capture`.
+- `Discovery`: run ARP discovery and view discovered hosts on the D3 map.
+
+Typical two-PC flow:
+
+1. Select the test interface on both PCs.
+2. On the receiver PC, open `Capture` and press `Start Capture`.
+3. On the sender PC, open `Sender`, set destination MAC/IP and payload, then press `Send Packet`.
+4. Open `Discovery` when you need to confirm which hosts are visible on the link.
+
+`Preview Frame` only generates and decodes the frame locally in the `Sender` view. It does not transmit anything.
 
 ## Verification
 
