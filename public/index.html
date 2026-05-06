@@ -35,9 +35,32 @@
         <div id="interfaceInfo" class="muted"></div>
       </section>
 
-      <section class="nodeNotice">
-        <strong>Local node control</strong>
-        <span>Install and run this app on both PCs. This browser controls only the interfaces on the PC running this server.</span>
+      <section class="linkStrip">
+        <div class="linkSide localSide">
+          <div class="linkLabel">This PC <span class="roleTag" id="localRoleTag">SENDER</span></div>
+          <div class="linkLine">
+            <span id="localIfName" class="strong">-</span>
+            <span id="localIp" class="muted">-</span>
+          </div>
+          <div class="linkLine">
+            <code id="localMac" class="mac">--:--:--:--:--:--</code>
+          </div>
+        </div>
+        <div class="linkArrow" id="linkArrow" title="Click to swap roles">⇄</div>
+        <div class="linkSide peerSide">
+          <div class="linkLabel">Peer PC <span class="roleTag" id="peerRoleTag">RECEIVER</span></div>
+          <div class="linkInputs">
+            <input id="peerUrlPin" placeholder="http://169.254.x.x:8080" autocomplete="off">
+            <select id="peerInterfacePin"><option value="">probe peer first</option></select>
+            <button id="peerProbeBtn" class="ghostBtn" title="Probe peer interfaces">Probe</button>
+          </div>
+          <div class="linkLine">
+            <span id="peerIfName" class="strong">-</span>
+            <span id="peerIp" class="muted">-</span>
+            <code id="peerMac" class="mac">--:--:--:--:--:--</code>
+            <button id="useMacBtn" class="ghostBtn small" title="Fill Sender's destination MAC/IP from peer">Lock to Peer</button>
+          </div>
+        </div>
       </section>
 
       <section class="workspace">
@@ -241,25 +264,28 @@
         <section id="controlView" class="roleView controlView">
           <aside class="sidebar">
             <div class="interfaceBox">
-              <div>Local Node</div>
-              <div class="muted">This server controls this PC only.</div>
+              <div>Sender / Receiver pair (auto-filled from pinned Peer above)</div>
+              <div class="muted">Click ⇄ in the link strip to swap roles.</div>
             </div>
-            <label>
-              Sender Node URL
-              <input id="senderNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
-            </label>
-            <label>
-              Sender Interface
-              <select id="senderNodeInterface"></select>
-            </label>
-            <label>
-              Receiver Node URL
-              <input id="receiverNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
-            </label>
-            <label>
-              Receiver Interface
-              <select id="receiverNodeInterface"></select>
-            </label>
+            <details>
+              <summary class="advancedSummary">Manual override</summary>
+              <label>
+                Sender Node URL
+                <input id="senderNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
+              </label>
+              <label>
+                Sender Interface
+                <select id="senderNodeInterface"></select>
+              </label>
+              <label>
+                Receiver Node URL
+                <input id="receiverNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
+              </label>
+              <label>
+                Receiver Interface
+                <select id="receiverNodeInterface"></select>
+              </label>
+            </details>
             <button id="probeNodes" class="fullWidth">Probe Nodes</button>
             <button id="runE2E" class="primaryAction fullWidth">Run E2E Test</button>
             <button id="runReport" class="primaryAction fullWidth">Run Validation Report</button>

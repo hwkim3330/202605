@@ -9,7 +9,14 @@ const state = {
   nodes: {
     sender: null,
     receiver: null
-  }
+  },
+  peer: {
+    url: localStorage.getItem('peerUrl') || '',
+    interface: localStorage.getItem('peerInterface') || '',
+    interfaces: [],
+    iface: null
+  },
+  localRole: localStorage.getItem('localRole') || 'sender'
 };
 
 function setStatus(message, isError = false) {
@@ -503,9 +510,119 @@ $('runSweep').addEventListener('click', () => runSweep().catch((err) => {
 $('senderNodeInterface').addEventListener('change', renderNodeGrid);
 $('receiverNodeInterface').addEventListener('change', renderNodeGrid);
 
+function localIface() {
+  return state.interfaces.find((i) => i.name === $('interfaceSelect').value) || null;
+}
+
+function renderLinkStrip() {
+  const local = localIface();
+  if (local) {
+    $('localIfName').textContent = local.name;
+    $('localIp').textContent = local.ipv4?.[0]?.local || '';
+    $('localMac').textContent = local.mac;
+  }
+  const peer = state.peer.iface;
+  if (peer) {
+    $('peerIfName').textContent = peer.name;
+    $('peerIp').textContent = peer.ipv4?.[0]?.local || '';
+    $('peerMac').textContent = peer.mac;
+  } else {
+    $('peerIfName').textContent = state.peer.url ? '(probe to load)' : '-';
+    $('peerIp').textContent = '';
+    $('peerMac').textContent = '--:--:--:--:--:--';
+  }
+  const localTag = state.localRole === 'sender' ? 'SENDER' : 'RECEIVER';
+  const peerTag = state.localRole === 'sender' ? 'RECEIVER' : 'SENDER';
+  $('localRoleTag').textContent = localTag;
+  $('peerRoleTag').textContent = peerTag;
+  syncControlFromPeer();
+}
+
+function syncControlFromPeer() {
+  const localUrl = window.location.origin;
+  const peerUrl = state.peer.url;
+  const localIfName = $('interfaceSelect').value;
+  const peerIfName = state.peer.iface?.name || state.peer.interface || '';
+  if (state.localRole === 'sender') {
+    $('senderNodeUrl').value = localUrl;
+    $('receiverNodeUrl').value = peerUrl;
+  } else {
+    $('senderNodeUrl').value = peerUrl;
+    $('receiverNodeUrl').value = localUrl;
+  }
+  if (state.nodes.sender) {
+    renderInterfaceOptions('senderNodeInterface', state.nodes.sender.interfaces);
+    $('senderNodeInterface').value = state.localRole === 'sender' ? localIfName : peerIfName;
+  }
+  if (state.nodes.receiver) {
+    renderInterfaceOptions('receiverNodeInterface', state.nodes.receiver.interfaces);
+    $('receiverNodeInterface').value = state.localRole === 'sender' ? peerIfName : localIfName;
+  }
+  renderNodeGrid();
+}
+
+async function probePeer() {
+  const url = $('peerUrlPin').value.trim();
+  if (!url) { alert('peer URL is required'); return; }
+  setStatus('Probing peer...');
+  state.peer.url = url;
+  localStorage.setItem('peerUrl', url);
+  const result = await api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url }) });
+  state.peer.interfaces = result.interfaces;
+  const sel = $('peerInterfacePin');
+  const sorted = [...result.interfaces].sort((a, b) => {
+    const score = (i) => (i.name === 'lo' ? 20 : i.name.startsWith('docker') ? 15 : i.state === 'up' ? 0 : 10);
+    return score(a) - score(b);
+  });
+  sel.innerHTML = sorted.map((i) => {
+    const ip = i.ipv4?.[0]?.local || '';
+    return `<option value="${i.name}">${i.name} (${i.state})${ip ? ' - ' + ip : ''}</option>`;
+  }).join('');
+  if (state.peer.interface && sorted.find((i) => i.name === state.peer.interface)) {
+    sel.value = state.peer.interface;
+  }
+  state.peer.iface = sorted.find((i) => i.name === sel.value) || null;
+  if (state.localRole === 'sender') state.nodes.receiver = { url, interfaces: result.interfaces };
+  else state.nodes.sender = { url, interfaces: result.interfaces };
+  renderLinkStrip();
+  setStatus(`Peer probed: ${result.interfaces.length} interfaces`);
+}
+
+function lockToPeer() {
+  const peer = state.peer.iface;
+  if (!peer) { alert('probe peer first'); return; }
+  if (state.localRole === 'sender') {
+    $('dstMac').value = peer.mac;
+    if (peer.ipv4?.[0]?.local) $('dstIp').value = peer.ipv4[0].local;
+    $('captureSrcMac').value = peer.mac;
+    setStatus(`Locked: dst MAC = ${peer.mac}`);
+  } else {
+    $('captureSrcMac').value = peer.mac;
+    setStatus(`Locked: capture src MAC filter = ${peer.mac}`);
+  }
+}
+
+$('peerProbeBtn').addEventListener('click', () => probePeer().catch((err) => { setStatus(err.message, true); alert(err.message); }));
+$('peerInterfacePin').addEventListener('change', () => {
+  state.peer.interface = $('peerInterfacePin').value;
+  state.peer.iface = state.peer.interfaces.find((i) => i.name === state.peer.interface) || null;
+  localStorage.setItem('peerInterface', state.peer.interface);
+  renderLinkStrip();
+});
+$('linkArrow').addEventListener('click', () => {
+  state.localRole = state.localRole === 'sender' ? 'receiver' : 'sender';
+  localStorage.setItem('localRole', state.localRole);
+  renderLinkStrip();
+});
+$('useMacBtn').addEventListener('click', lockToPeer);
+$('interfaceSelect').addEventListener('change', renderLinkStrip);
+
 await loadExamples();
 await loadInterfaces();
 $('senderNodeUrl').value = window.location.origin;
 $('receiverNodeUrl').value = '';
+$('peerUrlPin').value = state.peer.url;
+renderLinkStrip();
+if (state.peer.url) probePeer().catch(() => {});
 await build();
 renderPackets();

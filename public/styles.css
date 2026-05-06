@@ -210,6 +210,159 @@ label textarea {
   color: #6f5a2a;
 }
 
+.linkStrip {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #f0f7f8 0%, #e6eff1 100%);
+}
+
+.linkSide {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border: 1px solid #c7d3da;
+  border-radius: 10px;
+  background: #ffffff;
+  min-width: 0;
+}
+
+.linkSide.localSide {
+  border-left: 4px solid #0f6f78;
+}
+
+.linkSide.peerSide {
+  border-left: 4px solid #b9651a;
+}
+
+.linkLabel {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roleTag {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #0f6f78;
+  color: #fff;
+  font-weight: 700;
+}
+
+.peerSide .roleTag {
+  background: #b9651a;
+}
+
+.linkLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.linkLine .strong {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.linkLine .muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.linkInputs {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 1fr) auto;
+  gap: 6px;
+}
+
+.linkInputs input,
+.linkInputs select {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.mac {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: #eef5f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #14323a;
+  letter-spacing: 0.02em;
+}
+
+.linkArrow {
+  font-size: 28px;
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+  padding: 0 6px;
+  transition: transform 0.15s;
+}
+
+.linkArrow:hover {
+  transform: scale(1.15);
+  color: var(--accent-strong);
+}
+
+.ghostBtn {
+  background: #ffffff;
+  color: var(--accent);
+  border-color: var(--accent);
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ghostBtn:hover {
+  background: var(--soft);
+  color: var(--accent-strong);
+}
+
+.ghostBtn.small {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.advancedSummary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 6px 0 4px;
+  user-select: none;
+}
+
+.advancedSummary:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 880px) {
+  .linkStrip {
+    grid-template-columns: 1fr;
+  }
+  .linkArrow {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+}
+
 .primaryAction {
   background: #14532d;
   border-color: #14532d;
