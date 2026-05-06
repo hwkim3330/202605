@@ -1,0 +1,16 @@
+{
+  "name": "Periodic Jitter 500 us",
+  "category": "8 TSN",
+  "priority": 24,
+  "description": "Sub-millisecond periodic stream (500 us, 2000 packets) with PCP 7 to evaluate TSN jitter and PSFP gating timing.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 42000, "dstPort": 50000 },
+  "payload": { "mode": "benchmark", "size": 80, "start": 1 },
+  "count": 2000,
+  "intervalMs": 0.5,
+  "vlan": { "enabled": true, "id": 10, "priority": 7 }
+}

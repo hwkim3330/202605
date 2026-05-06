@@ -446,6 +446,60 @@ $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
+
+async function runBenchmark() {
+  setStatus('Running benchmark...');
+  const result = await api('/api/benchmark', {
+    method: 'POST',
+    body: JSON.stringify({
+      senderUrl: $('senderNodeUrl').value,
+      receiverUrl: $('receiverNodeUrl').value,
+      senderInterface: $('senderNodeInterface').value,
+      receiverInterface: $('receiverNodeInterface').value,
+      profile: getProfile(),
+      count: Number($('benchCount').value || 500),
+      intervalMs: Number($('benchInterval').value || 1),
+      payloadSize: Number($('benchPayloadSize').value || 64)
+    })
+  });
+  const s = result.report.stats;
+  $('reportSummary').innerHTML = `
+    <div><span>Sent</span><strong>${s.txCount}</strong></div>
+    <div><span>Recv</span><strong>${s.rxCount}</strong></div>
+    <div><span>Loss</span><strong>${s.lossPct.toFixed(2)}%</strong></div>
+    <div><span>Tx Mbps</span><strong>${s.throughputMbps.toFixed(2)}</strong></div>
+    <div><span>Lat p95 µs</span><strong>${(s.latencyUs.p95||0).toFixed(1)}</strong></div>
+    <div><span>Jitter µs</span><strong>${(s.jitterUs.mean||0).toFixed(2)}</strong></div>
+  `;
+  setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`);
+  window.open('/reports/benchmark-latest.html', '_blank');
+}
+
+async function runSweep() {
+  setStatus('Running frame-size sweep (this can take a while)...');
+  const result = await api('/api/sweep', {
+    method: 'POST',
+    body: JSON.stringify({
+      senderUrl: $('senderNodeUrl').value,
+      receiverUrl: $('receiverNodeUrl').value,
+      senderInterface: $('senderNodeInterface').value,
+      receiverInterface: $('receiverNodeInterface').value,
+      count: Number($('benchCount').value || 200),
+      intervalMs: Number($('benchInterval').value || 1)
+    })
+  });
+  setStatus(`Sweep done: ${result.report.results.length} sizes`);
+  window.open('/reports/sweep-latest.html', '_blank');
+}
+
+$('runBenchmark').addEventListener('click', () => runBenchmark().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('runSweep').addEventListener('click', () => runSweep().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
 $('senderNodeInterface').addEventListener('change', renderNodeGrid);
 $('receiverNodeInterface').addEventListener('change', renderNodeGrid);
 

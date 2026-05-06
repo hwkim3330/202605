@@ -24,7 +24,7 @@ If PC B opens `http://PC_A_IP:8080`, it controls PC A's NICs, not PC B's NICs.
 - Linux `AF_PACKET` raw-socket send/capture engine.
 - Ethernet II, 802.1Q VLAN, IPv4, UDP, ICMP Echo, and ARP.
 - Wireshark-style packet list, decode panel, and hex panel.
-- 21 built-in test profiles:
+- 27 built-in test profiles:
   - ARP, ICMP, UDP
   - sequence payload
   - AA55 and counter payload patterns
@@ -32,6 +32,10 @@ If PC B opens `http://PC_A_IP:8080`, it controls PC A's NICs, not PC B's NICs.
   - VLAN 10 PCP 0/7 and VLAN 20 isolation
   - unknown unicast, multicast, ACL candidate
   - periodic UDP and PSFP Stream A/B candidates
+  - latency benchmark, sub-ms periodic jitter, mixed-PCP burst, MTU edge, broadcast storm guard
+- Performance benchmark mode: embedded sequence + tx timestamp in the UDP payload, capture records ns-precision rx timestamps, and the server computes per-packet latency, inter-arrival, jitter, loss, and throughput.
+- Frame-size sweep that runs the benchmark across 64..1514 B and produces a Chart.js report (throughput, loss, latency p95, jitter vs frame size).
+- HTML benchmark report with latency CDF, latency-per-packet line, inter-arrival timeline, and latency histogram (Chart.js).
 
 ## Install
 

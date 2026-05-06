@@ -390,6 +390,296 @@ async function runE2ETest(reqBody) {
   return report;
 }
 
+function percentile(sorted, p) {
+  if (!sorted.length) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))));
+  return sorted[idx];
+}
+
+function summarize(arr) {
+  if (!arr.length) return { count: 0 };
+  const sorted = [...arr].sort((a, b) => a - b);
+  const sum = sorted.reduce((s, v) => s + v, 0);
+  const mean = sum / sorted.length;
+  const variance = sorted.reduce((s, v) => s + (v - mean) ** 2, 0) / sorted.length;
+  return {
+    count: sorted.length,
+    min: sorted[0],
+    max: sorted[sorted.length - 1],
+    mean,
+    stddev: Math.sqrt(variance),
+    p50: percentile(sorted, 50),
+    p95: percentile(sorted, 95),
+    p99: percentile(sorted, 99)
+  };
+}
+
+function analyzeBenchmark(txRecords, frames, sentBytes, elapsedSec) {
+  const txBySeq = new Map();
+  for (const rec of txRecords) txBySeq.set(rec.seq, rec);
+  const matched = [];
+  const rxByCapture = [];
+  for (const frame of frames) {
+    const bench = frame.decoded?.benchmark;
+    if (!bench) continue;
+    rxByCapture.push(frame);
+    const tx = txBySeq.get(bench.seq);
+    if (!tx) continue;
+    matched.push({
+      seq: bench.seq,
+      txTimestampNs: tx.txTimestampNs,
+      rxTimestampNs: frame.rxTimestampNs,
+      latencyNs: frame.rxTimestampNs - tx.txTimestampNs,
+      length: frame.length
+    });
+  }
+  matched.sort((a, b) => a.seq - b.seq);
+  const latenciesUs = matched.map((m) => m.latencyNs / 1000);
+  const minLat = latenciesUs.length ? Math.min(...latenciesUs) : 0;
+  const adjustedUs = latenciesUs.map((v) => v - minLat);
+  const interArrivalUs = [];
+  for (let i = 1; i < matched.length; i += 1) {
+    interArrivalUs.push((matched[i].rxTimestampNs - matched[i - 1].rxTimestampNs) / 1000);
+  }
+  const jitterUs = [];
+  for (let i = 1; i < latenciesUs.length; i += 1) {
+    jitterUs.push(Math.abs(latenciesUs[i] - latenciesUs[i - 1]));
+  }
+  const txCount = txRecords.length;
+  const rxCount = matched.length;
+  const lossPct = txCount ? ((txCount - rxCount) / txCount) * 100 : 0;
+  const throughputMbps = elapsedSec > 0 ? (sentBytes * 8) / (elapsedSec * 1e6) : 0;
+  return {
+    txCount,
+    rxCount,
+    lossPct,
+    elapsedSec,
+    sentBytes,
+    throughputMbps,
+    rxThroughputMbps: elapsedSec > 0
+      ? (matched.reduce((s, m) => s + m.length, 0) * 8) / (elapsedSec * 1e6)
+      : 0,
+    latencyUs: summarize(latenciesUs),
+    latencyAdjustedUs: summarize(adjustedUs),
+    interArrivalUs: summarize(interArrivalUs),
+    jitterUs: summarize(jitterUs),
+    samples: matched.slice(0, 5000),
+    interArrivalSamples: interArrivalUs.slice(0, 5000),
+    capturedTotal: rxByCapture.length
+  };
+}
+
+function benchmarkReportHtml(report) {
+  const seqLabels = report.stats.samples.map((s) => s.seq);
+  const latencies = report.stats.samples.map((s) => (s.latencyNs / 1000).toFixed(3));
+  const adjusted = (() => {
+    const min = Math.min(...report.stats.samples.map((s) => s.latencyNs)) || 0;
+    return report.stats.samples.map((s) => ((s.latencyNs - min) / 1000).toFixed(3));
+  })();
+  const interArrival = report.stats.interArrivalSamples.map((v) => v.toFixed(3));
+  const cdfSorted = [...report.stats.samples.map((s) => s.latencyNs / 1000)].sort((a, b) => a - b);
+  const cdfPoints = cdfSorted.map((v, i) => ({ x: v, y: ((i + 1) / cdfSorted.length) * 100 }));
+  const fmt = (v, d = 2) => (typeof v === 'number' ? v.toFixed(d) : '-');
+  const s = report.stats;
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Ethernet Packet Lab Benchmark</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+body{margin:24px;font:14px/1.45 system-ui,sans-serif;color:#17202a;}
+h1{margin:0 0 4px}
+.meta{color:#62707f;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:12px 0}
+.box{border:1px solid #d2dae3;border-radius:8px;padding:10px 14px}
+.box span{color:#62707f;font-size:12px}
+.box strong{display:block;font-size:22px;margin-top:2px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.chartCard{border:1px solid #d2dae3;border-radius:10px;padding:12px;background:#fff}
+.chartCard h3{margin:0 0 8px;font-size:14px}
+canvas{max-height:280px}
+table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}
+th,td{border-bottom:1px solid #e2e8f0;padding:6px;text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{background:#eef5f6}
+@media(max-width:900px){.charts{grid-template-columns:1fr}}
+</style></head><body>
+<h1>Ethernet Packet Lab Benchmark</h1>
+<div class="meta">Generated ${escapeHtml(report.generatedAt)} — Profile: ${escapeHtml(report.profileName)}</div>
+<div class="meta">Sender ${escapeHtml(report.sender.url)}/${escapeHtml(report.sender.interface)} → Receiver ${escapeHtml(report.receiver.url)}/${escapeHtml(report.receiver.interface)}</div>
+<div class="grid">
+  <div class="box"><span>Sent</span><strong>${s.txCount}</strong></div>
+  <div class="box"><span>Received</span><strong>${s.rxCount}</strong></div>
+  <div class="box"><span>Loss</span><strong>${fmt(s.lossPct, 2)}%</strong></div>
+  <div class="box"><span>Tx Throughput</span><strong>${fmt(s.throughputMbps)} Mbps</strong></div>
+  <div class="box"><span>Rx Throughput</span><strong>${fmt(s.rxThroughputMbps)} Mbps</strong></div>
+  <div class="box"><span>Latency p50</span><strong>${fmt(s.latencyUs.p50)} µs</strong></div>
+  <div class="box"><span>Latency p95</span><strong>${fmt(s.latencyUs.p95)} µs</strong></div>
+  <div class="box"><span>Latency p99</span><strong>${fmt(s.latencyUs.p99)} µs</strong></div>
+  <div class="box"><span>Jitter (mean |Δlat|)</span><strong>${fmt(s.jitterUs.mean)} µs</strong></div>
+  <div class="box"><span>Inter-arrival σ</span><strong>${fmt(s.interArrivalUs.stddev)} µs</strong></div>
+</div>
+<div class="charts">
+  <div class="chartCard"><h3>Latency per packet (µs, clock-skew adjusted)</h3><canvas id="latChart"></canvas></div>
+  <div class="chartCard"><h3>Latency CDF (µs)</h3><canvas id="cdfChart"></canvas></div>
+  <div class="chartCard"><h3>Inter-arrival time (µs)</h3><canvas id="iaChart"></canvas></div>
+  <div class="chartCard"><h3>Latency histogram</h3><canvas id="histChart"></canvas></div>
+</div>
+<h3>Statistics summary</h3>
+<table><thead><tr><th>Metric</th><th>min</th><th>p50</th><th>mean</th><th>p95</th><th>p99</th><th>max</th><th>σ</th></tr></thead>
+<tbody>
+<tr><td>Latency µs</td><td>${fmt(s.latencyUs.min)}</td><td>${fmt(s.latencyUs.p50)}</td><td>${fmt(s.latencyUs.mean)}</td><td>${fmt(s.latencyUs.p95)}</td><td>${fmt(s.latencyUs.p99)}</td><td>${fmt(s.latencyUs.max)}</td><td>${fmt(s.latencyUs.stddev)}</td></tr>
+<tr><td>Inter-arrival µs</td><td>${fmt(s.interArrivalUs.min)}</td><td>${fmt(s.interArrivalUs.p50)}</td><td>${fmt(s.interArrivalUs.mean)}</td><td>${fmt(s.interArrivalUs.p95)}</td><td>${fmt(s.interArrivalUs.p99)}</td><td>${fmt(s.interArrivalUs.max)}</td><td>${fmt(s.interArrivalUs.stddev)}</td></tr>
+<tr><td>|Δlatency| µs</td><td>${fmt(s.jitterUs.min)}</td><td>${fmt(s.jitterUs.p50)}</td><td>${fmt(s.jitterUs.mean)}</td><td>${fmt(s.jitterUs.p95)}</td><td>${fmt(s.jitterUs.p99)}</td><td>${fmt(s.jitterUs.max)}</td><td>${fmt(s.jitterUs.stddev)}</td></tr>
+</tbody></table>
+<script>
+const seqLabels = ${JSON.stringify(seqLabels)};
+const adjusted = ${JSON.stringify(adjusted)}.map(Number);
+const interArrival = ${JSON.stringify(interArrival)}.map(Number);
+const cdfPoints = ${JSON.stringify(cdfPoints)};
+const lineOpts = { responsive:true, animation:false, plugins:{legend:{display:false}}, scales:{x:{ticks:{maxTicksLimit:10}}}};
+new Chart(document.getElementById('latChart'), { type:'line', data:{labels:seqLabels, datasets:[{data:adjusted, borderColor:'#0ea5e9', borderWidth:1, pointRadius:0}]}, options:lineOpts });
+new Chart(document.getElementById('iaChart'), { type:'line', data:{labels:seqLabels.slice(1), datasets:[{data:interArrival, borderColor:'#16a34a', borderWidth:1, pointRadius:0}]}, options:lineOpts });
+new Chart(document.getElementById('cdfChart'), { type:'line', data:{datasets:[{data:cdfPoints, parsing:false, borderColor:'#7c3aed', borderWidth:1.5, pointRadius:0, showLine:true}]}, options:{responsive:true, animation:false, plugins:{legend:{display:false}}, scales:{x:{type:'linear', title:{display:true,text:'latency µs'}}, y:{min:0,max:100, title:{display:true,text:'percentile %'}}}}});
+const lat = adjusted.slice();
+const bins = 30;
+const minV = Math.min(...lat), maxV = Math.max(...lat);
+const step = (maxV - minV) / bins || 1;
+const histLabels = [], histCounts = new Array(bins).fill(0);
+for (let i=0;i<bins;i++) histLabels.push((minV + i*step).toFixed(1));
+for (const v of lat) { let i = Math.min(bins-1, Math.floor((v-minV)/step)); histCounts[i]++; }
+new Chart(document.getElementById('histChart'), { type:'bar', data:{labels:histLabels, datasets:[{data:histCounts, backgroundColor:'#f59e0b'}]}, options:{responsive:true, animation:false, plugins:{legend:{display:false}}}});
+</script>
+</body></html>`;
+}
+
+async function runBenchmark(reqBody) {
+  const senderUrl = normalizeBaseUrl(reqBody.senderUrl);
+  const receiverUrl = normalizeBaseUrl(reqBody.receiverUrl);
+  const baseProfile = reqBody.profile;
+  if (!baseProfile) throw new Error('profile is required');
+
+  const [senderInfo, receiverInfo] = await Promise.all([
+    remoteJson(senderUrl, '/api/interfaces'),
+    remoteJson(receiverUrl, '/api/interfaces')
+  ]);
+  const senderIface = selectInterface(senderInfo.stdout?.interfaces || [], reqBody.senderInterface);
+  const receiverIface = selectInterface(receiverInfo.stdout?.interfaces || [], reqBody.receiverInterface);
+
+  const profile = profileForE2E(baseProfile, senderIface, receiverIface);
+  const count = Number(reqBody.count || profile.count || 500);
+  const intervalMs = Number(reqBody.intervalMs ?? profile.intervalMs ?? 1);
+  profile.count = count;
+  profile.intervalMs = intervalMs;
+  profile.recordTimestamps = true;
+  profile.payload = { mode: 'benchmark', size: Number(reqBody.payloadSize || profile.payload?.size || 64), start: 1 };
+
+  const captureTimeoutSec = Number(reqBody.captureTimeoutSec || Math.max(8, Math.ceil((count * intervalMs) / 1000) + 5));
+  const captureBody = {
+    interface: receiverIface.name,
+    timeoutSec: captureTimeoutSec,
+    timeoutMs: captureTimeoutSec * 1000 + 5000,
+    maxFrames: count + 100,
+    srcMac: senderIface.mac
+  };
+
+  const capturePromise = remoteJson(receiverUrl, '/api/capture', { method: 'POST', body: captureBody });
+  await new Promise((resolve) => setTimeout(resolve, Number(reqBody.captureLeadMs || 800)));
+  const sendResult = await remoteJson(senderUrl, '/api/send', {
+    method: 'POST',
+    body: { ...profile, timeoutMs: captureTimeoutSec * 1000 + 10000 }
+  });
+  const captureResult = await capturePromise;
+
+  const txRecords = sendResult.stdout?.txRecords || [];
+  const frames = captureResult.stdout?.frames || [];
+  const elapsedSec = sendResult.stdout?.elapsedSec || (intervalMs * count) / 1000;
+  const sentBytes = sendResult.stdout?.bytesSent || 0;
+  const stats = analyzeBenchmark(txRecords, frames, sentBytes, elapsedSec);
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    profileName: baseProfile.name || 'benchmark',
+    sender: { url: senderUrl, interface: senderIface.name, mac: senderIface.mac, ip: firstIpv4(senderIface) },
+    receiver: { url: receiverUrl, interface: receiverIface.name, mac: receiverIface.mac, ip: firstIpv4(receiverIface) },
+    config: { count, intervalMs, payloadSize: profile.payload.size },
+    stats
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'benchmark-latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'benchmark-latest.html'), benchmarkReportHtml(report));
+  return report;
+}
+
+async function runFrameSizeSweep(reqBody) {
+  const sizes = reqBody.sizes || [64, 128, 256, 512, 1024, 1280, 1514];
+  const count = Number(reqBody.count || 200);
+  const intervalMs = Number(reqBody.intervalMs ?? 1);
+  const results = [];
+  for (const size of sizes) {
+    const profile = {
+      name: `Sweep ${size}B`,
+      protocol: 'udp',
+      udp: { srcPort: 40000, dstPort: 50000 },
+      ipv4: { ttl: 64 },
+      payload: { mode: 'benchmark', size: Math.max(32, size - 42), start: 1 },
+      targetFrameLength: size,
+      count,
+      intervalMs
+    };
+    const single = await runBenchmark({ ...reqBody, profile, count, intervalMs });
+    results.push({
+      size,
+      stats: {
+        txCount: single.stats.txCount,
+        rxCount: single.stats.rxCount,
+        lossPct: single.stats.lossPct,
+        throughputMbps: single.stats.throughputMbps,
+        rxThroughputMbps: single.stats.rxThroughputMbps,
+        latencyUs: single.stats.latencyUs,
+        jitterUs: single.stats.jitterUs
+      }
+    });
+  }
+  const report = {
+    generatedAt: new Date().toISOString(),
+    config: { count, intervalMs, sizes },
+    results
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'sweep-latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'sweep-latest.html'), sweepReportHtml(report));
+  return report;
+}
+
+function sweepReportHtml(report) {
+  const sizes = report.results.map((r) => r.size);
+  const tx = report.results.map((r) => r.stats.throughputMbps.toFixed(2));
+  const rx = report.results.map((r) => r.stats.rxThroughputMbps.toFixed(2));
+  const loss = report.results.map((r) => r.stats.lossPct.toFixed(2));
+  const p95 = report.results.map((r) => (r.stats.latencyUs.p95 || 0).toFixed(2));
+  const rows = report.results.map((r) => `<tr><td>${r.size}</td><td>${r.stats.txCount}</td><td>${r.stats.rxCount}</td><td>${r.stats.lossPct.toFixed(2)}%</td><td>${r.stats.throughputMbps.toFixed(2)}</td><td>${r.stats.rxThroughputMbps.toFixed(2)}</td><td>${(r.stats.latencyUs.p50||0).toFixed(2)}</td><td>${(r.stats.latencyUs.p95||0).toFixed(2)}</td><td>${(r.stats.jitterUs.mean||0).toFixed(2)}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Frame Size Sweep</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>body{margin:24px;font:14px/1.45 system-ui;color:#17202a}.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0}.chartCard{border:1px solid #d2dae3;border-radius:10px;padding:12px}canvas{max-height:280px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border-bottom:1px solid #e2e8f0;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef5f6}</style>
+</head><body>
+<h1>Frame Size Sweep</h1><div>${escapeHtml(report.generatedAt)} — count=${report.config.count}, interval=${report.config.intervalMs}ms</div>
+<div class="charts">
+<div class="chartCard"><h3>Throughput vs frame size</h3><canvas id="tp"></canvas></div>
+<div class="chartCard"><h3>Loss % vs frame size</h3><canvas id="loss"></canvas></div>
+<div class="chartCard"><h3>Latency p95 (µs)</h3><canvas id="lat"></canvas></div>
+<div class="chartCard"><h3>Jitter mean |Δlat| (µs)</h3><canvas id="jit"></canvas></div>
+</div>
+<table><thead><tr><th>Size</th><th>Tx</th><th>Rx</th><th>Loss</th><th>Tx Mbps</th><th>Rx Mbps</th><th>Lat p50µs</th><th>Lat p95µs</th><th>Jitter µs</th></tr></thead><tbody>${rows}</tbody></table>
+<script>
+const sizes=${JSON.stringify(sizes)};
+const opts={responsive:true,animation:false,plugins:{legend:{position:'bottom'}}};
+new Chart(document.getElementById('tp'),{type:'line',data:{labels:sizes,datasets:[{label:'Tx Mbps',data:${JSON.stringify(tx)}.map(Number),borderColor:'#0ea5e9'},{label:'Rx Mbps',data:${JSON.stringify(rx)}.map(Number),borderColor:'#16a34a'}]},options:opts});
+new Chart(document.getElementById('loss'),{type:'bar',data:{labels:sizes,datasets:[{label:'%',data:${JSON.stringify(loss)}.map(Number),backgroundColor:'#ef4444'}]},options:opts});
+new Chart(document.getElementById('lat'),{type:'line',data:{labels:sizes,datasets:[{label:'p95 µs',data:${JSON.stringify(p95)}.map(Number),borderColor:'#7c3aed'}]},options:opts});
+const jit=${JSON.stringify(report.results.map((r)=>(r.stats.jitterUs.mean||0).toFixed(2)))}.map(Number);
+new Chart(document.getElementById('jit'),{type:'line',data:{labels:sizes,datasets:[{label:'µs',data:jit,borderColor:'#f59e0b'}]},options:opts});
+</script></body></html>`;
+}
+
 async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/interfaces') {
@@ -416,6 +706,28 @@ async function handleApi(req, res) {
       const body = await readRequestJson(req);
       const info = await remoteJson(body.url, '/api/interfaces');
       return sendJson(res, 200, { ok: true, url: normalizeBaseUrl(body.url), interfaces: info.stdout?.interfaces || [] });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/benchmark') {
+      const body = await readRequestJson(req);
+      const report = await runBenchmark(body);
+      return sendJson(res, 200, {
+        ok: report.stats.rxCount > 0,
+        report,
+        html: '/reports/benchmark-latest.html',
+        json: '/reports/benchmark-latest.json'
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/sweep') {
+      const body = await readRequestJson(req);
+      const report = await runFrameSizeSweep(body);
+      return sendJson(res, 200, {
+        ok: true,
+        report,
+        html: '/reports/sweep-latest.html',
+        json: '/reports/sweep-latest.json'
+      });
     }
 
     if (req.method === 'POST' && req.url === '/api/e2e-test') {

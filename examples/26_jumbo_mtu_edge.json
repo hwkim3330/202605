@@ -1,0 +1,16 @@
+{
+  "name": "MTU Edge 1500",
+  "category": "3 Size Sweep",
+  "priority": 26,
+  "description": "Largest standard Ethernet payload at the 1500 MTU boundary (frame length 1514, no FCS). Verifies the link does not silently fragment or drop at the edge.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 44000, "dstPort": 50000 },
+  "payload": { "mode": "counter", "size": 1472 },
+  "targetFrameLength": 1514,
+  "count": 50,
+  "intervalMs": 5
+}

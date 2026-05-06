@@ -1,0 +1,15 @@
+{
+  "name": "Broadcast Storm Guard",
+  "category": "5 Switching",
+  "priority": 27,
+  "description": "Short broadcast burst to confirm the switch's storm-control / rate limit kicks in. Receiver should see the configured ceiling, not the full transmit rate.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "255.255.255.255", "ttl": 1 },
+  "udp": { "srcPort": 45000, "dstPort": 50000 },
+  "payload": { "mode": "benchmark", "size": 64, "start": 1 },
+  "count": 2000,
+  "intervalMs": 0
+}

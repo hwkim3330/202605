@@ -90,6 +90,14 @@ def payload_bytes(profile: dict[str, Any], sequence: int | None = None) -> bytes
         seq = int(payload.get("start", 1) if sequence is None else sequence)
         template = payload.get("template", "KETI_TEST_SEQ_{seq:06d}")
         return template.format(seq=seq, time=f"{time.time():.6f}").encode()
+    if mode == "benchmark":
+        size = int(payload.get("size", 64))
+        seq = int(payload.get("start", 1) if sequence is None else sequence)
+        ts_ns = time.time_ns()
+        header = b"KETI" + struct.pack("!IQ", seq & 0xFFFFFFFF, ts_ns & 0xFFFFFFFFFFFFFFFF)
+        if size <= len(header):
+            return header[:size]
+        return header + bytes(size - len(header))
     return str(payload.get("data", "ethernet-packet-lab")).encode()
 
 
@@ -234,6 +242,10 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
         if proto == IP_PROTO_UDP and len(frame) >= l4 + 8:
             src_port, dst_port, length, csum = struct.unpack("!HHHH", frame[l4 : l4 + 8])
             decoded["udp"] = {"srcPort": src_port, "dstPort": dst_port, "length": length, "checksum": f"0x{csum:04x}"}
+            udp_payload = frame[l4 + 8 : l4 + length] if length >= 8 else b""
+            if len(udp_payload) >= 16 and udp_payload[:4] == b"KETI":
+                seq, ts_ns = struct.unpack("!IQ", udp_payload[4:16])
+                decoded["benchmark"] = {"seq": seq, "txTimestampNs": ts_ns}
         elif proto == IP_PROTO_ICMP and len(frame) >= l4 + 8:
             typ, code, csum, ident, seq = struct.unpack("!BBHHH", frame[l4 : l4 + 8])
             decoded["icmp"] = {"type": typ, "code": code, "checksum": f"0x{csum:04x}", "id": ident, "seq": seq}
@@ -295,16 +307,25 @@ def command_send() -> None:
         sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         sock.bind((interface, 0))
         start = time.monotonic()
+        start_ns = time.time_ns()
         sent = 0
         decoded = None
         payload = profile.get("payload", {})
         seq_start = int(payload.get("start", 1)) if isinstance(payload, dict) else 1
+        tx_records = []
+        record_each = bool(profile.get("recordTimestamps")) or (
+            isinstance(payload, dict) and payload.get("mode") == "benchmark"
+        )
         for index in range(count):
             frame, decoded = build_frame(profile, seq_start + index)
+            tx_ns = time.time_ns()
             sent += sock.send(frame)
+            if record_each:
+                tx_records.append({"seq": seq_start + index, "txTimestampNs": tx_ns, "length": len(frame)})
             if interval_ms > 0 and index != count - 1:
                 time.sleep(interval_ms / 1000)
         elapsed = time.monotonic() - start
+        end_ns = time.time_ns()
     except PermissionError:
         fail("raw socket permission denied. Run the server/agent with sudo or CAP_NET_RAW.")
     except Exception as exc:
@@ -314,7 +335,16 @@ def command_send() -> None:
             sock.close()
         except Exception:
             pass
-    print(json.dumps({"ok": True, "framesSent": count, "bytesSent": sent, "elapsedSec": elapsed, "decoded": decoded}, ensure_ascii=False))
+    print(json.dumps({
+        "ok": True,
+        "framesSent": count,
+        "bytesSent": sent,
+        "elapsedSec": elapsed,
+        "startTimestampNs": start_ns,
+        "endTimestampNs": end_ns,
+        "decoded": decoded,
+        "txRecords": tx_records,
+    }, ensure_ascii=False))
 
 
 def command_capture() -> None:
@@ -338,6 +368,7 @@ def command_capture() -> None:
                 frame, addr = sock.recvfrom(65535)
             except socket.timeout:
                 continue
+            rx_ns = time.time_ns()
             decoded = decode_frame(frame)
             eth = decoded.get("ethernet", {})
             if ether_type_filter and eth.get("etherType") != ether_type_filter.lower():
@@ -347,7 +378,8 @@ def command_capture() -> None:
             if src_mac_filter and eth.get("srcMac", "").lower() != src_mac_filter:
                 continue
             frames.append({
-                "timestamp": time.time(),
+                "timestamp": rx_ns / 1e9,
+                "rxTimestampNs": rx_ns,
                 "interface": addr[0] if addr else interface,
                 "length": len(frame),
                 "frameHex": frame.hex(),

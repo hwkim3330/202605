@@ -263,8 +263,26 @@
             <button id="probeNodes" class="fullWidth">Probe Nodes</button>
             <button id="runE2E" class="primaryAction fullWidth">Run E2E Test</button>
             <button id="runReport" class="primaryAction fullWidth">Run Validation Report</button>
-            <a id="openReport" class="linkButton disabled" href="/reports/latest.html" target="_blank" rel="noreferrer">Open Latest Report</a>
+            <div class="grid2">
+              <label>
+                Bench Count
+                <input id="benchCount" type="number" min="10" value="500">
+              </label>
+              <label>
+                Bench Interval ms
+                <input id="benchInterval" type="number" min="0" step="0.1" value="1">
+              </label>
+            </div>
+            <label>
+              Bench Payload Size
+              <input id="benchPayloadSize" type="number" min="32" value="64">
+            </label>
+            <button id="runBenchmark" class="primaryAction fullWidth">Run Benchmark (latency/jitter)</button>
+            <button id="runSweep" class="primaryAction fullWidth">Run Frame-Size Sweep</button>
+            <a id="openReport" class="linkButton disabled" href="/reports/latest.html" target="_blank" rel="noreferrer">Open Validation Report</a>
             <a id="openE2EReport" class="linkButton disabled" href="/reports/e2e-latest.html" target="_blank" rel="noreferrer">Open E2E Report</a>
+            <a id="openBenchmark" class="linkButton" href="/reports/benchmark-latest.html" target="_blank" rel="noreferrer">Open Benchmark Report</a>
+            <a id="openSweep" class="linkButton" href="/reports/sweep-latest.html" target="_blank" rel="noreferrer">Open Sweep Report</a>
             <a id="openReportJson" class="linkButton disabled" href="/reports/latest.json" target="_blank" rel="noreferrer">Open JSON</a>
             <a id="openE2EJson" class="linkButton disabled" href="/reports/e2e-latest.json" target="_blank" rel="noreferrer">Open E2E JSON</a>
           </aside>

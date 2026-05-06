@@ -1,0 +1,17 @@
+{
+  "name": "Mixed PCP Burst (PCP 0)",
+  "category": "9 Performance",
+  "priority": 25,
+  "description": "Best-effort burst on VLAN 10 PCP 0. Combine with profile 24 on PCP 7 from a second sender to verify TSN strict priority / shaper isolates the high-priority stream.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 43000, "dstPort": 50000 },
+  "payload": { "mode": "benchmark", "size": 1400, "start": 1 },
+  "targetFrameLength": 1514,
+  "count": 5000,
+  "intervalMs": 0,
+  "vlan": { "enabled": true, "id": 10, "priority": 0 }
+}
