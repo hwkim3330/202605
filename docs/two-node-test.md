@@ -16,6 +16,7 @@ On both PCs:
 ```bash
 git clone https://github.com/hwkim3330/202605.git
 cd 202605
+./install-lab.sh
 ./run-lab.sh
 ```
 
@@ -38,6 +39,16 @@ Remote URL access is only for intentionally controlling a different lab PC:
 
 ```text
 http://<lab-pc-ip>:8080
+```
+
+## Update
+
+On both PCs:
+
+```bash
+cd 202605
+./update-lab.sh
+./run-lab.sh
 ```
 
 ## Receiver flow

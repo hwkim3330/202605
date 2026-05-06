@@ -34,6 +34,11 @@
         <div id="interfaceInfo" class="muted"></div>
       </section>
 
+      <section class="nodeNotice">
+        <strong>Local node control</strong>
+        <span>Install and run this app on both PCs. This browser controls only the interfaces on the PC running this server.</span>
+      </section>
+
       <section class="workspace">
         <section id="senderView" class="roleView active">
           <aside class="sidebar">
@@ -148,10 +153,10 @@
 
           <section class="workPane">
             <div class="heroStrip senderStrip">
-        <div>
-          <strong>Sender</strong>
-          <span>This controls the NICs on this server PC only. Run this app on both PCs for two-node tests.</span>
-        </div>
+              <div>
+                <strong>Sender</strong>
+                <span>Transmit crafted frames from this PC's selected interface.</span>
+              </div>
               <div class="heroActions">
                 <button id="send" class="primaryAction">Send Packet</button>
                 <button id="build">Preview Frame</button>

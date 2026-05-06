@@ -1,101 +1,92 @@
 # Ethernet Packet Lab
 
-KETI two-node Ethernet packet lab for direct cable or isolated switch tests.
+KETI two-node Ethernet packet lab for direct cable, FPGA, PHY, or isolated switch tests.
 
-The app provides a browser UI for packet transmit, receive capture, frame decode, and hex view. It is designed for Linux lab PCs where crafted Ethernet II frames need to be sent and observed between two machines.
+This tool is a functional packet generator and receiver. It is not a line-rate traffic generator. Use it to prove packet fields, forwarding, filtering, VLAN/PCP handling, payload integrity, and basic periodic traffic before moving to dedicated TSN/performance equipment.
 
-## What it does
+## Important Model
 
-- Sends Ethernet II frames from a selected NIC.
-- Captures received frames on a selected NIC.
-- Builds and decodes Ethernet, 802.1Q VLAN, IPv4, UDP, ICMP Echo, and ARP.
-- Shows packet list, protocol details, and hex bytes in a Wireshark-style layout.
-- Provides ready-to-run profiles for ARP, ICMP, UDP, payload patterns, size sweep, VLAN/PCP, switching, ACL, and TSN-prep traffic.
-- Works over normal LAN IPs or link-local addresses such as `169.254.x.x`.
+Install and run this repository on **both PCs**.
 
-## Architecture
+Each browser controls only the machine where its local Node/Python server is running:
 
-- `server.js`: Node.js web server and JSON API.
-- `tools/packet_agent.py`: Linux `AF_PACKET` raw-socket engine.
-- `public/`: browser UI and KETI logo.
-- `examples/`: editable packet profiles.
-- `docs/two-node-test.md`: two-PC test procedure.
-- `docs/packet-test-plan.md`: recommended validation order.
+```text
+PC A: ./run-lab.sh -> open http://localhost:8080 on PC A -> Sender
+PC B: ./run-lab.sh -> open http://localhost:8080 on PC B -> Capture
+```
 
-Node handles the UI and API. Python handles the privileged packet work. This avoids fragile Node native packet addons while still using Linux standard raw sockets.
+If PC B opens `http://PC_A_IP:8080`, it controls PC A's NICs, not PC B's NICs.
+
+## Features
+
+- Sender and Capture views.
+- Linux `AF_PACKET` raw-socket send/capture engine.
+- Ethernet II, 802.1Q VLAN, IPv4, UDP, ICMP Echo, and ARP.
+- Wireshark-style packet list, decode panel, and hex panel.
+- 21 built-in test profiles:
+  - ARP, ICMP, UDP
+  - sequence payload
+  - AA55 and counter payload patterns
+  - 64/128/256/512/1024/1514-byte frame-size tests
+  - VLAN 10 PCP 0/7 and VLAN 20 isolation
+  - unknown unicast, multicast, ACL candidate
+  - periodic UDP and PSFP Stream A/B candidates
 
 ## Install
+
+On both PCs:
 
 ```bash
 git clone https://github.com/hwkim3330/202605.git
 cd 202605
-npm install
+./install-lab.sh
 ```
 
 ## Run
 
-One-command lab start:
+On both PCs:
 
 ```bash
 ./run-lab.sh
 ```
 
-Frame preview also works as a normal user:
-
-```bash
-npm start
-```
-
-Actual send, capture, and discovery need raw-socket permission:
-
-```bash
-sudo env PATH="$PATH" npm start
-```
-
-If Node was installed with `nvm`, use the full PATH:
-
-```bash
-sudo env PATH="$HOME/.nvm/versions/node/v22.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" npm start
-```
-
-Open the UI:
+Open locally on each PC:
 
 ```text
 http://localhost:8080
 ```
 
-For two-PC tests, run this app on both PCs. Each browser controls only the machine where its Node/Python server is running:
+`run-lab.sh` uses `sudo` because raw Ethernet send/capture requires `CAP_NET_RAW`.
 
-```text
-PC A browser -> http://localhost:8080 on PC A
-PC B browser -> http://localhost:8080 on PC B
+## Update
+
+On both PCs:
+
+```bash
+cd 202605
+./update-lab.sh
 ```
 
-Opening `http://<other-pc-ip>:8080` from a remote browser does not control the remote browser's local NIC. It controls the NICs on the PC running that server. Use remote access only for observation or if you intentionally want to control that other PC.
+Then restart:
 
-If you need to access a headless lab PC from another machine, open that lab PC's server address:
-
-```text
-http://<lab-pc-ip>:8080
+```bash
+./run-lab.sh
 ```
 
-## Lab Flow
-
-The UI is split into two work modes:
-
-- `Sender`: choose UDP, ICMP, ARP, or raw EtherType, then press `Send Packet`.
-- `Capture`: set optional MAC/EtherType filters, then press `Start Capture`.
-
-Typical two-PC flow:
+## Two-PC Flow
 
 1. Start `./run-lab.sh` on PC A and PC B.
-2. On PC B, open PC B's own `http://localhost:8080`, then open `Capture` and press `Start Capture`.
-3. On PC A, open PC A's own `http://localhost:8080`, then open `Sender`, set destination MAC/IP and payload, then press `Send Packet`.
-4. Use ARP/ICMP/UDP profiles first, then move to payload, size, VLAN, PCP, and TSN-prep profiles.
+2. On PC B, open `http://localhost:8080`, select the test interface, open `Capture`, and press `Start Capture`.
+3. On PC A, open `http://localhost:8080`, select the test interface, open `Sender`, choose a test profile, and press `Send Packet`.
+4. Start with ARP, ICMP, and UDP. Then move to payload pattern, size sweep, VLAN/PCP, switching, policy, and TSN-prep profiles.
 
-`Preview Frame` only generates and decodes the frame locally in the `Sender` view. It does not transmit anything.
+`Preview Frame` only builds and decodes locally. It does not transmit.
 
-The built-in profiles follow this order:
+## Recommended Test Order
+
+See [docs/packet-test-plan.md](docs/packet-test-plan.md).
+
+Short version:
 
 1. Basic: ARP, ICMP, UDP
 2. Integrity: sequence, AA55, counter
@@ -103,24 +94,46 @@ The built-in profiles follow this order:
 4. VLAN/PCP: VLAN 10 PCP 0/7 and VLAN 20 isolation
 5. Switching/policy/TSN-prep candidates
 
-## Verification
+## Commands
+
+Run checks:
 
 ```bash
 npm run check
+```
+
+Build one example frame without root:
+
+```bash
 python3 tools/packet_agent.py build < examples/03_udp_unicast_basic.json
 ```
 
-API checks:
+Manual capture:
 
 ```bash
-curl http://127.0.0.1:8080/api/interfaces
-curl -X POST http://127.0.0.1:8080/api/build \
-  -H 'content-type: application/json' \
-  --data-binary @examples/03_udp_unicast_basic.json
+sudo python3 tools/packet_agent.py capture <<'JSON'
+{"interface":"eth0","timeoutSec":10,"maxFrames":10}
+JSON
 ```
+
+Manual send:
+
+```bash
+sudo python3 tools/packet_agent.py send < examples/03_udp_unicast_basic.json
+```
+
+## Architecture
+
+- `server.js`: Node.js web server and JSON API.
+- `tools/packet_agent.py`: Python raw-socket packet engine.
+- `public/`: browser UI and KETI logo.
+- `examples/`: test profiles.
+- `docs/`: operating and test-plan documentation.
+
+Node handles UI/API. Python handles privileged packet work. This avoids fragile Node native packet addons while using standard Linux raw sockets.
 
 ## Notes
 
-- Use this on an isolated lab interface.
-- Broadcast ARP and crafted VLAN traffic can affect other devices on the same segment.
-- AF_PACKET frames do not include Ethernet FCS. A `targetFrameLength` of 1514 corresponds to a 1518-byte untagged Ethernet frame on the wire including FCS.
+- Use an isolated lab interface.
+- Broadcast ARP, unknown unicast, multicast, and VLAN traffic can affect other devices on the same segment.
+- `AF_PACKET` frames do not include Ethernet FCS. A 1514-byte untagged frame here corresponds to 1518 bytes on the wire including FCS.
