@@ -1047,8 +1047,9 @@ async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/wire-validation') {
       const body = await readRequestJson(req);
       const report = await runWireValidation(body);
-      return sendJson(res, report.ok ? 200 : 400, {
-        ok: report.ok,
+      return sendJson(res, 200, {
+        ok: true,
+        validationOk: report.ok,
         report,
         html: '/reports/testcase-latest.html',
         json: '/reports/testcase-latest.json'
@@ -1086,8 +1087,9 @@ async function handleApi(req, res) {
     if (req.method === 'POST' && req.url === '/api/run-test-case') {
       const body = await readRequestJson(req);
       const report = await runTestCase(body);
-      return sendJson(res, report.ok ? 200 : 400, {
-        ok: report.ok,
+      return sendJson(res, 200, {
+        ok: true,
+        validationOk: report.ok,
         report,
         html: '/reports/testcase-latest.html',
         json: '/reports/testcase-latest.json'
