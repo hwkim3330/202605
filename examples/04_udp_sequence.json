@@ -1,0 +1,16 @@
+{
+  "name": "UDP Sequence",
+  "category": "2 Integrity",
+  "priority": 4,
+  "description": "Sequence payload for loss, duplicate, and ordering checks.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 50000, "dstPort": 50001 },
+  "payload": { "mode": "sequence", "template": "KETI_TEST_SEQ_{seq:06d},TIME={time}", "start": 1 },
+  "count": 10,
+  "intervalMs": 100,
+  "vlan": { "enabled": false, "id": 10, "priority": 0 }
+}

@@ -119,7 +119,6 @@ textarea {
 .workPane,
 .packetArea,
 .packetList,
-.topologyPane,
 .detailPane {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -202,9 +201,9 @@ label textarea {
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
   gap: 6px;
-  min-width: 370px;
+  min-width: 260px;
 }
 
 .modeTab {
@@ -259,7 +258,6 @@ label textarea {
 }
 
 .packetList,
-.topologyPane,
 .detailPane {
   min-height: 0;
   overflow: hidden;
@@ -336,20 +334,6 @@ tbody tr:hover {
   padding: 12px;
 }
 
-.discoveryPane {
-  grid-template-rows: auto minmax(420px, 1fr);
-}
-
-.discoveryPane .topologyPane {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-}
-
-.discoveryPane #topology {
-  height: auto;
-  min-height: 420px;
-}
-
 .heroStrip {
   display: flex;
   align-items: center;
@@ -385,10 +369,6 @@ tbody tr:hover {
 
 .captureStrip {
   border-left: 5px solid #14532d;
-}
-
-.discoveryStrip {
-  border-left: 5px solid #b7791f;
 }
 
 .actionStack {
@@ -455,46 +435,19 @@ pre {
   min-height: 20px;
 }
 
+.profileDescription {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafb;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 .captures {
   display: grid;
   gap: 10px;
   margin-top: 8px;
-}
-
-#topology {
-  width: 100%;
-  height: 260px;
-  display: block;
-  background:
-    linear-gradient(#f7fafb 1px, transparent 1px),
-    linear-gradient(90deg, #f7fafb 1px, transparent 1px),
-    #ffffff;
-  background-size: 24px 24px;
-}
-
-.scanResults {
-  border-top: 1px solid var(--line);
-  padding: 8px 10px;
-  color: var(--muted);
-  max-height: 150px;
-  overflow: auto;
-  font-size: 13px;
-}
-
-.scanResults .host {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  border-bottom: 1px solid #edf1f4;
-  padding: 5px 0;
-}
-
-.nodeLabel {
-  font: 12px system-ui, sans-serif;
-  fill: #243442;
-  paint-order: stroke;
-  stroke: #fff;
-  stroke-width: 3px;
 }
 
 .captureItem {

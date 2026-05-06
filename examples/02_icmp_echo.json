@@ -1,0 +1,16 @@
+{
+  "name": "ICMP Echo",
+  "category": "1 Basic",
+  "priority": 2,
+  "description": "ICMP Echo Request for basic IPv4 reachability.",
+  "interface": "eth0",
+  "protocol": "icmp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "icmp": { "type": 8, "code": 0, "id": 8230, "seq": 1 },
+  "payload": { "mode": "text", "data": "KETI_ICMP_ECHO" },
+  "count": 1,
+  "intervalMs": 1000,
+  "vlan": { "enabled": false, "id": 10, "priority": 0 }
+}

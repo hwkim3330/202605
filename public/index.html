@@ -13,7 +13,7 @@
           <img src="/keti.png" alt="KETI">
           <div>
             <h1>Ethernet Packet Lab</h1>
-            <p>Packet sender, receiver, and ARP discovery for lab links</p>
+            <p>Packet sender and receiver for Ethernet lab links</p>
           </div>
         </div>
         <div class="topActions">
@@ -26,7 +26,6 @@
         <div class="modeTabs">
           <button class="modeTab active" data-view="senderView">Sender</button>
           <button class="modeTab" data-view="captureView">Capture</button>
-          <button class="modeTab" data-view="discoveryView">Discovery</button>
         </div>
         <div class="toolbarField">
           <span>Interface</span>
@@ -50,6 +49,11 @@
               <button data-example="icmp">ICMP</button>
               <button data-example="arp">ARP</button>
             </div>
+            <label>
+              Test Profile
+              <select id="profileSelect"></select>
+            </label>
+            <div id="profileDescription" class="profileDescription">-</div>
             <label>
               Protocol
               <select id="protocol">
@@ -103,6 +107,33 @@
               Payload
               <textarea id="payload" rows="5"></textarea>
             </label>
+            <div class="grid2">
+              <label>
+                Payload Mode
+                <select id="payloadMode">
+                  <option value="text">Text</option>
+                  <option value="sequence">Sequence</option>
+                  <option value="hex">Hex</option>
+                  <option value="counter">Counter</option>
+                  <option value="repeat">Repeat Byte</option>
+                  <option value="random">Random</option>
+                </select>
+              </label>
+              <label>
+                Payload Size
+                <input id="payloadSize" type="number" min="0" placeholder="optional">
+              </label>
+            </div>
+            <div class="grid2">
+              <label>
+                Repeat Byte
+                <input id="payloadByte" autocomplete="off" placeholder="0xaa">
+              </label>
+              <label>
+                Frame Length
+                <input id="targetFrameLength" type="number" min="60" placeholder="without FCS">
+              </label>
+            </div>
             <div class="grid2">
               <label>
                 Count
@@ -204,41 +235,8 @@
           </section>
         </section>
 
-        <section id="discoveryView" class="roleView">
-          <aside class="sidebar">
-            <h2>ARP Discovery</h2>
-            <label>
-              CIDR
-              <input id="scanCidr" autocomplete="off" placeholder="169.254.5.0/24">
-            </label>
-            <div class="grid2">
-              <label>
-                Timeout sec
-                <input id="scanTimeout" type="number" min="1" value="3">
-              </label>
-              <label>
-                Max hosts
-                <input id="scanMaxHosts" type="number" min="1" max="4096" value="512">
-              </label>
-            </div>
-            <button id="scan" class="primaryAction fullWidth">Discover Hosts</button>
-          </aside>
-
-          <section class="workPane discoveryPane">
-            <div class="heroStrip discoveryStrip">
-              <strong>Discovery</strong>
-              <span>Find ARP neighbors on the selected Ethernet segment.</span>
-            </div>
-            <div class="topologyPane">
-              <div class="sectionTitle">Discovery Map</div>
-              <svg id="topology" role="img" aria-label="ARP discovery topology"></svg>
-              <div id="scanResults" class="scanResults">No scan results yet</div>
-            </div>
-          </section>
-        </section>
       </section>
     </main>
-    <script src="/vendor/d3.min.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

@@ -1,5 +1,11 @@
 const $ = (id) => document.getElementById(id);
-const state = { examples: {}, interfaces: [], packets: [], scanHosts: [] };
+
+const state = {
+  examples: {},
+  exampleItems: [],
+  interfaces: [],
+  packets: []
+};
 
 function setStatus(message, isError = false) {
   $('status').textContent = message;
@@ -18,7 +24,14 @@ async function api(path, options = {}) {
   return data;
 }
 
+function payloadData(profile) {
+  const payload = profile.payload || {};
+  if (typeof payload === 'string') return { mode: 'text', data: payload };
+  return payload;
+}
+
 function setProfile(profile) {
+  const payload = payloadData(profile);
   $('protocol').value = profile.protocol || 'udp';
   $('dstMac').value = profile.dstMac || '';
   $('srcMac').value = profile.srcMac || '';
@@ -26,7 +39,11 @@ function setProfile(profile) {
   $('dstIp').value = profile.ipv4?.dst || profile.arp?.targetIp || '';
   $('srcPort').value = profile.udp?.srcPort || 40000;
   $('dstPort').value = profile.udp?.dstPort || 50000;
-  $('payload').value = profile.payload?.data || '';
+  $('payloadMode').value = payload.mode || 'text';
+  $('payload').value = payload.data || payload.template || '';
+  $('payloadSize').value = payload.size ?? '';
+  $('payloadByte').value = payload.byte ?? '';
+  $('targetFrameLength').value = profile.targetFrameLength ?? '';
   $('count').value = profile.count || 1;
   $('intervalMs').value = profile.intervalMs || 1000;
   $('vlanEnabled').checked = Boolean(profile.vlan?.enabled);
@@ -35,6 +52,7 @@ function setProfile(profile) {
   $('captureSrcMac').value = '';
   $('captureDstMac').value = '';
   $('captureEtherType').value = profile.protocol === 'arp' ? '0x0806' : profile.protocol === 'raw' ? '' : '0x0800';
+  $('profileDescription').textContent = profile.description || profile.name || '-';
 }
 
 function cidrFromInterface(iface) {
@@ -43,18 +61,31 @@ function cidrFromInterface(iface) {
   return `${ipv4.local}/${ipv4.prefixlen}`;
 }
 
-function scanCidrFromInterface(iface) {
-  const ipv4 = iface?.ipv4?.[0];
-  if (!ipv4?.local) return '';
-  const parts = ipv4.local.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((part) => Number.isNaN(part))) return '';
-  const prefix = Math.max(Number(ipv4.prefixlen || 24), 24);
-  if (prefix <= 24) return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
-  return `${ipv4.local}/${prefix}`;
+function currentPayload() {
+  const mode = $('payloadMode').value;
+  const payload = { mode };
+  const text = $('payload').value;
+  const size = $('payloadSize').value;
+  const byte = $('payloadByte').value.trim();
+  if (mode === 'sequence') {
+    payload.template = text || 'KETI_TEST_SEQ_{seq:06d}';
+    payload.start = 1;
+  } else if (mode === 'hex') {
+    payload.data = text;
+  } else if (mode === 'counter' || mode === 'random') {
+    payload.size = Number(size || 32);
+  } else if (mode === 'repeat') {
+    payload.byte = byte || '0x00';
+    payload.size = Number(size || 32);
+  } else {
+    payload.data = text;
+  }
+  return payload;
 }
 
 function getProfile() {
   const protocol = $('protocol').value;
+  const targetFrameLength = $('targetFrameLength').value;
   const profile = {
     interface: $('interfaceSelect').value,
     protocol,
@@ -62,16 +93,14 @@ function getProfile() {
     srcMac: $('srcMac').value.trim(),
     count: Number($('count').value || 1),
     intervalMs: Number($('intervalMs').value || 0),
+    payload: currentPayload(),
     vlan: {
       enabled: $('vlanEnabled').checked,
       id: Number($('vlanId').value || 0),
       priority: Number($('vlanPriority').value || 0)
-    },
-    payload: {
-      mode: 'text',
-      data: $('payload').value
     }
   };
+  if (targetFrameLength) profile.targetFrameLength = Number(targetFrameLength);
   if (protocol === 'udp') {
     profile.ipv4 = { src: $('srcIp').value.trim(), dst: $('dstIp').value.trim(), ttl: 64 };
     profile.udp = { srcPort: Number($('srcPort').value), dstPort: Number($('dstPort').value) };
@@ -144,97 +173,6 @@ function renderPackets() {
   });
 }
 
-function renderTopology() {
-  const svg = d3.select('#topology');
-  const node = svg.node();
-  const width = node.clientWidth || 360;
-  const height = node.clientHeight || 260;
-  svg.selectAll('*').remove();
-
-  const iface = state.interfaces.find((item) => item.name === $('interfaceSelect').value);
-  const root = {
-    id: iface?.name || 'local',
-    label: iface?.name || 'local',
-    sublabel: iface?.ipv4?.[0]?.local || iface?.mac || '',
-    type: 'local'
-  };
-  const hosts = state.scanHosts.map((host) => ({
-    id: host.ip,
-    label: host.ip,
-    sublabel: host.mac,
-    type: 'host'
-  }));
-  const nodes = [root, ...hosts];
-  const links = hosts.map((host) => ({ source: root.id, target: host.id }));
-
-  if (hosts.length === 0) {
-    svg.append('text')
-      .attr('x', width / 2)
-      .attr('y', height / 2)
-      .attr('text-anchor', 'middle')
-      .attr('fill', '#62707f')
-      .text('Run Scan to discover ARP neighbors');
-    return;
-  }
-
-  const simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id((d) => d.id).distance(105))
-    .force('charge', d3.forceManyBody().strength(-420))
-    .force('center', d3.forceCenter(width / 2, height / 2))
-    .force('collision', d3.forceCollide(38));
-
-  const link = svg.append('g')
-    .attr('stroke', '#9aabb8')
-    .attr('stroke-width', 1.4)
-    .selectAll('line')
-    .data(links)
-    .join('line');
-
-  const group = svg.append('g')
-    .selectAll('g')
-    .data(nodes)
-    .join('g');
-
-  group.append('circle')
-    .attr('r', (d) => d.type === 'local' ? 18 : 14)
-    .attr('fill', (d) => d.type === 'local' ? '#0f6f78' : '#f0b429')
-    .attr('stroke', '#ffffff')
-    .attr('stroke-width', 2);
-
-  group.append('text')
-    .attr('class', 'nodeLabel')
-    .attr('x', 22)
-    .attr('y', 4)
-    .text((d) => d.label);
-
-  group.append('title')
-    .text((d) => `${d.label}\n${d.sublabel}`);
-
-  simulation.on('tick', () => {
-    link
-      .attr('x1', (d) => d.source.x)
-      .attr('y1', (d) => d.source.y)
-      .attr('x2', (d) => d.target.x)
-      .attr('y2', (d) => d.target.y);
-    group.attr('transform', (d) => `translate(${d.x},${d.y})`);
-  });
-}
-
-function renderScanResults(result = null) {
-  if (!state.scanHosts.length) {
-    $('scanResults').textContent = result ? `No hosts found. Probed ${result.probed} address(es).` : 'No scan results yet';
-    renderTopology();
-    return;
-  }
-  $('scanResults').innerHTML = state.scanHosts.map((host) => `
-    <div class="host">
-      <strong>${host.ip}</strong>
-      <span>${host.mac}</span>
-    </div>
-  `).join('');
-  renderTopology();
-}
-
 async function loadInterfaces() {
   setStatus('Loading interfaces...');
   const result = await api('/api/interfaces');
@@ -262,27 +200,32 @@ function updateInterfaceInfo() {
     return;
   }
   const cidr = cidrFromInterface(selected);
-  const scanCidr = scanCidrFromInterface(selected);
   $('interfaceInfo').textContent = `MAC ${selected.mac} / MTU ${selected.mtu} / ${selected.state}${cidr ? ` / ${cidr}` : ''}`;
   $('selectedInterfaceName').textContent = selected.name;
   $('selectedInterfaceMac').textContent = `${selected.mac}${cidr ? ` / ${cidr}` : ''}`;
-  if (scanCidr) $('scanCidr').value = scanCidr;
-  if (selected.state !== 'up' && selected.name !== 'lo') {
-    setStatus(`${selected.name} is ${selected.state}`, true);
-  }
-  if (!$('srcMac').value || $('srcMac').value === '02:00:00:00:00:01') {
-    $('srcMac').value = selected.mac;
-  }
+  if (selected.state !== 'up' && selected.name !== 'lo') setStatus(`${selected.name} is ${selected.state}`, true);
+  if (!$('srcMac').value || $('srcMac').value === '02:00:00:00:00:01') $('srcMac').value = selected.mac;
   if (selected.ipv4?.[0]?.local && (!$('srcIp').value || $('srcIp').value === '192.168.100.10')) {
     $('srcIp').value = selected.ipv4[0].local;
   }
-  renderTopology();
+}
+
+function renderProfileSelect() {
+  $('profileSelect').innerHTML = state.exampleItems.map((item) => (
+    `<option value="${item.key}">${item.priority}. ${item.category} - ${item.name}</option>`
+  )).join('');
 }
 
 async function loadExamples() {
   const data = await api('/api/examples');
   state.examples = data.profiles;
-  setProfile(state.examples.udp);
+  state.exampleItems = data.items || Object.entries(data.profiles).map(([key, profile]) => ({ key, profile, name: profile.name || key, category: 'General', priority: 99 }));
+  renderProfileSelect();
+  const first = state.exampleItems[0];
+  if (first) {
+    $('profileSelect').value = first.key;
+    setProfile(first.profile);
+  }
 }
 
 async function build() {
@@ -327,30 +270,19 @@ async function capture() {
   setStatus(`Capture complete: ${frames.length} frame(s)`);
 }
 
-async function scan() {
-  const iface = state.interfaces.find((item) => item.name === $('interfaceSelect').value);
-  const srcIp = iface?.ipv4?.[0]?.local || $('srcIp').value.trim();
-  const timeoutSec = Number($('scanTimeout').value || 3);
-  setStatus(`Scanning ${$('scanCidr').value}...`);
-  const result = await api('/api/scan', {
-    method: 'POST',
-    body: JSON.stringify({
-      interface: $('interfaceSelect').value,
-      cidr: $('scanCidr').value.trim(),
-      srcMac: $('srcMac').value.trim(),
-      srcIp,
-      timeoutSec,
-      timeoutMs: (timeoutSec * 1000) + 8000,
-      maxHosts: Number($('scanMaxHosts').value || 512)
-    })
-  });
-  state.scanHosts = result.stdout.hosts || [];
-  renderScanResults(result.stdout);
-  setStatus(`Scan found ${state.scanHosts.length} host(s)`);
-}
-
 document.querySelectorAll('[data-example]').forEach((button) => {
-  button.addEventListener('click', () => setProfile(state.examples[button.dataset.example]));
+  button.addEventListener('click', () => {
+    const item = state.exampleItems.find((entry) => entry.key.includes(button.dataset.example));
+    if (item) {
+      $('profileSelect').value = item.key;
+      setProfile(item.profile);
+    }
+  });
+});
+
+$('profileSelect').addEventListener('change', () => {
+  const item = state.exampleItems.find((entry) => entry.key === $('profileSelect').value);
+  if (item) setProfile(item.profile);
 });
 
 document.querySelectorAll('[data-view]').forEach((button) => {
@@ -359,7 +291,6 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     document.querySelectorAll('.roleView').forEach((view) => view.classList.remove('active'));
     button.classList.add('active');
     $(button.dataset.view).classList.add('active');
-    if (button.dataset.view === 'discoveryView') renderTopology();
   });
 });
 
@@ -380,13 +311,8 @@ $('capture').addEventListener('click', () => capture().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
-$('scan').addEventListener('click', () => scan().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
-}));
 
 await loadExamples();
 await loadInterfaces();
 await build();
 renderPackets();
-renderTopology();

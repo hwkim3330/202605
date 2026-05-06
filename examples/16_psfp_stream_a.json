@@ -1,0 +1,16 @@
+{
+  "name": "PSFP Stream A",
+  "category": "8 TSN",
+  "priority": 20,
+  "description": "Stream A identifier candidate: multicast DMAC, VID 10, UDP dst 50001.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "01:00:5e:00:00:01",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "239.0.0.1", "ttl": 1 },
+  "udp": { "srcPort": 50000, "dstPort": 50001 },
+  "payload": { "mode": "sequence", "template": "PSFP_A_SEQ_{seq:06d}", "start": 1 },
+  "count": 10,
+  "intervalMs": 10,
+  "vlan": { "enabled": true, "id": 10, "priority": 3 }
+}

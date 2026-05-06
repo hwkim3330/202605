@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import ipaddress
 import json
 import os
 import random
@@ -9,7 +8,6 @@ import struct
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
 from typing import Any
 
 ETH_P_ALL = 0x0003
@@ -71,7 +69,7 @@ def hexdump(data: bytes) -> str:
     return "\n".join(lines)
 
 
-def payload_bytes(profile: dict[str, Any]) -> bytes:
+def payload_bytes(profile: dict[str, Any], sequence: int | None = None) -> bytes:
     payload = profile.get("payload", {})
     if isinstance(payload, str):
         return payload.encode()
@@ -84,6 +82,14 @@ def payload_bytes(profile: dict[str, Any]) -> bytes:
     if mode == "random":
         size = int(payload.get("size", 32))
         return os.urandom(size)
+    if mode == "repeat":
+        value = int(str(payload.get("byte", "0x00")), 0) & 0xFF
+        size = int(payload.get("size", 32))
+        return bytes([value]) * size
+    if mode == "sequence":
+        seq = int(payload.get("start", 1) if sequence is None else sequence)
+        template = payload.get("template", "KETI_TEST_SEQ_{seq:06d}")
+        return template.format(seq=seq, time=f"{time.time():.6f}").encode()
     return str(payload.get("data", "ethernet-packet-lab")).encode()
 
 
@@ -126,9 +132,9 @@ def build_ipv4(profile: dict[str, Any], proto: int, l4_payload: bytes) -> bytes:
     return header[:10] + struct.pack("!H", csum) + header[12:] + l4_payload
 
 
-def build_udp(profile: dict[str, Any]) -> bytes:
+def build_udp(profile: dict[str, Any], sequence: int | None = None) -> bytes:
     udp = profile.get("udp", {})
-    data = payload_bytes(profile)
+    data = payload_bytes(profile, sequence)
     src_port = int(udp.get("srcPort", 40000))
     dst_port = int(udp.get("dstPort", 50000))
     length = 8 + len(data)
@@ -140,9 +146,9 @@ def build_udp(profile: dict[str, Any]) -> bytes:
     return struct.pack("!HHHH", src_port, dst_port, length, csum) + data
 
 
-def build_icmp(profile: dict[str, Any]) -> bytes:
+def build_icmp(profile: dict[str, Any], sequence: int | None = None) -> bytes:
     icmp = profile.get("icmp", {})
-    data = payload_bytes(profile)
+    data = payload_bytes(profile, sequence)
     icmp_type = int(icmp.get("type", 8))
     code = int(icmp.get("code", 0))
     ident = int(icmp.get("id", 0x2026))
@@ -162,24 +168,30 @@ def build_arp(profile: dict[str, Any]) -> bytes:
     return struct.pack("!HHBBH", 1, ETH_P_IP, 6, 4, operation) + sender_mac + sender_ip + target_mac + target_ip
 
 
-def build_frame(profile: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
+def build_frame(profile: dict[str, Any], sequence: int | None = None) -> tuple[bytes, dict[str, Any]]:
     protocol = profile.get("protocol", "udp").lower()
     if protocol == "udp":
-        l4 = build_udp(profile)
+        l4 = build_udp(profile, sequence)
         frame = ethernet_header(profile, ETH_P_IP) + build_ipv4(profile, IP_PROTO_UDP, l4)
     elif protocol == "icmp":
-        l4 = build_icmp(profile)
+        l4 = build_icmp(profile, sequence)
         frame = ethernet_header(profile, ETH_P_IP) + build_ipv4(profile, IP_PROTO_ICMP, l4)
     elif protocol == "arp":
         frame = ethernet_header(profile, ETH_P_ARP) + build_arp(profile)
     elif protocol == "raw":
         ether_type = int(str(profile.get("etherType", "0x88b5")), 0)
-        frame = ethernet_header(profile, ether_type) + payload_bytes(profile)
+        frame = ethernet_header(profile, ether_type) + payload_bytes(profile, sequence)
     else:
         raise ValueError(f"unsupported protocol: {protocol}")
 
     if len(frame) < 60:
         frame += bytes(60 - len(frame))
+    target_len = profile.get("targetFrameLength")
+    if target_len:
+        target = int(target_len)
+        if target < len(frame):
+            raise ValueError(f"targetFrameLength {target} is smaller than built frame length {len(frame)}")
+        frame += bytes(target - len(frame))
     return frame, decode_frame(frame)
 
 
@@ -280,14 +292,17 @@ def command_send() -> None:
     count = int(profile.get("count", 1))
     interval_ms = float(profile.get("intervalMs", 1000))
     try:
-        frame, decoded = build_frame(profile)
         sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         sock.bind((interface, 0))
         start = time.monotonic()
         sent = 0
-        for _ in range(count):
+        decoded = None
+        payload = profile.get("payload", {})
+        seq_start = int(payload.get("start", 1)) if isinstance(payload, dict) else 1
+        for index in range(count):
+            frame, decoded = build_frame(profile, seq_start + index)
             sent += sock.send(frame)
-            if interval_ms > 0 and _ != count - 1:
+            if interval_ms > 0 and index != count - 1:
                 time.sleep(interval_ms / 1000)
         elapsed = time.monotonic() - start
     except PermissionError:
@@ -351,83 +366,9 @@ def command_capture() -> None:
     print(json.dumps({"ok": True, "frames": frames}, ensure_ascii=False))
 
 
-def command_scan() -> None:
-    req = read_json()
-    interface = req.get("interface")
-    cidr = req.get("cidr")
-    src_mac = req.get("srcMac")
-    src_ip = req.get("srcIp")
-    timeout_sec = float(req.get("timeoutSec", 3))
-    max_hosts = int(req.get("maxHosts", 256))
-    if not interface or not cidr or not src_mac or not src_ip:
-        fail("interface, cidr, srcMac, and srcIp are required")
-
-    try:
-        network = ipaddress.ip_network(cidr, strict=False)
-    except ValueError as exc:
-        fail(f"invalid CIDR: {exc}")
-    targets = [ip for ip in network.hosts() if str(ip) != src_ip]
-    if len(targets) > max_hosts:
-        targets = targets[:max_hosts]
-
-    replies: dict[str, dict[str, Any]] = {}
-    try:
-        sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
-        sock.bind((interface, 0))
-        sock.settimeout(0.1)
-
-        for target in targets:
-            profile = {
-                "protocol": "arp",
-                "dstMac": "ff:ff:ff:ff:ff:ff",
-                "srcMac": src_mac,
-                "arp": {
-                    "operation": 1,
-                    "senderMac": src_mac,
-                    "senderIp": src_ip,
-                    "targetMac": "00:00:00:00:00:00",
-                    "targetIp": str(target),
-                },
-            }
-            frame, _ = build_frame(profile)
-            sock.send(frame)
-            time.sleep(0.003)
-
-        deadline = time.monotonic() + timeout_sec
-        while time.monotonic() < deadline:
-            try:
-                frame, _ = sock.recvfrom(65535)
-            except socket.timeout:
-                continue
-            decoded = decode_frame(frame)
-            arp = decoded.get("arp")
-            if not arp or arp.get("operation") != 2:
-                continue
-            ip = arp.get("senderIp")
-            if ip in {str(t) for t in targets}:
-                replies[ip] = {
-                    "ip": ip,
-                    "mac": arp.get("senderMac"),
-                    "targetIp": arp.get("targetIp"),
-                    "timestamp": time.time(),
-                }
-    except PermissionError:
-        fail("raw socket permission denied. Run the server/agent with sudo or CAP_NET_RAW.")
-    except Exception as exc:
-        fail(str(exc))
-    finally:
-        try:
-            sock.close()
-        except Exception:
-            pass
-
-    hosts = sorted(replies.values(), key=lambda item: tuple(int(x) for x in item["ip"].split(".")))
-    print(json.dumps({"ok": True, "interface": interface, "cidr": cidr, "probed": len(targets), "hosts": hosts}, ensure_ascii=False))
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ethernet Packet Lab raw-socket agent")
-    parser.add_argument("command", choices=["interfaces", "build", "send", "capture", "scan"])
+    parser.add_argument("command", choices=["interfaces", "build", "send", "capture"])
     args = parser.parse_args()
     if args.command == "interfaces":
         list_interfaces()
@@ -437,8 +378,6 @@ def main() -> None:
         command_send()
     elif args.command == "capture":
         command_capture()
-    elif args.command == "scan":
-        command_scan()
 
 
 if __name__ == "__main__":

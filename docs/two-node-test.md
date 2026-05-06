@@ -16,41 +16,43 @@ On both PCs:
 ```bash
 git clone https://github.com/hwkim3330/202605.git
 cd 202605
-npm start
+./run-lab.sh
 ```
 
-For actual send/capture:
+Manual start for actual send/capture:
 
 ```bash
-sudo npm start
+sudo env PATH="$PATH" npm start
 ```
 
 Open `http://<pc-ip>:8080`.
 
-If PC B is connected to PC A's USB/Ethernet interface, use the IP assigned to that interface. On the current machine this was verified locally on both `172.31.51.213:8080` and `192.168.1.1:8080`.
+If PC B is connected to PC A's USB/Ethernet interface, use the IP assigned to that interface. Link-local addresses usually look like `169.254.x.x`.
 
 ## Receiver flow
 
 1. Select the test interface.
-2. Set Source MAC to the receiver NIC MAC.
-3. Press `Capture`.
+2. Open `Capture`.
+3. Keep filters empty for the first test.
+4. Press `Start Capture`.
 
 The default UI leaves receive filters empty so broadcast and unknown-destination tests are visible. Add Source MAC, Destination MAC, or EtherType filters only when the capture stream is too noisy.
 
 ## Sender flow
 
 1. Select the test interface.
-2. Set Source MAC to the sender NIC MAC.
-3. Set Destination MAC to receiver NIC MAC or `ff:ff:ff:ff:ff:ff`.
-4. Set Source IP and Destination IP.
-5. Press `Build`, then `Send`.
+2. Open `Sender`.
+3. Choose a Test Profile, starting with ARP, ICMP, then UDP.
+4. Set Destination MAC/IP and Source MAC/IP.
+5. Press `Preview Frame` if you want to inspect bytes.
+6. Press `Send Packet`.
 
 ## CLI examples
 
 Build a frame without root:
 
 ```bash
-python3 tools/packet_agent.py build < examples/udp_profile.json
+python3 tools/packet_agent.py build < examples/03_udp_unicast_basic.json
 ```
 
 Capture with root:
@@ -64,5 +66,5 @@ JSON
 Send with root:
 
 ```bash
-sudo python3 tools/packet_agent.py send < examples/udp_profile.json
+sudo python3 tools/packet_agent.py send < examples/03_udp_unicast_basic.json
 ```

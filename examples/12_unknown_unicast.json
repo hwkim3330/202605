@@ -1,0 +1,16 @@
+{
+  "name": "Unknown Unicast",
+  "category": "5 Switching",
+  "priority": 16,
+  "description": "Destination MAC intentionally unknown for flooding and FDB checks.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "02:de:ad:be:ef:01",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 50000, "dstPort": 50001 },
+  "payload": { "mode": "text", "data": "UNKNOWN_UNICAST" },
+  "count": 1,
+  "intervalMs": 1000,
+  "vlan": { "enabled": false, "id": 10, "priority": 0 }
+}

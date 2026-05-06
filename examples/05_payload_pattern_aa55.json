@@ -1,0 +1,16 @@
+{
+  "name": "Payload Pattern AA55",
+  "category": "2 Integrity",
+  "priority": 5,
+  "description": "Alternating AA55 pattern for data-path integrity checks.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 50000, "dstPort": 50001 },
+  "payload": { "mode": "hex", "data": "aa 55 aa 55 aa 55 aa 55 aa 55 aa 55 aa 55 aa 55" },
+  "count": 1,
+  "intervalMs": 1000,
+  "vlan": { "enabled": false, "id": 10, "priority": 0 }
+}

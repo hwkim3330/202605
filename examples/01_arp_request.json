@@ -1,4 +1,8 @@
 {
+  "name": "ARP Request",
+  "category": "1 Basic",
+  "priority": 1,
+  "description": "Broadcast ARP request for L2 path validation.",
   "interface": "eth0",
   "protocol": "arp",
   "dstMac": "ff:ff:ff:ff:ff:ff",
@@ -10,15 +14,8 @@
     "targetMac": "00:00:00:00:00:00",
     "targetIp": "192.168.100.20"
   },
-  "payload": {
-    "mode": "text",
-    "data": ""
-  },
+  "payload": { "mode": "text", "data": "" },
   "count": 1,
   "intervalMs": 1000,
-  "vlan": {
-    "enabled": false,
-    "id": 10,
-    "priority": 0
-  }
+  "vlan": { "enabled": false, "id": 10, "priority": 0 }
 }

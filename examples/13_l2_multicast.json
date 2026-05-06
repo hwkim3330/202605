@@ -1,0 +1,16 @@
+{
+  "name": "L2 Multicast",
+  "category": "5 Switching",
+  "priority": 17,
+  "description": "IPv4 multicast MAC frame for multicast flooding/snooping checks.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "01:00:5e:00:00:01",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "239.0.0.1", "ttl": 1 },
+  "udp": { "srcPort": 50000, "dstPort": 50001 },
+  "payload": { "mode": "text", "data": "L2_MULTICAST" },
+  "count": 1,
+  "intervalMs": 1000,
+  "vlan": { "enabled": false, "id": 10, "priority": 0 }
+}

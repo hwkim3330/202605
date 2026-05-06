@@ -1,0 +1,16 @@
+{
+  "name": "Periodic UDP 1 ms",
+  "category": "7 TSN Prep",
+  "priority": 19,
+  "description": "1 ms periodic sequence traffic for interval, jitter, and loss checks.",
+  "interface": "eth0",
+  "protocol": "udp",
+  "dstMac": "ff:ff:ff:ff:ff:ff",
+  "srcMac": "02:00:00:00:00:01",
+  "ipv4": { "src": "192.168.100.10", "dst": "192.168.100.20", "ttl": 64 },
+  "udp": { "srcPort": 50000, "dstPort": 50001 },
+  "payload": { "mode": "sequence", "template": "SEQ={seq:06d},TIME={time}", "start": 1 },
+  "count": 100,
+  "intervalMs": 1,
+  "vlan": { "enabled": true, "id": 10, "priority": 7 }
+}

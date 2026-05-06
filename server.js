@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
-const nodeModulesDir = join(root, 'node_modules');
 const agentPath = join(root, 'tools', 'packet_agent.py');
 const port = Number(process.env.PORT || 8080);
 
@@ -79,10 +78,25 @@ async function handleApi(req, res) {
     }
 
     if (req.method === 'GET' && req.url === '/api/examples') {
-      const udp = JSON.parse(await readFile(join(root, 'examples', 'udp_profile.json'), 'utf8'));
-      const arp = JSON.parse(await readFile(join(root, 'examples', 'arp_request_profile.json'), 'utf8'));
-      const icmp = JSON.parse(await readFile(join(root, 'examples', 'icmp_echo_profile.json'), 'utf8'));
-      return sendJson(res, 200, { ok: true, profiles: { udp, arp, icmp } });
+      const files = (await readdir(join(root, 'examples'))).filter((file) => file.endsWith('.json')).sort();
+      const profiles = {};
+      const items = [];
+      for (const file of files) {
+        const profile = JSON.parse(await readFile(join(root, 'examples', file), 'utf8'));
+        const key = file.replace(/\.json$/, '');
+        profiles[key] = profile;
+        items.push({
+          key,
+          file,
+          name: profile.name || key,
+          category: profile.category || 'General',
+          priority: profile.priority || 99,
+          description: profile.description || '',
+          profile
+        });
+      }
+      items.sort((a, b) => a.priority - b.priority || a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      return sendJson(res, 200, { ok: true, profiles, items });
     }
 
     if (req.method === 'POST' && req.url === '/api/build') {
@@ -103,12 +117,6 @@ async function handleApi(req, res) {
       return sendJson(res, result.ok ? 200 : 400, result);
     }
 
-    if (req.method === 'POST' && req.url === '/api/scan') {
-      const body = await readRequestJson(req);
-      const result = await runAgent(['scan'], body, Number(body.timeoutMs || 20000) + 5000);
-      return sendJson(res, result.ok ? 200 : 400, result);
-    }
-
     return sendJson(res, 404, { ok: false, error: 'Unknown API route' });
   } catch (error) {
     return sendJson(res, 500, { ok: false, error: error.message });
@@ -117,14 +125,6 @@ async function handleApi(req, res) {
 
 function serveStatic(req, res) {
   const requestPath = decodeURIComponent(new URL(req.url, `http://${req.headers.host}`).pathname);
-  if (requestPath === '/vendor/d3.min.js') {
-    const d3Path = join(nodeModulesDir, 'd3', 'dist', 'd3.min.js');
-    if (existsSync(d3Path)) {
-      res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8' });
-      createReadStream(d3Path).pipe(res);
-      return;
-    }
-  }
   const clean = normalize(requestPath).replace(/^(\.\.[/\\])+/, '');
   const relative = clean === '/' ? '/index.html' : clean;
   const filePath = join(publicDir, relative);
