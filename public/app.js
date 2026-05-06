@@ -16,7 +16,8 @@ const state = {
     interfaces: [],
     iface: null
   },
-  localRole: localStorage.getItem('localRole') || 'sender'
+  localRole: localStorage.getItem('localRole') || 'sender',
+  locked: localStorage.getItem('autoLock') !== '0'
 };
 
 function setStatus(message, isError = false) {
@@ -45,10 +46,12 @@ function payloadData(profile) {
 function setProfile(profile) {
   const payload = payloadData(profile);
   $('protocol').value = profile.protocol || 'udp';
-  $('dstMac').value = profile.dstMac || '';
-  $('srcMac').value = profile.srcMac || '';
-  $('srcIp').value = profile.ipv4?.src || profile.arp?.senderIp || '';
-  $('dstIp').value = profile.ipv4?.dst || profile.arp?.targetIp || '';
+  if (!state.locked) {
+    $('dstMac').value = profile.dstMac || '';
+    $('srcMac').value = profile.srcMac || '';
+    $('srcIp').value = profile.ipv4?.src || profile.arp?.senderIp || '';
+    $('dstIp').value = profile.ipv4?.dst || profile.arp?.targetIp || '';
+  }
   $('srcPort').value = profile.udp?.srcPort || 40000;
   $('dstPort').value = profile.udp?.dstPort || 50000;
   $('payloadMode').value = payload.mode || 'text';
@@ -211,14 +214,18 @@ function updateInterfaceInfo() {
     $('selectedInterfaceMac').textContent = '-';
     return;
   }
-  const cidr = cidrFromInterface(selected);
+  const v4 = firstV4(selected);
+  const cidr = v4 && selected.ipv4[0]?.prefixlen ? `${v4}/${selected.ipv4[0].prefixlen}` : v4;
   $('interfaceInfo').textContent = `MAC ${selected.mac} / MTU ${selected.mtu} / ${selected.state}${cidr ? ` / ${cidr}` : ''}`;
   $('selectedInterfaceName').textContent = selected.name;
   $('selectedInterfaceMac').textContent = `${selected.mac}${cidr ? ` / ${cidr}` : ''}`;
   if (selected.state !== 'up' && selected.name !== 'lo') setStatus(`${selected.name} is ${selected.state}`, true);
-  if (!$('srcMac').value || $('srcMac').value === '02:00:00:00:00:01') $('srcMac').value = selected.mac;
-  if (selected.ipv4?.[0]?.local && (!$('srcIp').value || $('srcIp').value === '192.168.100.10')) {
-    $('srcIp').value = selected.ipv4[0].local;
+  if (state.locked) {
+    $('srcMac').value = selected.mac;
+    if (v4) $('srcIp').value = v4;
+  } else {
+    if (!$('srcMac').value || $('srcMac').value === '02:00:00:00:00:01') $('srcMac').value = selected.mac;
+    if (v4 && (!$('srcIp').value || $('srcIp').value === '192.168.100.10')) $('srcIp').value = v4;
   }
 }
 
@@ -570,17 +577,56 @@ function localIface() {
   return state.interfaces.find((i) => i.name === $('interfaceSelect').value) || null;
 }
 
+function firstV4(iface) {
+  return iface?.ipv4?.find((a) => a.local && !a.local.includes(':'))?.local || '';
+}
+
+function applyLock() {
+  if (!state.locked) return;
+  const local = localIface();
+  const peer = state.peer.iface;
+  const localIp = firstV4(local);
+  const peerIp = firstV4(peer);
+  // Sender form (always reflects the locked pair)
+  if (local) {
+    $('srcMac').value = local.mac;
+    if (localIp) $('srcIp').value = localIp;
+    $('srcMac').readOnly = true;
+    $('srcIp').readOnly = true;
+  }
+  if (peer) {
+    $('dstMac').value = peer.mac;
+    if (peerIp) $('dstIp').value = peerIp;
+    $('dstMac').readOnly = true;
+    $('dstIp').readOnly = true;
+  }
+  // Capture filters: incoming frames from peer NIC, addressed to local NIC
+  if (peer) $('captureSrcMac').value = peer.mac;
+  if (local) $('captureDstMac').value = local.mac;
+}
+
+function setLockUi() {
+  const btn = $('lockToggle');
+  if (!btn) return;
+  btn.textContent = state.locked ? '🔒 Locked to peer' : '🔓 Manual';
+  btn.classList.toggle('locked', state.locked);
+  ['srcMac','srcIp','dstMac','dstIp'].forEach((id) => {
+    const el = $(id);
+    if (el) el.readOnly = state.locked;
+  });
+}
+
 function renderLinkStrip() {
   const local = localIface();
   if (local) {
     $('localIfName').textContent = local.name;
-    $('localIp').textContent = local.ipv4?.[0]?.local || '';
+    $('localIp').textContent = firstV4(local);
     $('localMac').textContent = local.mac;
   }
   const peer = state.peer.iface;
   if (peer) {
     $('peerIfName').textContent = peer.name;
-    $('peerIp').textContent = peer.ipv4?.[0]?.local || '';
+    $('peerIp').textContent = firstV4(peer);
     $('peerMac').textContent = peer.mac;
   } else {
     $('peerIfName').textContent = state.peer.url ? '(probe to load)' : '-';
@@ -592,6 +638,8 @@ function renderLinkStrip() {
   $('localRoleTag').textContent = localTag;
   $('peerRoleTag').textContent = peerTag;
   syncControlFromPeer();
+  applyLock();
+  setLockUi();
 }
 
 function setActionStatus(id, kind, text) {
@@ -711,6 +759,12 @@ $('linkArrow').addEventListener('click', () => {
   renderLinkStrip();
 });
 $('useMacBtn').addEventListener('click', lockToPeer);
+$('lockToggle').addEventListener('click', () => {
+  state.locked = !state.locked;
+  localStorage.setItem('autoLock', state.locked ? '1' : '0');
+  if (state.locked) applyLock();
+  setLockUi();
+});
 $('interfaceSelect').addEventListener('change', () => {
   localStorage.setItem('localInterface', $('interfaceSelect').value);
   renderLinkStrip();

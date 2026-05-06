@@ -269,7 +269,7 @@ def list_interfaces() -> None:
             addr_map[item.get("ifname", "")] = [
                 {"local": a.get("local"), "prefixlen": a.get("prefixlen")}
                 for a in item.get("addr_info", [])
-                if a.get("family") == "inet"
+                if a.get("family") == "inet" and a.get("local") and ":" not in a.get("local", "")
             ]
     except Exception:
         addr_map = {}

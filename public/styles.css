@@ -305,6 +305,13 @@ label textarea {
   letter-spacing: 0.02em;
 }
 
+.linkCenter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 .linkArrow {
   font-size: 28px;
   color: var(--accent);
@@ -317,6 +324,18 @@ label textarea {
 .linkArrow:hover {
   transform: scale(1.15);
   color: var(--accent-strong);
+}
+
+.ghostBtn.locked {
+  background: #0f6f78;
+  color: #fff;
+  border-color: #0f6f78;
+}
+
+input[readonly], select[readonly] {
+  background: #f3f6f8;
+  color: #4a5662;
+  cursor: not-allowed;
 }
 
 .ghostBtn {
