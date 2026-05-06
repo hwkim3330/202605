@@ -579,7 +579,14 @@ async function runBenchmark(reqBody) {
   const senderIface = selectInterface(senderInfo.stdout?.interfaces || [], reqBody.senderInterface);
   const receiverIface = selectInterface(receiverInfo.stdout?.interfaces || [], reqBody.receiverInterface);
 
-  const profile = profileForE2E(baseProfile, senderIface, receiverIface);
+  // Benchmark always rides UDP+IPv4: the KETI marker (seq + tx ns) lives in the UDP payload, so any other protocol (ARP, ICMP, raw) would yield zero matches at the receiver.
+  const baseUdp = { ...baseProfile, protocol: 'udp' };
+  baseUdp.udp = { srcPort: 40000, dstPort: 50000, ...(baseProfile.udp || {}) };
+  baseUdp.ipv4 = { ttl: 64, ...(baseProfile.ipv4 || {}) };
+  delete baseUdp.arp;
+  delete baseUdp.icmp;
+  delete baseUdp.etherType;
+  const profile = profileForE2E(baseUdp, senderIface, receiverIface);
   const count = Number(reqBody.count || profile.count || 500);
   const intervalMs = Number(reqBody.intervalMs ?? profile.intervalMs ?? 1);
   profile.count = count;

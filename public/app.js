@@ -519,7 +519,9 @@ async function runBenchmark() {
     setActionStatus('statusBench', okFlag ? 'ok' : 'fail', `${s.rxCount}/${s.txCount} · ${s.throughputMbps.toFixed(1)}Mbps`);
     setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`, !okFlag);
     if (okFlag) window.open('/reports/benchmark-latest.html', '_blank');
-    else alert(`Benchmark received 0 packets. Check the wire / peer interface / link.`);
+    else {
+      alert(`Benchmark received 0 packets.\n\nChecklist:\n - Wire/link between ${senderIf} and ${receiverIf} is up\n - Peer agent is reachable at ${receiverUrl}\n - Sender MAC ${state.interfaces.find(i=>i.name===senderIf)?.mac} matches what the peer expects\n\nThe benchmark always uses UDP+IPv4 internally regardless of the profile selected on the Sender tab.`);
+    }
   } catch (err) {
     setActionStatus('statusBench', 'fail', 'fail');
     throw err;
