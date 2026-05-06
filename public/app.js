@@ -260,8 +260,9 @@ function renderCaseSelect() {
 function renderCaseRows() {
   const steps = state.currentCase.steps || [];
   if (!steps.length) {
-    $('caseRows').innerHTML = '<tr><td colspan="8" class="empty">No steps yet</td></tr>';
+    $('caseRows').innerHTML = '<tr><td colspan="9" class="empty">No packet list rows yet</td></tr>';
     $('caseStepPreview').textContent = '';
+    updateCaseEstimate();
     return;
   }
   $('caseRows').innerHTML = steps.map((step, index) => {
@@ -270,27 +271,31 @@ function renderCaseRows() {
     if (step.kind === 'delay') {
       return `
         <tr data-step-index="${index}"${selected}>
-          <td>${index + 1}</td>
-          <td>Delay</td>
-          <td>${step.name || 'Delay'}</td>
-          <td>-</td>
+          <td><input type="checkbox" data-step-check="${index}" ${step.checked !== false ? 'checked' : ''}></td>
+          <td>${index}</td>
+          <td class="eventName">${step.name || 'Delay'}</td>
+          <td></td>
+          <td></td>
+          <td>DELAY</td>
+          <td>${step.delayMs || 0} ms wait event</td>
           <td>-</td>
           <td><input class="miniInput" data-step-delay="${index}" type="number" min="0" value="${step.delayMs || 0}"> ms</td>
-          <td>-</td>
-          <td><div class="stepActions"><button data-step-up="${index}">↑</button><button data-step-down="${index}">↓</button><button data-step-remove="${index}">Remove</button></div></td>
         </tr>
       `;
     }
+    const src = profile.srcMac || profile.arp?.senderMac || '-';
+    const dst = profile.dstMac || profile.arp?.targetMac || '-';
     return `
       <tr data-step-index="${index}"${selected}>
-        <td>${index + 1}</td>
-        <td>Packet</td>
+        <td><input type="checkbox" data-step-check="${index}" ${step.checked !== false ? 'checked' : ''}></td>
+        <td>${index}</td>
         <td>${step.name || profile.name || 'Packet'}</td>
+        <td><code>${src}</code></td>
+        <td><code>${dst}</code></td>
         <td>${protocolSummary(profile)}</td>
+        <td>${payloadSummary(profile)}</td>
         <td><input class="miniInput" data-step-count="${index}" type="number" min="1" value="${step.count || profile.count || 1}"></td>
         <td><input class="miniInput" data-step-interval="${index}" type="number" min="0" value="${step.intervalMs ?? profile.intervalMs ?? 0}"> ms</td>
-        <td>${payloadSummary(profile)}</td>
-        <td><div class="stepActions"><button data-step-load="${index}">Load</button><button data-step-up="${index}">↑</button><button data-step-down="${index}">↓</button><button data-step-remove="${index}">Remove</button></div></td>
       </tr>
     `;
   }).join('');
@@ -302,14 +307,22 @@ function renderCaseRows() {
       renderCaseRows();
     });
   });
+  document.querySelectorAll('[data-step-check]').forEach((input) => {
+    input.addEventListener('click', (event) => event.stopPropagation());
+    input.addEventListener('change', () => {
+      state.currentCase.steps[Number(input.dataset.stepCheck)].checked = input.checked;
+    });
+  });
   document.querySelectorAll('[data-step-count]').forEach((input) => {
     input.addEventListener('change', () => {
       state.currentCase.steps[Number(input.dataset.stepCount)].count = Math.max(1, Number(input.value || 1));
+      updateCaseEstimate();
     });
   });
   document.querySelectorAll('[data-step-interval]').forEach((input) => {
     input.addEventListener('change', () => {
       state.currentCase.steps[Number(input.dataset.stepInterval)].intervalMs = Math.max(0, Number(input.value || 0));
+      updateCaseEstimate();
     });
   });
   document.querySelectorAll('[data-step-delay]').forEach((input) => {
@@ -320,49 +333,11 @@ function renderCaseRows() {
       renderCaseRows();
     });
   });
-  document.querySelectorAll('[data-step-load]').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const step = state.currentCase.steps[Number(button.dataset.stepLoad)];
-      if (step?.profile) setProfile(step.profile);
-    });
-  });
-  document.querySelectorAll('[data-step-up]').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const index = Number(button.dataset.stepUp);
-      if (index <= 0) return;
-      const tmp = state.currentCase.steps[index - 1];
-      state.currentCase.steps[index - 1] = state.currentCase.steps[index];
-      state.currentCase.steps[index] = tmp;
-      state.selectedStep = index - 1;
-      renderCaseRows();
-    });
-  });
-  document.querySelectorAll('[data-step-down]').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      const index = Number(button.dataset.stepDown);
-      if (index >= state.currentCase.steps.length - 1) return;
-      const tmp = state.currentCase.steps[index + 1];
-      state.currentCase.steps[index + 1] = state.currentCase.steps[index];
-      state.currentCase.steps[index] = tmp;
-      state.selectedStep = index + 1;
-      renderCaseRows();
-    });
-  });
-  document.querySelectorAll('[data-step-remove]').forEach((button) => {
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      state.currentCase.steps.splice(Number(button.dataset.stepRemove), 1);
-      state.selectedStep = -1;
-      renderCaseRows();
-    });
-  });
 
   if (state.selectedStep >= 0 && state.currentCase.steps[state.selectedStep]) {
     $('caseStepPreview').textContent = JSON.stringify(state.currentCase.steps[state.selectedStep], null, 2);
   }
+  updateCaseEstimate();
 }
 
 function setCurrentCase(testCase) {
@@ -392,23 +367,95 @@ async function loadTestCases() {
 function addCurrentPacketToCase() {
   const profile = getProfile();
   const selected = state.exampleItems.find((entry) => entry.key === $('profileSelect').value);
-  state.currentCase.steps.push({
+  const insertAt = state.selectedStep >= 0 ? state.selectedStep + 1 : state.currentCase.steps.length;
+  state.currentCase.steps.splice(insertAt, 0, {
     kind: 'packet',
     name: selected?.name || profile.name || `${String(profile.protocol || 'udp').toUpperCase()} packet`,
     enabled: true,
+    checked: true,
     count: Number($('count').value || profile.count || 1),
     intervalMs: Number($('intervalMs').value || profile.intervalMs || 0),
     profile
   });
-  state.selectedStep = state.currentCase.steps.length - 1;
+  state.selectedStep = insertAt;
   renderCaseRows();
 }
 
 function addDelayToCase() {
   const delayMs = Math.max(0, Number($('caseDelayMs').value || 100));
-  state.currentCase.steps.push({ kind: 'delay', name: `Delay ${delayMs} ms`, delayMs });
-  state.selectedStep = state.currentCase.steps.length - 1;
+  const insertAt = state.selectedStep >= 0 ? state.selectedStep + 1 : state.currentCase.steps.length;
+  state.currentCase.steps.splice(insertAt, 0, { kind: 'delay', name: `Delay ${delayMs} ms`, delayMs, checked: true });
+  state.selectedStep = insertAt;
   renderCaseRows();
+}
+
+function selectedStep() {
+  return state.selectedStep >= 0 ? state.currentCase.steps[state.selectedStep] : null;
+}
+
+function loadSelectedStep() {
+  const step = selectedStep();
+  if (step?.profile) setProfile(step.profile);
+}
+
+function duplicateSelectedStep() {
+  const step = selectedStep();
+  if (!step) return;
+  const insertAt = state.selectedStep + 1;
+  state.currentCase.steps.splice(insertAt, 0, cloneJson(step));
+  state.selectedStep = insertAt;
+  renderCaseRows();
+}
+
+function removeSelectedStep() {
+  if (state.selectedStep < 0) return;
+  state.currentCase.steps.splice(state.selectedStep, 1);
+  state.selectedStep = Math.min(state.selectedStep, state.currentCase.steps.length - 1);
+  renderCaseRows();
+}
+
+function moveSelectedStep(delta) {
+  const index = state.selectedStep;
+  const next = index + delta;
+  if (index < 0 || next < 0 || next >= state.currentCase.steps.length) return;
+  const tmp = state.currentCase.steps[next];
+  state.currentCase.steps[next] = state.currentCase.steps[index];
+  state.currentCase.steps[index] = tmp;
+  state.selectedStep = next;
+  renderCaseRows();
+}
+
+function estimatedWireMsForProfile(profile) {
+  const len = Number(profile?.targetFrameLength || 64);
+  return ((8 + Math.max(64, len) + 4 + 12) * 8) / 1_000_000;
+}
+
+function updateCaseEstimate() {
+  const steps = state.currentCase.steps || [];
+  let totalMs = 0;
+  let packets = 0;
+  for (const step of steps) {
+    if (step.kind === 'delay') totalMs += Number(step.delayMs || 0);
+    else {
+      const count = Number(step.count || step.profile?.count || 1);
+      totalMs += count * estimatedWireMsForProfile(step.profile);
+      totalMs += Math.max(0, count - 1) * Number(step.intervalMs ?? step.profile?.intervalMs ?? 0);
+      packets += count;
+    }
+  }
+  const loops = $('caseRepeat')?.checked ? Math.max(1, Number($('caseLoopCount')?.value || 1)) : 1;
+  const cycleMs = Math.max(0, Number($('caseCycleMs')?.value || 0));
+  const repeatedMs = loops > 1 ? Math.max(totalMs, cycleMs) * loops : totalMs;
+  if ($('caseEstimatedTime')) $('caseEstimatedTime').textContent = `${repeatedMs.toFixed(3)} ms`;
+  if ($('caseSentPackets')) $('caseSentPackets').textContent = String(packets);
+}
+
+function caseForRun({ selectedOnly = false } = {}) {
+  const testCase = caseFromForm();
+  if (selectedOnly) {
+    testCase.steps = testCase.steps.filter((step) => step.checked !== false);
+  }
+  return testCase;
 }
 
 async function saveCurrentCase() {
@@ -429,11 +476,15 @@ async function deleteCurrentCase() {
   setStatus('Test case deleted');
 }
 
-async function runCurrentCase() {
-  setStatus('Running test case on wire...');
+async function runCurrentCase({ selectedOnly = false } = {}) {
+  const started = new Date();
+  $('caseStartTime').textContent = started.toLocaleTimeString();
+  $('caseEndTime').textContent = '-';
+  $('caseCycleStatus').textContent = 'running';
+  setStatus(selectedOnly ? 'Sending selected packet list rows...' : 'Sending full packet list...');
   await ensurePeerReady();
   syncControlFromPeer();
-  const testCase = caseFromForm();
+  const testCase = caseForRun({ selectedOnly });
   const result = await api('/api/run-test-case', {
     method: 'POST',
     body: JSON.stringify({
@@ -441,9 +492,15 @@ async function runCurrentCase() {
       receiverUrl: $('receiverNodeUrl').value,
       senderInterface: $('senderNodeInterface').value,
       receiverInterface: $('receiverNodeInterface').value,
-      testCase
+      testCase,
+      loopCount: $('caseRepeat').checked ? Number($('caseLoopCount').value || 1) : 1,
+      cyclePeriodMs: Number($('caseCycleMs').value || 0)
     })
   });
+  $('caseEndTime').textContent = new Date().toLocaleTimeString();
+  $('caseCycleStatus').textContent = `${Date.now() - started.getTime()} ms`;
+  $('caseSentPackets').textContent = String(result.report.summary.framesSent);
+  $('caseSentBytes').textContent = String(result.report.steps.reduce((sum, step) => sum + ((step.framesSent || 0) * (step.txProfile?.targetFrameLength || 64)), 0));
   $('caseRunSummary').textContent = JSON.stringify(result.report.summary, null, 2);
   $('reportSummary').innerHTML = `
     <div><span>Status</span><strong>${result.report.ok ? 'PASS' : 'FAIL'}</strong></div>
@@ -701,15 +758,44 @@ async function runE2E() {
 async function runReport() {
   const prog = progressFor('progReport');
   setActionStatus('statusReport', 'running', 'running');
-  prog.start(2);
-  setStatus('Running validation report...');
+  prog.start(25);
+  setStatus('Running on-wire standard validation...');
   try {
-    const result = await api('/api/run-report', { method: 'POST', body: '{}' });
-    renderReport(result.report);
-    const fail = result.report.summary.fail;
-    setActionStatus('statusReport', fail === 0 ? 'ok' : 'fail', `${result.report.summary.pass}/${result.report.summary.total}`);
+    await ensurePeerReady();
+    syncControlFromPeer();
+    const result = await api('/api/wire-validation', {
+      method: 'POST',
+      body: JSON.stringify({
+        senderUrl: $('senderNodeUrl').value,
+        receiverUrl: $('receiverNodeUrl').value,
+        senderInterface: $('senderNodeInterface').value,
+        receiverInterface: $('receiverNodeInterface').value,
+        count: 2,
+        intervalMs: 100
+      })
+    });
+    const fail = result.report.summary.failed;
+    $('reportSummary').innerHTML = `
+      <div><span>Status</span><strong>${result.report.ok ? 'PASS' : 'FAIL'}</strong></div>
+      <div><span>Sent</span><strong>${result.report.summary.framesSent}</strong></div>
+      <div><span>Matched</span><strong>${result.report.summary.matched}</strong></div>
+    `;
+    $('reportRows').innerHTML = result.report.steps.map((step, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>Wire</td>
+        <td>${step.name}</td>
+        <td class="${step.ok ? 'passText' : 'failText'}">${step.ok ? 'PASS' : 'FAIL'}</td>
+        <td>${step.framesSent ?? '-'}</td>
+        <td>${step.protocol || step.kind}</td>
+        <td>${step.kind === 'delay' ? `${step.delayMs} ms` : `${step.matchCount || 0} match`}</td>
+      </tr>
+    `).join('');
+    $('openReport')?.classList.remove('disabled');
+    $('openCaseReport')?.classList.remove('disabled');
+    setActionStatus('statusReport', fail === 0 ? 'ok' : 'fail', `${result.report.summary.matched}/${result.report.summary.framesSent}`);
     prog.finish();
-    setStatus(`Report complete: ${result.report.summary.pass}/${result.report.summary.total} pass`, fail > 0);
+    setStatus(`Wire validation ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.summary.matched}/${result.report.summary.framesSent} matched`, fail > 0);
   } catch (err) {
     setActionStatus('statusReport', 'fail', 'fail');
     prog.fail();
@@ -888,10 +974,21 @@ $('deleteCase').addEventListener('click', () => deleteCurrentCase().catch((err) 
 }));
 $('addCurrentPacket').addEventListener('click', addCurrentPacketToCase);
 $('addDelay').addEventListener('click', addDelayToCase);
+$('duplicateStep').addEventListener('click', duplicateSelectedStep);
+$('removeStep').addEventListener('click', removeSelectedStep);
+$('moveStepUp').addEventListener('click', () => moveSelectedStep(-1));
+$('moveStepDown').addEventListener('click', () => moveSelectedStep(1));
+$('sendSelectedSteps').addEventListener('click', () => runCurrentCase({ selectedOnly: true }).catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
 $('runCase').addEventListener('click', () => runCurrentCase().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
+$('caseCycleMs').addEventListener('change', updateCaseEstimate);
+$('caseRepeat').addEventListener('change', updateCaseEstimate);
+$('caseLoopCount').addEventListener('change', updateCaseEstimate);
 $('senderNodeInterface').addEventListener('change', renderNodeGrid);
 $('receiverNodeInterface').addEventListener('change', renderNodeGrid);
 

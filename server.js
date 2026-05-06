@@ -171,7 +171,8 @@ function profileForE2E(profile, senderIface, receiverIface) {
       ...(next.ipv4 || {}),
       src: senderIp,
       dst: receiverIp,
-      ttl: next.ipv4?.ttl || 64
+      ttl: next.ipv4?.ttl || 64,
+      id: next.ipv4?.id ?? 0x2026
     };
   }
   return next;
@@ -190,6 +191,7 @@ function sameValue(left, right) {
 
 function isExpectedFrame(frame, sentDecoded, senderIface, receiverIface) {
   const decoded = frame.decoded || {};
+  if (sentDecoded?.length && decoded.length !== sentDecoded.length) return false;
   if (!sameValue(decoded.ethernet?.srcMac, senderIface.mac)) return false;
   if (sentDecoded?.ethernet?.dstMac && !sameValue(decoded.ethernet?.dstMac, sentDecoded.ethernet.dstMac)) return false;
   if (decodedProtocol(decoded) !== decodedProtocol(sentDecoded)) return false;
@@ -800,6 +802,8 @@ async function runTestCase(reqBody) {
   const receiverUrl = normalizeBaseUrl(reqBody.receiverUrl);
   const testCase = normalizeTestCase(reqBody.testCase || {});
   if (!testCase.steps.length) throw new Error('test case has no steps');
+  const loopCount = Math.max(1, Number(reqBody.loopCount || 1));
+  const cyclePeriodMs = Math.max(0, Number(reqBody.cyclePeriodMs || 0));
 
   const [senderInfo, receiverInfo] = await Promise.all([
     remoteJson(senderUrl, '/api/interfaces'),
@@ -809,10 +813,11 @@ async function runTestCase(reqBody) {
   const receiverIface = selectInterface(receiverInfo.stdout?.interfaces || [], reqBody.receiverInterface);
   const packetSteps = testCase.steps.filter((step) => step.kind === 'packet' && step.enabled !== false);
   const expectedFrames = packetSteps.reduce((sum, step) => sum + Math.max(1, Number(step.count || 1)), 0);
-  const activeMs = testCase.steps.reduce((sum, step) => {
+  const onePassActiveMs = testCase.steps.reduce((sum, step) => {
     if (step.kind === 'delay') return sum + Number(step.delayMs || 0);
     return sum + (Math.max(0, Number(step.intervalMs || 0)) * Math.max(1, Number(step.count || 1)));
   }, 0);
+  const activeMs = Math.max(onePassActiveMs, cyclePeriodMs) * loopCount;
   const captureTimeoutSec = Number(reqBody.timeoutSec || Math.max(8, Math.ceil(activeMs / 1000) + 5));
   const captureBody = {
     interface: receiverIface.name,
@@ -826,34 +831,48 @@ async function runTestCase(reqBody) {
   await new Promise((resolve) => setTimeout(resolve, Number(reqBody.captureLeadMs || 800)));
 
   const sentSteps = [];
-  for (const step of testCase.steps) {
-    if (step.kind === 'delay') {
-      const delayMs = Number(step.delayMs || 0);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      sentSteps.push({ kind: 'delay', name: step.name, delayMs, ok: true });
-      continue;
+  for (let loop = 0; loop < loopCount; loop += 1) {
+    const passStarted = Date.now();
+    for (const step of testCase.steps) {
+      const stepName = loopCount > 1 ? `L${loop + 1}: ${step.name}` : step.name;
+      if (step.kind === 'delay') {
+        const delayMs = Number(step.delayMs || 0);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        sentSteps.push({ kind: 'delay', name: stepName, delayMs, ok: true, loop: loop + 1 });
+        continue;
+      }
+      if (step.enabled === false) {
+        sentSteps.push({ kind: 'packet', name: stepName, skipped: true, ok: true, framesSent: 0, expectedCount: 0, loop: loop + 1 });
+        continue;
+      }
+      const txProfile = profileForE2E(step.profile, senderIface, receiverIface);
+      txProfile.count = Math.max(1, Number(step.count || txProfile.count || 1));
+      txProfile.intervalMs = Math.max(0, Number(step.intervalMs ?? txProfile.intervalMs ?? 0));
+      const buildResult = await remoteJson(senderUrl, '/api/build', { method: 'POST', body: txProfile });
+      const sendResult = await remoteJson(senderUrl, '/api/send', {
+        method: 'POST',
+        body: { ...txProfile, timeoutMs: captureTimeoutSec * 1000 + 10000 }
+      });
+      sentSteps.push({
+        kind: 'packet',
+        name: stepName,
+        ok: sendResult.ok,
+        expectedCount: txProfile.count,
+        framesSent: sendResult.stdout?.framesSent || 0,
+        protocol: decodedProtocol(sendResult.stdout?.decoded),
+        sentDecoded: sendResult.stdout?.decoded,
+        expectedFrameHex: ['sequence', 'random', 'benchmark'].includes(txProfile.payload?.mode)
+          ? ''
+          : buildResult.stdout?.frameHex,
+        txProfile,
+        loop: loop + 1
+      });
     }
-    if (step.enabled === false) {
-      sentSteps.push({ kind: 'packet', name: step.name, skipped: true, ok: true, framesSent: 0, expectedCount: 0 });
-      continue;
+    const elapsed = Date.now() - passStarted;
+    const remaining = cyclePeriodMs - elapsed;
+    if (loop < loopCount - 1 && remaining > 0) {
+      await new Promise((resolve) => setTimeout(resolve, remaining));
     }
-    const txProfile = profileForE2E(step.profile, senderIface, receiverIface);
-    txProfile.count = Math.max(1, Number(step.count || txProfile.count || 1));
-    txProfile.intervalMs = Math.max(0, Number(step.intervalMs ?? txProfile.intervalMs ?? 0));
-    const sendResult = await remoteJson(senderUrl, '/api/send', {
-      method: 'POST',
-      body: { ...txProfile, timeoutMs: captureTimeoutSec * 1000 + 10000 }
-    });
-    sentSteps.push({
-      kind: 'packet',
-      name: step.name,
-      ok: sendResult.ok,
-      expectedCount: txProfile.count,
-      framesSent: sendResult.stdout?.framesSent || 0,
-      protocol: decodedProtocol(sendResult.stdout?.decoded),
-      sentDecoded: sendResult.stdout?.decoded,
-      txProfile
-    });
   }
 
   const captureResult = await capturePromise;
@@ -864,7 +883,11 @@ async function runTestCase(reqBody) {
     const matched = [];
     frames.forEach((frame, frameIndex) => {
       if (usedFrameIndexes.has(frameIndex)) return;
-      if (!isExpectedFrame(frame, step.sentDecoded, senderIface, receiverIface)) return;
+      if (step.expectedCount === 1 && step.expectedFrameHex) {
+        if (frame.frameHex !== step.expectedFrameHex) return;
+      } else if (!isExpectedFrame(frame, step.sentDecoded, senderIface, receiverIface)) {
+        return;
+      }
       usedFrameIndexes.add(frameIndex);
       matched.push(frame);
     });
@@ -873,7 +896,8 @@ async function runTestCase(reqBody) {
       ok: step.ok && matched.length >= step.expectedCount,
       matchCount: matched.length,
       sampleFrames: matched.slice(0, 5),
-      sentDecoded: undefined
+      sentDecoded: undefined,
+      expectedFrameHex: undefined
     };
   });
   const framesSent = packetResults.reduce((sum, step) => sum + Number(step.framesSent || 0), 0);
@@ -892,7 +916,9 @@ async function runTestCase(reqBody) {
       failed,
       framesSent,
       matched,
-      captured: frames.length
+      captured: frames.length,
+      loopCount,
+      cyclePeriodMs
     },
     steps: packetResults,
     capturedFrames: frames.slice(0, 500),
@@ -902,6 +928,51 @@ async function runTestCase(reqBody) {
   await writeFile(join(reportsDir, 'testcase-latest.json'), JSON.stringify(report, null, 2));
   await writeFile(join(reportsDir, 'testcase-latest.html'), testCaseReportHtml(report));
   return report;
+}
+
+async function runWireValidation(reqBody) {
+  const { profiles } = await loadExampleItems();
+  const orderedKeys = [
+    '01_arp_request',
+    '02_icmp_echo',
+    '03_udp_unicast_basic',
+    '04_udp_sequence',
+    '05_payload_pattern_aa55',
+    '06_payload_counter_256',
+    '07_frame_size_64',
+    '08_frame_size_128',
+    '09_frame_size_256',
+    '10_frame_size_512',
+    '11_frame_size_1024',
+    '08_frame_size_1514',
+    '09_vlan10_udp_pcp0',
+    '10_vlan10_udp_pcp7',
+    '11_vlan20_isolation'
+  ];
+  const steps = [];
+  for (const key of orderedKeys) {
+    const profile = profiles[key];
+    if (!profile) continue;
+    steps.push({
+      kind: 'packet',
+      name: profile.name || key,
+      enabled: true,
+      count: Number(reqBody.count || (profile.priority <= 3 ? 3 : 2)),
+      intervalMs: Number(reqBody.intervalMs ?? 100),
+      profile
+    });
+    steps.push({ kind: 'delay', name: 'Guard 100 ms', delayMs: 100 });
+  }
+  return runTestCase({
+    ...reqBody,
+    testCase: {
+      id: 'wire-standard-validation',
+      name: 'Wire Standard Validation',
+      description: 'On-wire ARP, ICMP, UDP, payload integrity, frame-size, VLAN, and PCP validation.',
+      steps
+    },
+    maxFrames: Number(reqBody.maxFrames || 500)
+  });
 }
 
 function sweepReportHtml(report) {
@@ -970,6 +1041,17 @@ async function handleApi(req, res) {
         report,
         html: '/reports/latest.html',
         json: '/reports/latest.json'
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/wire-validation') {
+      const body = await readRequestJson(req);
+      const report = await runWireValidation(body);
+      return sendJson(res, report.ok ? 200 : 400, {
+        ok: report.ok,
+        report,
+        html: '/reports/testcase-latest.html',
+        json: '/reports/testcase-latest.json'
       });
     }
 

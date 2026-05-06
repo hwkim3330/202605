@@ -113,40 +113,41 @@ reports/e2e-latest.json
 
 Both PCs must allow TCP `8080` from the link-local network. If a node does not probe, check cable/link state, the `169.254.x.x/16` address, firewall policy, and whether `./run-lab.sh` is still running on that node.
 
-## Reports
+## Wire Validation
 
-Open `Control` and press `Run Validation Report`.
+Open `Control` and run `Wire Validation`.
 
-This validates every built-in profile locally by building and decoding the frame. It writes:
+This is an on-the-wire standard packet validation. The sender node transmits ARP, ICMP, UDP, payload-pattern, frame-size, VLAN, and PCP test frames while the receiver node captures and matches them. It writes:
 
 ```text
-reports/latest.html
-reports/latest.json
+reports/testcase-latest.html
+reports/testcase-latest.json
 ```
 
-The report confirms profile correctness, frame length, protocol decode, VLAN/PCP decode, and build errors. It does not prove PC A to PC B wire delivery; for that, run `Capture` on the receiver PC while sending from the sender PC.
+The older local build/decode check still exists as an internal API, but the Control page validation is now the real link validation.
 
-## Test Cases
+## Packet List
 
-Open `Cases` to build reusable packet sequences.
+The Sender screen has a bottom `Packet List`, modeled after `EthernetPacketGenerator_v1.zip`.
 
-A test case is a JSON packet list stored in `testcases/`. It can contain:
+A packet list is a JSON test case stored in `testcases/`. It can contain:
 
 - `packet` steps: a complete packet profile plus repeat `count` and `intervalMs`
 - `delay` steps: a wait between packet groups
+- checked rows for `Send Selected`
+- full-list sending with optional repeat loops and cycle period
 
 Typical flow:
 
 1. Configure one packet in `Sender`.
-2. Open `Cases`.
-3. Press `Add Current Packet`.
+2. Press `+` in `Packet List`.
+3. Add delay events where needed.
 4. Adjust count/interval in the sequence table.
-5. Add delays if needed.
-6. Save the test case.
-7. Probe the peer in the top link strip.
-8. Press `Run On Wire`.
+5. Save the packet list.
+6. Probe the peer in the top link strip.
+7. Press `Send Selected` or `Send List`.
 
-The test case runner opens capture on the receiver node, sends each packet step from the sender node in order, then writes:
+The runner opens capture on the receiver node, sends each packet step from the sender node in order, then writes:
 
 ```text
 reports/testcase-latest.html

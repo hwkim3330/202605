@@ -737,9 +737,9 @@ input[readonly], select[readonly] {
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(96px, 1fr));
+  grid-template-columns: repeat(3, minmax(105px, 1fr));
   gap: 6px;
-  min-width: 420px;
+  min-width: 330px;
 }
 
 .modeTab {
@@ -857,7 +857,7 @@ tbody tr.selectedRow {
 }
 
 .detailGrid.tall {
-  height: calc(100vh - 250px);
+  min-height: 240px;
 }
 
 .roleView {
@@ -876,6 +876,10 @@ tbody tr.selectedRow {
   gap: 12px;
   min-height: 0;
   padding: 12px;
+}
+
+#senderView .workPane {
+  grid-template-rows: auto 220px minmax(330px, 1fr);
 }
 
 .heroStrip {
@@ -1022,35 +1026,112 @@ tbody tr.selectedRow {
   background: #741313;
 }
 
-.caseView {
-  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
-}
-
-.casePane {
-  grid-template-rows: auto minmax(280px, 1fr) minmax(220px, 0.8fr);
-}
-
-.caseTools {
+.sequencePanel {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
   display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
+  grid-template-rows: auto auto minmax(120px, 1fr) auto;
 }
 
-.caseInlineButton {
-  align-self: end;
-}
-
-.stepActions {
+.sequenceHeader,
+.sequenceToolbar,
+.sendStatusBar {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfd;
+}
+
+.sequenceHeader {
+  justify-content: space-between;
+}
+
+.sequenceTitle strong {
+  display: block;
+  font-size: 15px;
+}
+
+.sequenceTitle span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sequenceTools,
+.sequenceToolbar {
+  flex-wrap: wrap;
+}
+
+.sequenceTools select {
+  width: 220px;
+}
+
+.sequenceTools input {
+  width: 190px;
+}
+
+.sequenceToolbar button {
+  min-width: 34px;
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.delayInline,
+.sendInline {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
+
+.delayInline input,
+.sendInline input {
+  width: 82px;
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.sendCheck {
+  display: flex;
+  grid-template-columns: none;
   gap: 5px;
 }
 
-.stepActions button {
-  min-width: 0;
-  min-height: 28px;
-  padding: 0 8px;
+.sequenceTableWrap {
+  min-height: 0;
+  overflow: auto;
+}
+
+.sequenceTableWrap td,
+.sequenceTableWrap th {
   font-size: 12px;
+}
+
+.eventName {
+  color: #a45b10;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.sendStatusBar {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sendStatusBar strong {
+  color: var(--text);
+}
+
+.hiddenCaseDescription {
+  display: none;
 }
 
 .miniInput {
