@@ -383,7 +383,9 @@ function renderE2EReport(report) {
 }
 
 async function runE2E() {
-  setActionStatus('statusE2E', 'running', 'running...');
+  const prog = progressFor('progE2E');
+  setActionStatus('statusE2E', 'running', 'running');
+  prog.start(7);
   setStatus('Running end-to-end test...');
   try {
     await ensurePeerReady();
@@ -406,24 +408,30 @@ async function runE2E() {
     });
     renderE2EReport(result.report);
     setActionStatus('statusE2E', result.report.ok ? 'ok' : 'fail', `${result.report.matchCount} matched`);
+    prog.finish();
     setStatus(`E2E ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.matchCount} matching frame(s)`, !result.report.ok);
   } catch (err) {
     setActionStatus('statusE2E', 'fail', 'fail');
+    prog.fail();
     throw err;
   }
 }
 
 async function runReport() {
-  setActionStatus('statusReport', 'running', 'running...');
+  const prog = progressFor('progReport');
+  setActionStatus('statusReport', 'running', 'running');
+  prog.start(2);
   setStatus('Running validation report...');
   try {
     const result = await api('/api/run-report', { method: 'POST', body: '{}' });
     renderReport(result.report);
     const fail = result.report.summary.fail;
     setActionStatus('statusReport', fail === 0 ? 'ok' : 'fail', `${result.report.summary.pass}/${result.report.summary.total}`);
+    prog.finish();
     setStatus(`Report complete: ${result.report.summary.pass}/${result.report.summary.total} pass`, fail > 0);
   } catch (err) {
     setActionStatus('statusReport', 'fail', 'fail');
+    prog.fail();
     throw err;
   }
 }
@@ -486,7 +494,12 @@ async function ensurePeerReady() {
 }
 
 async function runBenchmark() {
-  setActionStatus('statusBench', 'running', 'running...');
+  const prog = progressFor('progBench');
+  const count = Number($('benchCount').value || 500);
+  const intervalMs = Number($('benchInterval').value || 1);
+  const estSec = Math.max(3, (count * intervalMs) / 1000 + 3);
+  setActionStatus('statusBench', 'running', 'running');
+  prog.start(estSec);
   setStatus('Running benchmark...');
   try {
     await ensurePeerReady();
@@ -524,6 +537,7 @@ async function runBenchmark() {
     `;
     const okFlag = s.rxCount > 0;
     setActionStatus('statusBench', okFlag ? 'ok' : 'fail', `${s.rxCount}/${s.txCount} · ${s.throughputMbps.toFixed(1)}Mbps`);
+    if (okFlag) prog.finish(); else prog.fail();
     setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`, !okFlag);
     if (okFlag) window.open('/reports/benchmark-latest.html', '_blank');
     else {
@@ -531,12 +545,19 @@ async function runBenchmark() {
     }
   } catch (err) {
     setActionStatus('statusBench', 'fail', 'fail');
+    prog.fail();
     throw err;
   }
 }
 
 async function runSweep() {
-  setActionStatus('statusSweep', 'running', 'running...');
+  const prog = progressFor('progSweep');
+  const count = Number($('benchCount').value || 200);
+  const intervalMs = Number($('benchInterval').value || 1);
+  // 7 sizes × (count*intervalMs/1000 + 3s overhead each)
+  const estSec = 7 * ((count * intervalMs) / 1000 + 3);
+  setActionStatus('statusSweep', 'running', 'running');
+  prog.start(estSec);
   setStatus('Running frame-size sweep (this can take a while)...');
   try {
     await ensurePeerReady();
@@ -548,16 +569,17 @@ async function runSweep() {
         receiverUrl: $('receiverNodeUrl').value,
         senderInterface: $('senderNodeInterface').value,
         receiverInterface: $('receiverNodeInterface').value,
-        count: Number($('benchCount').value || 200),
-        intervalMs: Number($('benchInterval').value || 1)
+        count, intervalMs
       })
     });
     const sizes = result.report.results.length;
     setActionStatus('statusSweep', 'ok', `${sizes} sizes`);
+    prog.finish();
     setStatus(`Sweep done: ${sizes} sizes`);
     window.open('/reports/sweep-latest.html', '_blank');
   } catch (err) {
     setActionStatus('statusSweep', 'fail', 'fail');
+    prog.fail();
     throw err;
   }
 }
@@ -647,6 +669,62 @@ function setActionStatus(id, kind, text) {
   if (!el) return;
   el.className = `actionStatus ${kind}`;
   el.textContent = text;
+}
+
+function progressFor(progId) {
+  const track = $(progId);
+  if (!track) return { start() {}, set() {}, finish() {}, fail() {} };
+  const fill = track.querySelector('.progressFill');
+  const label = track.querySelector('.progressLabel');
+  let timer = null;
+  let card = track.closest('.actionCard');
+  return {
+    start(estimatedSec) {
+      track.classList.add('show');
+      card?.classList.add('running');
+      const t0 = performance.now();
+      fill.style.width = '0%';
+      label.textContent = '0%';
+      track.classList.remove('indeterminate');
+      if (!estimatedSec || estimatedSec <= 0) {
+        track.classList.add('indeterminate');
+        return;
+      }
+      const tick = () => {
+        const elapsed = (performance.now() - t0) / 1000;
+        const pct = Math.min(95, (elapsed / estimatedSec) * 100);
+        fill.style.width = pct.toFixed(1) + '%';
+        label.textContent = `${pct.toFixed(0)}% · ${elapsed.toFixed(1)}s / ~${estimatedSec.toFixed(1)}s`;
+      };
+      tick();
+      timer = setInterval(tick, 100);
+    },
+    set(pct, text) {
+      if (timer) { clearInterval(timer); timer = null; }
+      track.classList.remove('indeterminate');
+      fill.style.width = `${pct}%`;
+      if (text) label.textContent = text;
+    },
+    finish() {
+      if (timer) { clearInterval(timer); timer = null; }
+      track.classList.remove('indeterminate');
+      fill.style.width = '100%';
+      label.textContent = '100% · done';
+      card?.classList.remove('running');
+      setTimeout(() => track.classList.remove('show'), 1200);
+    },
+    fail() {
+      if (timer) { clearInterval(timer); timer = null; }
+      track.classList.remove('indeterminate');
+      fill.style.background = 'linear-gradient(90deg, #ef4444, #b91c1c)';
+      label.textContent = 'failed';
+      card?.classList.remove('running');
+      setTimeout(() => {
+        track.classList.remove('show');
+        fill.style.background = '';
+      }, 1500);
+    }
+  };
 }
 
 function renderPairCard() {

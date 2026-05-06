@@ -291,6 +291,7 @@
                   <h3>Validation</h3>
                   <span class="actionDesc">Build all 27 profiles locally and produce a PASS/FAIL report. No traffic on the wire.</span>
                 </div>
+                <div class="progressTrack" id="progReport"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
                 <div class="actionFooter">
                   <span class="actionStatus" id="statusReport">idle</span>
                   <button id="runReport" class="primaryAction">Run</button>
@@ -303,6 +304,7 @@
                   <h3>E2E (single profile)</h3>
                   <span class="actionDesc">Send the currently selected Sender-tab profile, capture on peer, match by MAC.</span>
                 </div>
+                <div class="progressTrack" id="progE2E"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
                 <div class="actionFooter">
                   <span class="actionStatus" id="statusE2E">idle</span>
                   <button id="runE2E" class="primaryAction">Run</button>
@@ -320,6 +322,7 @@
                   <label>Interval ms<input id="benchInterval" type="number" min="0" step="0.1" value="1"></label>
                   <label>Payload B<input id="benchPayloadSize" type="number" min="32" value="64"></label>
                 </div>
+                <div class="progressTrack" id="progBench"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
                 <div class="actionFooter">
                   <span class="actionStatus" id="statusBench">idle</span>
                   <button id="runBenchmark" class="primaryAction">Run</button>
@@ -332,6 +335,7 @@
                   <h3>Frame-size sweep</h3>
                   <span class="actionDesc">Run the benchmark across 64..1514 B and chart throughput / loss / latency / jitter.</span>
                 </div>
+                <div class="progressTrack" id="progSweep"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
                 <div class="actionFooter">
                   <span class="actionStatus" id="statusSweep">idle</span>
                   <button id="runSweep" class="primaryAction">Run</button>
