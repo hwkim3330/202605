@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import ipaddress
 import json
 import os
 import random
 import socket
 import struct
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -236,6 +238,18 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
 
 
 def list_interfaces() -> None:
+    addr_map: dict[str, list[dict[str, Any]]] = {}
+    try:
+        ip_out = subprocess.check_output(["ip", "-j", "addr"], text=True)
+        for item in json.loads(ip_out):
+            addr_map[item.get("ifname", "")] = [
+                {"local": a.get("local"), "prefixlen": a.get("prefixlen")}
+                for a in item.get("addr_info", [])
+                if a.get("family") == "inet"
+            ]
+    except Exception:
+        addr_map = {}
+
     interfaces = []
     for name in sorted(os.listdir("/sys/class/net")):
         base = f"/sys/class/net/{name}"
@@ -245,7 +259,7 @@ def list_interfaces() -> None:
             mtu = int(open(f"{base}/mtu", encoding="utf8").read().strip())
         except OSError:
             continue
-        interfaces.append({"name": name, "mac": mac, "state": state, "mtu": mtu})
+        interfaces.append({"name": name, "mac": mac, "state": state, "mtu": mtu, "ipv4": addr_map.get(name, [])})
     print(json.dumps({"ok": True, "interfaces": interfaces}, ensure_ascii=False))
 
 
@@ -337,9 +351,83 @@ def command_capture() -> None:
     print(json.dumps({"ok": True, "frames": frames}, ensure_ascii=False))
 
 
+def command_scan() -> None:
+    req = read_json()
+    interface = req.get("interface")
+    cidr = req.get("cidr")
+    src_mac = req.get("srcMac")
+    src_ip = req.get("srcIp")
+    timeout_sec = float(req.get("timeoutSec", 3))
+    max_hosts = int(req.get("maxHosts", 256))
+    if not interface or not cidr or not src_mac or not src_ip:
+        fail("interface, cidr, srcMac, and srcIp are required")
+
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+    except ValueError as exc:
+        fail(f"invalid CIDR: {exc}")
+    targets = [ip for ip in network.hosts() if str(ip) != src_ip]
+    if len(targets) > max_hosts:
+        targets = targets[:max_hosts]
+
+    replies: dict[str, dict[str, Any]] = {}
+    try:
+        sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
+        sock.bind((interface, 0))
+        sock.settimeout(0.1)
+
+        for target in targets:
+            profile = {
+                "protocol": "arp",
+                "dstMac": "ff:ff:ff:ff:ff:ff",
+                "srcMac": src_mac,
+                "arp": {
+                    "operation": 1,
+                    "senderMac": src_mac,
+                    "senderIp": src_ip,
+                    "targetMac": "00:00:00:00:00:00",
+                    "targetIp": str(target),
+                },
+            }
+            frame, _ = build_frame(profile)
+            sock.send(frame)
+            time.sleep(0.003)
+
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            try:
+                frame, _ = sock.recvfrom(65535)
+            except socket.timeout:
+                continue
+            decoded = decode_frame(frame)
+            arp = decoded.get("arp")
+            if not arp or arp.get("operation") != 2:
+                continue
+            ip = arp.get("senderIp")
+            if ip in {str(t) for t in targets}:
+                replies[ip] = {
+                    "ip": ip,
+                    "mac": arp.get("senderMac"),
+                    "targetIp": arp.get("targetIp"),
+                    "timestamp": time.time(),
+                }
+    except PermissionError:
+        fail("raw socket permission denied. Run the server/agent with sudo or CAP_NET_RAW.")
+    except Exception as exc:
+        fail(str(exc))
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+    hosts = sorted(replies.values(), key=lambda item: tuple(int(x) for x in item["ip"].split(".")))
+    print(json.dumps({"ok": True, "interface": interface, "cidr": cidr, "probed": len(targets), "hosts": hosts}, ensure_ascii=False))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ethernet Packet Lab raw-socket agent")
-    parser.add_argument("command", choices=["interfaces", "build", "send", "capture"])
+    parser.add_argument("command", choices=["interfaces", "build", "send", "capture", "scan"])
     args = parser.parse_args()
     if args.command == "interfaces":
         list_interfaces()
@@ -349,6 +437,8 @@ def main() -> None:
         command_send()
     elif args.command == "capture":
         command_capture()
+    elif args.command == "scan":
+        command_scan()
 
 
 if __name__ == "__main__":

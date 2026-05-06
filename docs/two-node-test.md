@@ -27,13 +27,15 @@ sudo npm start
 
 Open `http://<pc-ip>:8080`.
 
+If PC B is connected to PC A's USB/Ethernet interface, use the IP assigned to that interface. On the current machine this was verified locally on both `172.31.51.213:8080` and `192.168.1.1:8080`.
+
 ## Receiver flow
 
 1. Select the test interface.
 2. Set Source MAC to the receiver NIC MAC.
 3. Press `Capture`.
 
-The UI captures Ethernet frames addressed to the selected Source MAC. For broadcast ARP/UDP tests, clear or change filters in `public/app.js` if needed.
+The default UI leaves receive filters empty so broadcast and unknown-destination tests are visible. Add Source MAC, Destination MAC, or EtherType filters only when the capture stream is too noisy.
 
 ## Sender flow
 

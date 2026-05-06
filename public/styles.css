@@ -1,12 +1,13 @@
 :root {
   color-scheme: light;
-  --bg: #f4f6f8;
+  --bg: #eef2f5;
   --panel: #ffffff;
-  --text: #17202a;
-  --muted: #5f6b78;
-  --line: #d7dde4;
-  --accent: #146c94;
-  --accent-strong: #0d4f6f;
+  --text: #18212b;
+  --muted: #62707f;
+  --line: #d2dae3;
+  --accent: #0f6f78;
+  --accent-strong: #0a5158;
+  --soft: #e7f3f4;
   --ok: #1f7a4d;
   --warn: #a45b10;
 }
@@ -20,6 +21,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow: hidden;
 }
 
 button,
@@ -37,6 +39,7 @@ button {
   border-radius: 6px;
   padding: 0 14px;
   cursor: pointer;
+  font-weight: 650;
 }
 
 button:hover {
@@ -54,6 +57,13 @@ textarea {
   padding: 8px 10px;
 }
 
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  outline: 3px solid rgba(15, 111, 120, 0.14);
+}
+
 textarea {
   resize: vertical;
   min-height: 84px;
@@ -61,6 +71,8 @@ textarea {
 
 .app {
   min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
 }
 
 .topbar {
@@ -68,14 +80,15 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 18px 24px;
+  padding: 16px 22px;
   border-bottom: 1px solid var(--line);
-  background: #ffffff;
+  background: #fdfefe;
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 21px;
+  letter-spacing: 0;
 }
 
 .topbar p {
@@ -85,27 +98,36 @@ textarea {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) 1fr;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
   gap: 16px;
   padding: 16px;
+  min-height: 0;
 }
 
-.panel {
+.sidebar,
+.packetArea,
+.packetList,
+.topologyPane,
+.detailPane {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 16px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(24, 33, 43, 0.04);
 }
 
 .sidebar {
   display: grid;
   gap: 12px;
   align-content: start;
+  max-height: calc(100vh - 138px);
+  overflow: auto;
 }
 
 h2 {
-  margin: 8px 0 2px;
+  margin: 10px 0 2px;
   font-size: 15px;
+  letter-spacing: 0;
 }
 
 label {
@@ -144,6 +166,111 @@ label textarea {
 
 .actions {
   margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafb;
+}
+
+.toolbarField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.toolbarField select {
+  min-width: 180px;
+}
+
+.interfaceBox {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafb;
+  padding: 10px;
+  font-weight: 700;
+}
+
+.packetArea {
+  display: grid;
+  grid-template-rows: minmax(280px, 1fr) minmax(240px, 0.95fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+}
+
+.upperGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.packetList,
+.topologyPane,
+.detailPane {
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.sectionTitle {
+  border-bottom: 1px solid var(--line);
+  background: #f3f7f8;
+  color: #21313d;
+  padding: 8px 10px;
+  font-weight: 750;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--line);
+  padding: 7px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+th {
+  background: #fbfcfd;
+  color: #435263;
+  font-weight: 750;
+}
+
+tbody tr:nth-child(even) {
+  background: #f8fbfc;
+}
+
+tbody tr:hover {
+  background: #e7f3f4;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 12px;
+  min-height: 0;
 }
 
 .split {
@@ -153,16 +280,44 @@ label textarea {
 }
 
 pre {
-  min-height: 180px;
-  max-height: 440px;
+  min-height: 0;
+  height: calc(100% - 36px);
+  max-height: none;
   overflow: auto;
-  margin: 8px 0 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
   background: #101820;
   color: #dfe9f3;
   padding: 12px;
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status {
+  min-width: 180px;
+  max-width: 360px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft);
+  color: var(--accent-strong);
+  padding: 8px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.status.error {
+  border-color: #e0b5a4;
+  background: #fff0ea;
+  color: #8a3519;
 }
 
 .muted {
@@ -177,10 +332,43 @@ pre {
   margin-top: 8px;
 }
 
+#topology {
+  width: 100%;
+  height: 260px;
+  display: block;
+  background: #fbfcfd;
+}
+
+.scanResults {
+  border-top: 1px solid var(--line);
+  padding: 8px 10px;
+  color: var(--muted);
+  max-height: 150px;
+  overflow: auto;
+  font-size: 13px;
+}
+
+.scanResults .host {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #edf1f4;
+  padding: 5px 0;
+}
+
+.nodeLabel {
+  font: 12px system-ui, sans-serif;
+  fill: #243442;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
 .captureItem {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
+  background: #fbfcfd;
 }
 
 .captureItem strong {
@@ -194,12 +382,35 @@ pre {
 
 @media (max-width: 900px) {
   .workspace,
-  .split {
+  .upperGrid,
+  .detailGrid {
     grid-template-columns: 1fr;
+  }
+
+  body {
+    overflow: auto;
+  }
+
+  .sidebar {
+    max-height: none;
   }
 
   .topbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .status {
+    max-width: none;
   }
 }

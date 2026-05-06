@@ -6,6 +6,7 @@ The project uses:
 
 - Node.js HTTP server for the browser UI and API.
 - Python Linux `AF_PACKET` raw sockets for Ethernet II frame build/send/capture.
+- D3 for the browser-side ARP discovery topology view.
 - Standard frame formats: Ethernet II, 802.1Q VLAN, IPv4, UDP, ICMP Echo, ARP.
 
 The old `EthernetPacketGenerator_v1.zip` was Windows WPF/SharpPcap oriented. This repo keeps the protocol idea but moves the lab path to Linux-friendly raw sockets so two PCs can run sender and receiver roles.
@@ -22,11 +23,23 @@ Open:
 http://localhost:8080
 ```
 
+From another PC on the same network, open this machine's interface IP:
+
+```text
+http://<sender-or-receiver-ip>:8080
+```
+
 Actual packet send/capture needs raw-socket privileges:
 
 ```bash
 sudo npm start
 ```
+
+This keeps the UI in Node.js and delegates only the privileged Ethernet work to Python. That avoids Node native raw-socket addons while still using Linux standard `AF_PACKET` sockets.
+
+## Discovery
+
+Use `Scan` to run ARP discovery on the selected interface. For link-local Ethernet, the UI suggests a `/24` around the current interface IP, for example `169.254.5.0/24`, so it does not waste time scanning the full `169.254.0.0/16` range.
 
 ## Check
 

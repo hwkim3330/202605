@@ -11,18 +11,35 @@
       <header class="topbar">
         <div>
           <h1>Ethernet Packet Lab</h1>
-          <p>Linux raw socket 기반 Ethernet II 송신/수신 실험 도구</p>
+          <p>Ethernet II packet workbench for two-node lab tests</p>
         </div>
-        <button id="refreshInterfaces">Interfaces</button>
+        <div class="topActions">
+          <div id="status" class="status">Ready</div>
+          <button id="refreshInterfaces">Interfaces</button>
+        </div>
       </header>
 
-      <section class="workspace">
-        <aside class="panel sidebar">
-          <h2>Interface</h2>
+      <section class="toolbar">
+        <button id="build">Build</button>
+        <button id="send">Send</button>
+        <button id="capture">Capture</button>
+        <button id="scan">Scan</button>
+        <div class="toolbarField">
+          <span>Interface</span>
           <select id="interfaceSelect"></select>
-          <div id="interfaceInfo" class="muted"></div>
+        </div>
+        <div id="interfaceInfo" class="muted"></div>
+      </section>
 
-          <h2>Profile</h2>
+      <section class="workspace wireshark">
+        <aside class="sidebar">
+          <h2>Interface</h2>
+          <div class="interfaceBox">
+            <div id="selectedInterfaceName">-</div>
+            <div id="selectedInterfaceMac" class="muted">-</div>
+          </div>
+
+          <h2>Profiles</h2>
           <div class="buttonRow">
             <button data-example="udp">UDP</button>
             <button data-example="icmp">ICMP</button>
@@ -91,29 +108,90 @@
               <input id="intervalMs" type="number" min="0">
             </label>
           </div>
+
+          <h2>Receive Filter</h2>
+          <label>
+            Source MAC filter
+            <input id="captureSrcMac" autocomplete="off" placeholder="optional">
+          </label>
+          <label>
+            Destination MAC filter
+            <input id="captureDstMac" autocomplete="off" placeholder="optional">
+          </label>
+          <div class="grid2">
+            <label>
+              EtherType
+              <input id="captureEtherType" autocomplete="off" placeholder="0x0800">
+            </label>
+            <label>
+              Timeout sec
+              <input id="captureTimeout" type="number" min="1" value="10">
+            </label>
+          </div>
+          <label>
+            Max frames
+            <input id="captureMaxFrames" type="number" min="1" value="30">
+          </label>
+
+          <h2>Discovery</h2>
+          <label>
+            CIDR
+            <input id="scanCidr" autocomplete="off" placeholder="169.254.0.0/16">
+          </label>
+          <div class="grid2">
+            <label>
+              Timeout sec
+              <input id="scanTimeout" type="number" min="1" value="3">
+            </label>
+            <label>
+              Max hosts
+              <input id="scanMaxHosts" type="number" min="1" max="4096" value="512">
+            </label>
+          </div>
         </aside>
 
-        <section class="panel editor">
-          <div class="actions">
-            <button id="build">Build</button>
-            <button id="send">Send</button>
-            <button id="capture">Capture</button>
-          </div>
-          <div class="split">
-            <div>
-              <h2>Decoded</h2>
+        <section class="packetArea">
+          <section class="upperGrid">
+            <div class="packetList">
+              <div class="sectionTitle">Packet List</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>No.</th>
+                    <th>Time</th>
+                    <th>Source</th>
+                    <th>Destination</th>
+                    <th>Protocol</th>
+                    <th>Length</th>
+                    <th>Info</th>
+                  </tr>
+                </thead>
+                <tbody id="packetRows">
+                  <tr><td colspan="7" class="empty">No captured packets yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="topologyPane">
+              <div class="sectionTitle">ARP Discovery Map</div>
+              <svg id="topology" role="img" aria-label="ARP discovery topology"></svg>
+              <div id="scanResults" class="scanResults">No scan results yet</div>
+            </div>
+          </section>
+
+          <section class="detailGrid">
+            <div class="detailPane">
+              <div class="sectionTitle">Packet Details</div>
               <pre id="decoded"></pre>
             </div>
-            <div>
-              <h2>Hexdump</h2>
+            <div class="detailPane">
+              <div class="sectionTitle">Packet Bytes</div>
               <pre id="hexdump"></pre>
             </div>
-          </div>
-          <h2>Capture Results</h2>
-          <div id="captures" class="captures"></div>
+          </section>
         </section>
       </section>
     </main>
+    <script src="/vendor/d3.min.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>
