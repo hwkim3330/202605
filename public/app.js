@@ -376,28 +376,49 @@ function renderE2EReport(report) {
 }
 
 async function runE2E() {
+  setActionStatus('statusE2E', 'running', 'running...');
   setStatus('Running end-to-end test...');
-  const result = await api('/api/e2e-test', {
-    method: 'POST',
-    body: JSON.stringify({
-      senderUrl: $('senderNodeUrl').value,
-      receiverUrl: $('receiverNodeUrl').value,
-      senderInterface: $('senderNodeInterface').value,
-      receiverInterface: $('receiverNodeInterface').value,
-      profile: getProfile(),
-      timeoutSec: 5,
-      maxFrames: 50
-    })
-  });
-  renderE2EReport(result.report);
-  setStatus(`E2E ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.matchCount} matching frame(s)`, !result.report.ok);
+  try {
+    await ensurePeerReady();
+    syncControlFromPeer();
+    const senderUrl = $('senderNodeUrl').value;
+    const receiverUrl = $('receiverNodeUrl').value;
+    const senderIf = $('senderNodeInterface').value;
+    const receiverIf = $('receiverNodeInterface').value;
+    if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) throw new Error('Missing pair (peer not set?)');
+    const result = await api('/api/e2e-test', {
+      method: 'POST',
+      body: JSON.stringify({
+        senderUrl, receiverUrl,
+        senderInterface: senderIf,
+        receiverInterface: receiverIf,
+        profile: getProfile(),
+        timeoutSec: 5,
+        maxFrames: 50
+      })
+    });
+    renderE2EReport(result.report);
+    setActionStatus('statusE2E', result.report.ok ? 'ok' : 'fail', `${result.report.matchCount} matched`);
+    setStatus(`E2E ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.matchCount} matching frame(s)`, !result.report.ok);
+  } catch (err) {
+    setActionStatus('statusE2E', 'fail', 'fail');
+    throw err;
+  }
 }
 
 async function runReport() {
+  setActionStatus('statusReport', 'running', 'running...');
   setStatus('Running validation report...');
-  const result = await api('/api/run-report', { method: 'POST', body: '{}' });
-  renderReport(result.report);
-  setStatus(`Report complete: ${result.report.summary.pass}/${result.report.summary.total} pass`, result.report.summary.fail > 0);
+  try {
+    const result = await api('/api/run-report', { method: 'POST', body: '{}' });
+    renderReport(result.report);
+    const fail = result.report.summary.fail;
+    setActionStatus('statusReport', fail === 0 ? 'ok' : 'fail', `${result.report.summary.pass}/${result.report.summary.total}`);
+    setStatus(`Report complete: ${result.report.summary.pass}/${result.report.summary.total} pass`, fail > 0);
+  } catch (err) {
+    setActionStatus('statusReport', 'fail', 'fail');
+    throw err;
+  }
 }
 
 document.querySelectorAll('[data-example]').forEach((button) => {
@@ -421,6 +442,7 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     document.querySelectorAll('.roleView').forEach((view) => view.classList.remove('active'));
     button.classList.add('active');
     $(button.dataset.view).classList.add('active');
+    if (button.dataset.view === 'controlView') renderPairCard();
   });
 });
 
@@ -457,58 +479,78 @@ async function ensurePeerReady() {
 }
 
 async function runBenchmark() {
+  setActionStatus('statusBench', 'running', 'running...');
   setStatus('Running benchmark...');
-  await ensurePeerReady();
-  syncControlFromPeer();
-  const senderUrl = $('senderNodeUrl').value;
-  const receiverUrl = $('receiverNodeUrl').value;
-  const senderIf = $('senderNodeInterface').value;
-  const receiverIf = $('receiverNodeInterface').value;
-  if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) {
-    throw new Error(`Missing pair: sender ${senderUrl}/${senderIf} -> receiver ${receiverUrl}/${receiverIf}`);
+  try {
+    await ensurePeerReady();
+    syncControlFromPeer();
+    const senderUrl = $('senderNodeUrl').value;
+    const receiverUrl = $('receiverNodeUrl').value;
+    const senderIf = $('senderNodeInterface').value;
+    const receiverIf = $('receiverNodeInterface').value;
+    if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) {
+      throw new Error(`Missing pair: sender ${senderUrl || '?'}/${senderIf || '?'} -> receiver ${receiverUrl || '?'}/${receiverIf || '?'}`);
+    }
+    const res = await fetch('/api/benchmark', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        senderUrl, receiverUrl,
+        senderInterface: senderIf,
+        receiverInterface: receiverIf,
+        profile: getProfile(),
+        count: Number($('benchCount').value || 500),
+        intervalMs: Number($('benchInterval').value || 1),
+        payloadSize: Number($('benchPayloadSize').value || 64)
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const s = data.report.stats;
+    $('reportSummary').innerHTML = `
+      <div><span>Sent</span><strong>${s.txCount}</strong></div>
+      <div><span>Recv</span><strong>${s.rxCount}</strong></div>
+      <div><span>Loss</span><strong>${s.lossPct.toFixed(2)}%</strong></div>
+      <div><span>Tx Mbps</span><strong>${s.throughputMbps.toFixed(2)}</strong></div>
+      <div><span>Lat p95 µs (skew-adj.)</span><strong>${(s.latencyAdjustedUs?.p95||0).toFixed(1)}</strong></div>
+      <div><span>Jitter µs</span><strong>${(s.jitterUs.mean||0).toFixed(2)}</strong></div>
+    `;
+    const okFlag = s.rxCount > 0;
+    setActionStatus('statusBench', okFlag ? 'ok' : 'fail', `${s.rxCount}/${s.txCount} · ${s.throughputMbps.toFixed(1)}Mbps`);
+    setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`, !okFlag);
+    if (okFlag) window.open('/reports/benchmark-latest.html', '_blank');
+    else alert(`Benchmark received 0 packets. Check the wire / peer interface / link.`);
+  } catch (err) {
+    setActionStatus('statusBench', 'fail', 'fail');
+    throw err;
   }
-  const result = await api('/api/benchmark', {
-    method: 'POST',
-    body: JSON.stringify({
-      senderUrl, receiverUrl,
-      senderInterface: senderIf,
-      receiverInterface: receiverIf,
-      profile: getProfile(),
-      count: Number($('benchCount').value || 500),
-      intervalMs: Number($('benchInterval').value || 1),
-      payloadSize: Number($('benchPayloadSize').value || 64)
-    })
-  });
-  const s = result.report.stats;
-  $('reportSummary').innerHTML = `
-    <div><span>Sent</span><strong>${s.txCount}</strong></div>
-    <div><span>Recv</span><strong>${s.rxCount}</strong></div>
-    <div><span>Loss</span><strong>${s.lossPct.toFixed(2)}%</strong></div>
-    <div><span>Tx Mbps</span><strong>${s.throughputMbps.toFixed(2)}</strong></div>
-    <div><span>Lat p95 µs (skew-adj.)</span><strong>${(s.latencyAdjustedUs?.p95||0).toFixed(1)}</strong></div>
-    <div><span>Jitter µs</span><strong>${(s.jitterUs.mean||0).toFixed(2)}</strong></div>
-  `;
-  setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`);
-  window.open('/reports/benchmark-latest.html', '_blank');
 }
 
 async function runSweep() {
+  setActionStatus('statusSweep', 'running', 'running...');
   setStatus('Running frame-size sweep (this can take a while)...');
-  await ensurePeerReady();
-  syncControlFromPeer();
-  const result = await api('/api/sweep', {
-    method: 'POST',
-    body: JSON.stringify({
-      senderUrl: $('senderNodeUrl').value,
-      receiverUrl: $('receiverNodeUrl').value,
-      senderInterface: $('senderNodeInterface').value,
-      receiverInterface: $('receiverNodeInterface').value,
-      count: Number($('benchCount').value || 200),
-      intervalMs: Number($('benchInterval').value || 1)
-    })
-  });
-  setStatus(`Sweep done: ${result.report.results.length} sizes`);
-  window.open('/reports/sweep-latest.html', '_blank');
+  try {
+    await ensurePeerReady();
+    syncControlFromPeer();
+    const result = await api('/api/sweep', {
+      method: 'POST',
+      body: JSON.stringify({
+        senderUrl: $('senderNodeUrl').value,
+        receiverUrl: $('receiverNodeUrl').value,
+        senderInterface: $('senderNodeInterface').value,
+        receiverInterface: $('receiverNodeInterface').value,
+        count: Number($('benchCount').value || 200),
+        intervalMs: Number($('benchInterval').value || 1)
+      })
+    });
+    const sizes = result.report.results.length;
+    setActionStatus('statusSweep', 'ok', `${sizes} sizes`);
+    setStatus(`Sweep done: ${sizes} sizes`);
+    window.open('/reports/sweep-latest.html', '_blank');
+  } catch (err) {
+    setActionStatus('statusSweep', 'fail', 'fail');
+    throw err;
+  }
 }
 
 $('runBenchmark').addEventListener('click', () => runBenchmark().catch((err) => {
@@ -550,6 +592,39 @@ function renderLinkStrip() {
   syncControlFromPeer();
 }
 
+function setActionStatus(id, kind, text) {
+  const el = $(id);
+  if (!el) return;
+  el.className = `actionStatus ${kind}`;
+  el.textContent = text;
+}
+
+function renderPairCard() {
+  const local = localIface();
+  const peer = state.peer.iface;
+  const localUrl = window.location.origin;
+  const peerUrl = state.peer.url || '';
+  const senderIs = state.localRole === 'sender';
+  const sender = senderIs ? local : peer;
+  const receiver = senderIs ? peer : local;
+  const sUrl = senderIs ? localUrl : peerUrl;
+  const rUrl = senderIs ? peerUrl : localUrl;
+  const fmtMac = (m) => m || '--:--:--:--:--:--';
+  const fmtIp = (i) => i?.ipv4?.[0]?.local || '-';
+  if ($('ctrlSenderName')) {
+    $('ctrlSenderName').textContent = sender?.name || '-';
+    $('ctrlSenderMac').textContent = fmtMac(sender?.mac);
+    $('ctrlSenderIp').textContent = fmtIp(sender);
+    $('ctrlSenderUrl').textContent = sUrl || '(this PC)';
+    $('ctrlReceiverName').textContent = receiver?.name || '-';
+    $('ctrlReceiverMac').textContent = fmtMac(receiver?.mac);
+    $('ctrlReceiverIp').textContent = fmtIp(receiver);
+    $('ctrlReceiverUrl').textContent = rUrl || '(set peer above)';
+    const ready = sender && receiver && sUrl && rUrl;
+    $('pairWarning').classList.toggle('hidden', Boolean(ready));
+  }
+}
+
 function syncControlFromPeer() {
   const localUrl = window.location.origin;
   const peerUrl = state.peer.url;
@@ -577,6 +652,7 @@ function syncControlFromPeer() {
     $('receiverNodeInterface').value = state.localRole === 'sender' ? peerIfName : localIfName;
   }
   renderNodeGrid();
+  renderPairCard();
 }
 
 async function probePeer() {

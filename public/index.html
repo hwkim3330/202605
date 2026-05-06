@@ -262,67 +262,91 @@
         </section>
 
         <section id="controlView" class="roleView controlView">
-          <aside class="sidebar">
-            <div class="interfaceBox">
-              <div>Sender / Receiver pair (auto-filled from pinned Peer above)</div>
-              <div class="muted">Click ⇄ in the link strip to swap roles.</div>
-            </div>
-            <details>
-              <summary class="advancedSummary">Manual override</summary>
-              <label>
-                Sender Node URL
-                <input id="senderNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
-              </label>
-              <label>
-                Sender Interface
-                <select id="senderNodeInterface"></select>
-              </label>
-              <label>
-                Receiver Node URL
-                <input id="receiverNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
-              </label>
-              <label>
-                Receiver Interface
-                <select id="receiverNodeInterface"></select>
-              </label>
-            </details>
-            <button id="runE2E" class="primaryAction fullWidth">Run E2E Test</button>
-            <button id="runReport" class="primaryAction fullWidth">Run Validation Report</button>
-            <div class="grid2">
-              <label>
-                Bench Count
-                <input id="benchCount" type="number" min="10" value="500">
-              </label>
-              <label>
-                Bench Interval ms
-                <input id="benchInterval" type="number" min="0" step="0.1" value="1">
-              </label>
-            </div>
-            <label>
-              Bench Payload Size
-              <input id="benchPayloadSize" type="number" min="32" value="64">
-            </label>
-            <button id="runBenchmark" class="primaryAction fullWidth">Run Benchmark (latency/jitter)</button>
-            <button id="runSweep" class="primaryAction fullWidth">Run Frame-Size Sweep</button>
-            <a id="openReport" class="linkButton disabled" href="/reports/latest.html" target="_blank" rel="noreferrer">Open Validation Report</a>
-            <a id="openE2EReport" class="linkButton disabled" href="/reports/e2e-latest.html" target="_blank" rel="noreferrer">Open E2E Report</a>
-            <a id="openBenchmark" class="linkButton" href="/reports/benchmark-latest.html" target="_blank" rel="noreferrer">Open Benchmark Report</a>
-            <a id="openSweep" class="linkButton" href="/reports/sweep-latest.html" target="_blank" rel="noreferrer">Open Sweep Report</a>
-            <a id="openReportJson" class="linkButton disabled" href="/reports/latest.json" target="_blank" rel="noreferrer">Open JSON</a>
-            <a id="openE2EJson" class="linkButton disabled" href="/reports/e2e-latest.json" target="_blank" rel="noreferrer">Open E2E JSON</a>
-          </aside>
-
-          <section class="workPane controlPane">
-            <div class="heroStrip controlStrip">
-              <div>
-                <strong>Control</strong>
-                <span>Probe two nodes, run receiver capture plus sender transmit, and generate reports.</span>
+          <section class="workPane controlPane controlPaneFull">
+            <div class="pairCard" id="pairCard">
+              <div class="pairSide">
+                <span class="pairTag">SENDER</span>
+                <strong id="ctrlSenderName">-</strong>
+                <code class="mac" id="ctrlSenderMac">--</code>
+                <small id="ctrlSenderIp">-</small>
+                <small id="ctrlSenderUrl" class="muted">-</small>
+              </div>
+              <div class="pairFlow">→</div>
+              <div class="pairSide">
+                <span class="pairTag receiverTag">RECEIVER</span>
+                <strong id="ctrlReceiverName">-</strong>
+                <code class="mac" id="ctrlReceiverMac">--</code>
+                <small id="ctrlReceiverIp">-</small>
+                <small id="ctrlReceiverUrl" class="muted">-</small>
               </div>
             </div>
-            <div class="nodeGrid" id="nodeGrid">
-              <div><span>Sender</span><strong>-</strong><small>-</small></div>
-              <div><span>Receiver</span><strong>-</strong><small>-</small></div>
+            <div id="pairWarning" class="pairWarning hidden">Set the Peer URL in the top link strip and Probe before running tests.</div>
+
+            <div class="actionsGrid">
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>Validation</h3>
+                  <span class="actionDesc">Build all 27 profiles locally and produce a PASS/FAIL report. No traffic on the wire.</span>
+                </div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusReport">idle</span>
+                  <button id="runReport" class="primaryAction">Run</button>
+                  <a id="openReport" class="linkButton disabled" href="/reports/latest.html" target="_blank" rel="noreferrer">Open</a>
+                </div>
+              </div>
+
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>E2E (single profile)</h3>
+                  <span class="actionDesc">Send the currently selected Sender-tab profile, capture on peer, match by MAC.</span>
+                </div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusE2E">idle</span>
+                  <button id="runE2E" class="primaryAction">Run</button>
+                  <a id="openE2EReport" class="linkButton disabled" href="/reports/e2e-latest.html" target="_blank" rel="noreferrer">Open</a>
+                </div>
+              </div>
+
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>Benchmark — latency / jitter / loss</h3>
+                  <span class="actionDesc">Stream timestamped UDP packets and compute throughput, p50/p95/p99 latency, jitter, loss.</span>
+                </div>
+                <div class="actionParams">
+                  <label>Count<input id="benchCount" type="number" min="10" value="500"></label>
+                  <label>Interval ms<input id="benchInterval" type="number" min="0" step="0.1" value="1"></label>
+                  <label>Payload B<input id="benchPayloadSize" type="number" min="32" value="64"></label>
+                </div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusBench">idle</span>
+                  <button id="runBenchmark" class="primaryAction">Run</button>
+                  <a id="openBenchmark" class="linkButton" href="/reports/benchmark-latest.html" target="_blank" rel="noreferrer">Open</a>
+                </div>
+              </div>
+
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>Frame-size sweep</h3>
+                  <span class="actionDesc">Run the benchmark across 64..1514 B and chart throughput / loss / latency / jitter.</span>
+                </div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusSweep">idle</span>
+                  <button id="runSweep" class="primaryAction">Run</button>
+                  <a id="openSweep" class="linkButton" href="/reports/sweep-latest.html" target="_blank" rel="noreferrer">Open</a>
+                </div>
+              </div>
             </div>
+
+            <details class="advanced">
+              <summary class="advancedSummary">Manual override (sender / receiver URL + interface)</summary>
+              <div class="grid2">
+                <label>Sender Node URL<input id="senderNodeUrl" autocomplete="off"></label>
+                <label>Sender Interface<select id="senderNodeInterface"></select></label>
+                <label>Receiver Node URL<input id="receiverNodeUrl" autocomplete="off"></label>
+                <label>Receiver Interface<select id="receiverNodeInterface"></select></label>
+              </div>
+            </details>
+            <div class="nodeGrid hidden" id="nodeGrid"></div>
             <div class="reportSummary" id="reportSummary">
               <div><span>Total</span><strong>-</strong></div>
               <div><span>Pass</span><strong>-</strong></div>
