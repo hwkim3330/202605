@@ -450,15 +450,29 @@ $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
   alert(err.message);
 }));
 
+async function ensurePeerReady() {
+  if (!state.peer.url) throw new Error('Peer URL not set. Fill the Peer field in the top link strip.');
+  if (!state.peer.interfaces.length) await probePeer();
+  if (!state.peer.iface) throw new Error('Peer interface not selected.');
+}
+
 async function runBenchmark() {
   setStatus('Running benchmark...');
+  await ensurePeerReady();
+  syncControlFromPeer();
+  const senderUrl = $('senderNodeUrl').value;
+  const receiverUrl = $('receiverNodeUrl').value;
+  const senderIf = $('senderNodeInterface').value;
+  const receiverIf = $('receiverNodeInterface').value;
+  if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) {
+    throw new Error(`Missing pair: sender ${senderUrl}/${senderIf} -> receiver ${receiverUrl}/${receiverIf}`);
+  }
   const result = await api('/api/benchmark', {
     method: 'POST',
     body: JSON.stringify({
-      senderUrl: $('senderNodeUrl').value,
-      receiverUrl: $('receiverNodeUrl').value,
-      senderInterface: $('senderNodeInterface').value,
-      receiverInterface: $('receiverNodeInterface').value,
+      senderUrl, receiverUrl,
+      senderInterface: senderIf,
+      receiverInterface: receiverIf,
       profile: getProfile(),
       count: Number($('benchCount').value || 500),
       intervalMs: Number($('benchInterval').value || 1),
@@ -480,6 +494,8 @@ async function runBenchmark() {
 
 async function runSweep() {
   setStatus('Running frame-size sweep (this can take a while)...');
+  await ensurePeerReady();
+  syncControlFromPeer();
   const result = await api('/api/sweep', {
     method: 'POST',
     body: JSON.stringify({
