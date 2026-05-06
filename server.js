@@ -642,7 +642,7 @@ async function runFrameSizeSweep(reqBody) {
       protocol: 'udp',
       udp: { srcPort: 40000, dstPort: 50000 },
       ipv4: { ttl: 64 },
-      payload: { mode: 'benchmark', size: Math.max(32, size - 42), start: 1 },
+      payload: { mode: 'benchmark', size: Math.max(16, size - 42), start: 1 },
       targetFrameLength: size,
       count,
       intervalMs
