@@ -667,6 +667,40 @@ input[readonly], select[readonly] {
 .actionHeader h3 {
   font-weight: 700;
   letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+
+.badge.offline {
+  background: rgba(124, 58, 237, 0.1);
+  color: #5b21b6;
+}
+
+.badge.wire {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
+}
+
+.hintLine {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  color: var(--muted);
+  background: rgba(15, 23, 42, 0.04);
+  padding: 5px 8px;
+  border-radius: 6px;
+  word-break: break-all;
+  line-height: 1.4;
 }
 
 .pairCard {

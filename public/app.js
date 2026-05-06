@@ -395,19 +395,23 @@ async function runE2E() {
     const senderIf = $('senderNodeInterface').value;
     const receiverIf = $('receiverNodeInterface').value;
     if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) throw new Error('Missing pair (peer not set?)');
+    const burst = Number($('e2eBurst').value || 5);
+    const e2eInterval = Number($('e2eInterval').value || 200);
+    const profile = { ...getProfile(), count: burst, intervalMs: e2eInterval };
     const result = await api('/api/e2e-test', {
       method: 'POST',
       body: JSON.stringify({
         senderUrl, receiverUrl,
         senderInterface: senderIf,
         receiverInterface: receiverIf,
-        profile: getProfile(),
-        timeoutSec: 5,
-        maxFrames: 50
+        profile,
+        timeoutSec: Math.max(5, Math.ceil((burst * e2eInterval) / 1000) + 3),
+        maxFrames: Math.max(50, burst + 20)
       })
     });
     renderE2EReport(result.report);
-    setActionStatus('statusE2E', result.report.ok ? 'ok' : 'fail', `${result.report.matchCount} matched`);
+    const txCount = result.report.sent?.framesSent ?? burst;
+    setActionStatus('statusE2E', result.report.ok ? 'ok' : 'fail', `tx ${txCount} · rx ${result.report.matchCount}`);
     prog.finish();
     setStatus(`E2E ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.matchCount} matching frame(s)`, !result.report.ok);
   } catch (err) {
@@ -662,6 +666,16 @@ function renderLinkStrip() {
   syncControlFromPeer();
   applyLock();
   setLockUi();
+  const hint = $('e2eHint');
+  if (hint) {
+    const local = localIface();
+    const peer = state.peer.iface;
+    if (local && peer) {
+      hint.textContent = `tcpdump -i ${local.name} -nn ether host ${peer.mac}`;
+    } else {
+      hint.textContent = 'tcpdump -i $iface -nn ether host PEER_MAC';
+    }
+  }
 }
 
 function setActionStatus(id, kind, text) {

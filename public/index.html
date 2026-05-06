@@ -288,8 +288,8 @@
             <div class="actionsGrid">
               <div class="actionCard">
                 <div class="actionHeader">
-                  <h3>Validation</h3>
-                  <span class="actionDesc">Build all 27 profiles locally and produce a PASS/FAIL report. No traffic on the wire.</span>
+                  <h3>Validation <span class="badge offline">offline</span></h3>
+                  <span class="actionDesc">Builds and decodes all 27 profile JSONs locally to confirm fields, padding, and headers are correct. <strong>Does not send anything</strong> — Wireshark will not see traffic from this action.</span>
                 </div>
                 <div class="progressTrack" id="progReport"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
                 <div class="actionFooter">
@@ -301,8 +301,13 @@
 
               <div class="actionCard">
                 <div class="actionHeader">
-                  <h3>E2E (single profile)</h3>
-                  <span class="actionDesc">Send the currently selected Sender-tab profile, capture on peer, match by MAC.</span>
+                  <h3>E2E (single profile) <span class="badge wire">on the wire</span></h3>
+                  <span class="actionDesc">Send the currently selected Sender-tab profile across the link N times, capture on peer, match by MAC. Wireshark on the sender NIC will see the burst.</span>
+                </div>
+                <div class="actionParams">
+                  <label>Burst count<input id="e2eBurst" type="number" min="1" value="5"></label>
+                  <label>Interval ms<input id="e2eInterval" type="number" min="0" value="200"></label>
+                  <label>&nbsp;<span id="e2eHint" class="hintLine">tcpdump -i $iface ether host PEER</span></label>
                 </div>
                 <div class="progressTrack" id="progE2E"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
                 <div class="actionFooter">
@@ -314,7 +319,7 @@
 
               <div class="actionCard">
                 <div class="actionHeader">
-                  <h3>Benchmark — latency / jitter / loss</h3>
+                  <h3>Benchmark — latency / jitter / loss <span class="badge wire">on the wire</span></h3>
                   <span class="actionDesc">Stream timestamped UDP packets and compute throughput, p50/p95/p99 latency, jitter, loss.</span>
                 </div>
                 <div class="actionParams">
@@ -332,7 +337,7 @@
 
               <div class="actionCard">
                 <div class="actionHeader">
-                  <h3>Frame-size sweep</h3>
+                  <h3>Frame-size sweep <span class="badge wire">on the wire</span></h3>
                   <span class="actionDesc">Run the benchmark across 64..1514 B and chart throughput / loss / latency / jitter.</span>
                 </div>
                 <div class="progressTrack" id="progSweep"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
