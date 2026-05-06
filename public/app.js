@@ -86,9 +86,9 @@ function setProfile(profile) {
   $('vlanEnabled').checked = Boolean(profile.vlan?.enabled);
   $('vlanId').value = profile.vlan?.id ?? 10;
   $('vlanPriority').value = profile.vlan?.priority ?? 0;
-  $('captureSrcMac').value = '';
-  $('captureDstMac').value = '';
-  $('captureEtherType').value = profile.protocol === 'arp' ? '0x0806' : profile.protocol === 'raw' ? '' : '0x0800';
+  // Capture page is Wireshark-style "sniff all by default" - never auto-fill the
+  // pre-decode filter inputs from the loaded profile. Otherwise loading the ARP
+  // profile would silently lock captureEtherType=0x0806 and drop every UDP frame.
   $('profileDescription').textContent = profile.description || profile.name || '-';
 }
 
@@ -1504,6 +1504,8 @@ $('receiverNodeInterface').addEventListener('change', () => {
   const btn = document.querySelector(`[data-view="${target}"]`);
   if (btn) btn.click();
 })();
+// ?autoStart=1 — used for headless verification of the capture pipeline
+const _autoStart = new URLSearchParams(location.search).get('autoStart') === '1';
 await loadExamples();
 await loadTestProfiles();
 await loadTestCases();
@@ -1516,8 +1518,9 @@ if (savedLocalIf && state.interfaces.find((i) => i.name === savedLocalIf)) {
 $('peerUrlPin').value = state.peer.url;
 renderLinkStrip();
 if (state.peer.url) probePeer().catch(() => {});
-await build();
+try { await build(); } catch (err) { console.warn('initial build skipped:', err.message); }
 clearCapture();
+if (_autoStart) setTimeout(() => $('captureStart')?.click(), 800);
 // Honour URL hash like #capture / #control / #sender to jump to a tab on load
 (() => {
   const hash = location.hash.replace('#', '');
