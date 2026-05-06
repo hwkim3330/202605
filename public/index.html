@@ -9,21 +9,24 @@
   <body>
     <main class="app">
       <header class="topbar">
-        <div>
-          <h1>Ethernet Packet Lab</h1>
-          <p>Ethernet II packet workbench for two-node lab tests</p>
+        <div class="brand">
+          <img src="/keti.png" alt="KETI">
+          <div>
+            <h1>Ethernet Packet Lab</h1>
+            <p>Packet sender, receiver, and ARP discovery for lab links</p>
+          </div>
         </div>
         <div class="topActions">
           <div id="status" class="status">Ready</div>
-          <button id="refreshInterfaces">Interfaces</button>
+          <button id="refreshInterfaces">Refresh</button>
         </div>
       </header>
 
       <section class="toolbar">
-        <button id="build">Build</button>
-        <button id="send">Send</button>
-        <button id="capture">Capture</button>
-        <button id="scan">Scan</button>
+        <button id="capture" class="primaryAction">Start Capture</button>
+        <button id="send">Send Packet</button>
+        <button id="build">Preview Frame</button>
+        <button id="scan">Discover</button>
         <div class="toolbarField">
           <span>Interface</span>
           <select id="interfaceSelect"></select>
@@ -39,7 +42,7 @@
             <div id="selectedInterfaceMac" class="muted">-</div>
           </div>
 
-          <h2>Profiles</h2>
+          <h2>Packet Template</h2>
           <div class="buttonRow">
             <button data-example="udp">UDP</button>
             <button data-example="icmp">ICMP</button>
@@ -109,7 +112,7 @@
             </label>
           </div>
 
-          <h2>Receive Filter</h2>
+          <h2>Capture Filter</h2>
           <label>
             Source MAC filter
             <input id="captureSrcMac" autocomplete="off" placeholder="optional">
@@ -133,7 +136,7 @@
             <input id="captureMaxFrames" type="number" min="1" value="30">
           </label>
 
-          <h2>Discovery</h2>
+          <h2>ARP Discovery</h2>
           <label>
             CIDR
             <input id="scanCidr" autocomplete="off" placeholder="169.254.0.0/16">
@@ -172,7 +175,7 @@
               </table>
             </div>
             <div class="topologyPane">
-              <div class="sectionTitle">ARP Discovery Map</div>
+              <div class="sectionTitle">Discovery Map</div>
               <svg id="topology" role="img" aria-label="ARP discovery topology"></svg>
               <div id="scanResults" class="scanResults">No scan results yet</div>
             </div>

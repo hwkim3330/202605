@@ -286,14 +286,14 @@ async function loadExamples() {
 }
 
 async function build() {
-  setStatus('Building frame...');
+  setStatus('Preparing frame preview...');
   const result = await api('/api/build', { method: 'POST', body: JSON.stringify(getProfile()) });
   showResult(result);
-  setStatus(`Built ${result.stdout.decoded.length} byte frame`);
+  setStatus(`Preview ready: ${result.stdout.decoded.length} bytes`);
 }
 
 async function send() {
-  setStatus('Sending frames...');
+  setStatus('Sending packet...');
   const result = await api('/api/send', { method: 'POST', body: JSON.stringify(getProfile()) });
   showResult(result);
   setStatus(`Sent ${result.stdout.framesSent} frame(s), ${result.stdout.bytesSent} bytes`);
@@ -301,7 +301,7 @@ async function send() {
 
 async function capture() {
   const timeoutSec = Number($('captureTimeout').value || 10);
-  setStatus(`Capturing for ${timeoutSec}s...`);
+  setStatus(`Capture running for ${timeoutSec}s...`);
   const result = await api('/api/capture', {
     method: 'POST',
     body: JSON.stringify({
@@ -321,7 +321,7 @@ async function capture() {
     $('decoded').textContent = JSON.stringify(frames[0].decoded, null, 2);
     $('hexdump').textContent = frames[0].hexdump || '';
   }
-  setStatus(`Captured ${frames.length} frame(s)`);
+  setStatus(`Capture complete: ${frames.length} frame(s)`);
 }
 
 async function scan() {
