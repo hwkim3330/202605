@@ -445,10 +445,6 @@ $('runReport').addEventListener('click', () => runReport().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
-$('probeNodes').addEventListener('click', () => probeNodes().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
-}));
 $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
