@@ -300,8 +300,8 @@ function renderReport(report) {
       <td>${item.error || item.info || ''}</td>
     </tr>
   `).join('');
-  $('openReport').classList.remove('disabled');
-  $('openReportJson').classList.remove('disabled');
+  $('openReport')?.classList.remove('disabled');
+  $('openReportJson')?.classList.remove('disabled');
 }
 
 function renderInterfaceOptions(selectId, interfaces) {
@@ -371,8 +371,8 @@ function renderE2EReport(report) {
       `;
     }).join('')
     : '<tr><td colspan="7" class="empty">No matching frames captured</td></tr>';
-  $('openE2EReport').classList.remove('disabled');
-  $('openE2EJson').classList.remove('disabled');
+  $('openE2EReport')?.classList.remove('disabled');
+  $('openE2EJson')?.classList.remove('disabled');
 }
 
 async function runE2E() {
