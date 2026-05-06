@@ -17,6 +17,7 @@ const state = {
     iface: null
   },
   testCases: [],
+  testProfiles: [],
   currentCase: {
     id: '',
     name: 'Untitled Test Case',
@@ -257,6 +258,16 @@ function renderCaseSelect() {
   }
 }
 
+function renderProfileSuiteSelect() {
+  if (!state.testProfiles.length) {
+    $('profileSuiteSelect').innerHTML = '<option value="">No standard profiles</option>';
+    return;
+  }
+  $('profileSuiteSelect').innerHTML = '<option value="">Load standard profile...</option>' + state.testProfiles.map((item) => (
+    `<option value="${item.id}">${item.profileGroup} - ${item.name} (${item.stepCount})</option>`
+  )).join('');
+}
+
 function renderCaseRows() {
   const steps = state.currentCase.steps || [];
   if (!steps.length) {
@@ -362,6 +373,17 @@ async function loadTestCases() {
   } else {
     renderCaseRows();
   }
+}
+
+async function loadTestProfiles() {
+  try {
+    const result = await api('/api/test-profiles');
+    state.testProfiles = result.items || [];
+  } catch (err) {
+    state.testProfiles = [];
+    console.warn('test-profiles unavailable:', err.message);
+  }
+  renderProfileSuiteSelect();
 }
 
 function addCurrentPacketToCase() {
@@ -963,6 +985,14 @@ $('caseSelect').addEventListener('change', () => {
   const item = state.testCases.find((entry) => entry.id === $('caseSelect').value);
   if (item) setCurrentCase(item.testCase);
 });
+$('profileSuiteSelect').addEventListener('change', () => {
+  const item = state.testProfiles.find((entry) => entry.id === $('profileSuiteSelect').value);
+  if (!item) return;
+  setCurrentCase(item.testCase);
+  $('caseName').value = item.name;
+  $('caseDescription').value = item.description || '';
+  setStatus(`Loaded standard profile: ${item.name}`);
+});
 $('newCase').addEventListener('click', () => setCurrentCase({ id: '', name: 'Untitled Test Case', description: '', steps: [] }));
 $('saveCase').addEventListener('click', () => saveCurrentCase().catch((err) => {
   setStatus(err.message, true);
@@ -1296,6 +1326,7 @@ $('receiverNodeInterface').addEventListener('change', () => {
 });
 
 await loadExamples();
+await loadTestProfiles();
 await loadTestCases();
 await loadInterfaces();
 const savedLocalIf = localStorage.getItem('localInterface');
