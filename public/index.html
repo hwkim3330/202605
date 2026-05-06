@@ -406,38 +406,17 @@
 
             <details class="advanced">
               <summary class="advancedSummary">Manual override (sender / receiver URL + interface)</summary>
-              <div class="grid2">
+              <div class="grid2 overrideGrid">
                 <label>Sender Node URL<input id="senderNodeUrl" autocomplete="off"></label>
                 <label>Sender Interface<select id="senderNodeInterface"></select></label>
                 <label>Receiver Node URL<input id="receiverNodeUrl" autocomplete="off"></label>
                 <label>Receiver Interface<select id="receiverNodeInterface"></select></label>
               </div>
             </details>
+            <!-- Hidden legacy holders kept so existing JS references remain valid -->
             <div class="nodeGrid hidden" id="nodeGrid"></div>
-            <div class="reportSummary" id="reportSummary">
-              <div><span>Total</span><strong>-</strong></div>
-              <div><span>Pass</span><strong>-</strong></div>
-              <div><span>Fail</span><strong>-</strong></div>
-            </div>
-            <div class="packetList">
-              <div class="sectionTitle">Validation Results</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>No.</th>
-                    <th>Category</th>
-                    <th>Profile</th>
-                    <th>Status</th>
-                    <th>Length</th>
-                    <th>Protocol</th>
-                    <th>Info</th>
-                  </tr>
-                </thead>
-                <tbody id="reportRows">
-                  <tr><td colspan="7" class="empty">No report generated yet</td></tr>
-                </tbody>
-              </table>
-            </div>
+            <div class="reportSummary hidden" id="reportSummary"></div>
+            <table class="hidden"><tbody id="reportRows"></tbody></table>
           </section>
         </section>
 

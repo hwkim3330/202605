@@ -837,6 +837,34 @@ body.captureMode .toolbar { padding: 6px 16px; }
   color: var(--text);
 }
 
+/* Compact override panel */
+.overrideGrid {
+  margin-top: 10px;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.03);
+  border-radius: 10px;
+}
+.overrideGrid label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.overrideGrid input,
+.overrideGrid select {
+  margin-top: 4px;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.advanced { margin-top: 4px; }
+
+#controlView.roleView {
+  align-content: start;
+}
+.controlPaneFull {
+  height: auto;
+  overflow-y: auto;
+}
+
 .progressTrack {
   position: relative;
   height: 6px;

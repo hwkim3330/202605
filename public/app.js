@@ -1056,7 +1056,7 @@ async function runBenchmark() {
   const prog = progressFor('progBench');
   const count = Number($('benchCount').value || 500);
   const intervalMs = Number($('benchInterval').value || 1);
-  const estSec = Math.max(3, (count * intervalMs) / 1000 + 3);
+  const estSec = Math.max(1.2, (count * intervalMs) / 1000 + 0.7);
   setActionStatus('statusBench', 'running', 'running');
   prog.start(estSec);
   setStatus('Running benchmark...');
@@ -1113,8 +1113,11 @@ async function runSweep() {
   const prog = progressFor('progSweep');
   const count = Number($('benchCount').value || 200);
   const intervalMs = Number($('benchInterval').value || 1);
-  // 7 sizes × (count*intervalMs/1000 + 3s overhead each)
-  const estSec = 7 * ((count * intervalMs) / 1000 + 3);
+  // Per-slot wall time observed: send_ms + ~700ms HTTP/agent overhead. Strict
+  // srcMac filter + maxFrames=count makes the receiver exit immediately when
+  // all frames arrive instead of running to capture timeout.
+  const perSlot = Math.max(1.2, (count * intervalMs) / 1000 + 0.7);
+  const estSec = 7 * perSlot + 0.5;
   setActionStatus('statusSweep', 'running', 'running');
   prog.start(estSec);
   setStatus('Running frame-size sweep (this can take a while)...');

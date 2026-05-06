@@ -732,12 +732,16 @@ async function runBenchmark(reqBody) {
   profile.recordTimestamps = true;
   profile.payload = { mode: 'benchmark', size: Number(reqBody.payloadSize || profile.payload?.size || 64), start: 1 };
 
-  const captureTimeoutSec = Number(reqBody.captureTimeoutSec || Math.max(8, Math.ceil((count * intervalMs) / 1000) + 5));
+  // Stop the receiver agent as soon as our frames arrive. srcMac filter is
+  // strict, so the agent only counts the sender's own frames; +20 grace lets
+  // any in-flight stragglers in but doesn't make us wait a full timeout when
+  // there is no background traffic to top up the bucket.
+  const captureTimeoutSec = Number(reqBody.captureTimeoutSec || Math.max(4, Math.ceil((count * intervalMs) / 1000) + 2));
   const captureBody = {
     interface: receiverIface.name,
     timeoutSec: captureTimeoutSec,
     timeoutMs: captureTimeoutSec * 1000 + 5000,
-    maxFrames: count + 100,
+    maxFrames: count, // strict srcMac filter means we only count our own frames; stop right when all arrive
     srcMac: senderIface.mac
   };
 
