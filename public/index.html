@@ -273,7 +273,7 @@
                 <input id="captureFollow" type="checkbox" checked>
                 <span>Auto-scroll</span>
               </label>
-              <input id="captureDisplayFilter" autocomplete="off" placeholder="display filter — e.g. udp, arp, vlan, mac:c8:4d:..">
+              <input id="captureDisplayFilter" autocomplete="off" placeholder="display filter — udp / tcp / icmp / arp / vlan / mac:.. / ip:.. / port:50000" title="Display filter — applied client-side after decode. Tokens: udp tcp icmp arp vlan ipv4 / mac:&lt;substr&gt; / ip:&lt;substr&gt; / port:&lt;number&gt; / any substring of decoded JSON.">
               <div class="captureStats">
                 <span class="statChip"><span>pkts</span><strong id="capStatPkts">0</strong></span>
                 <span class="statChip"><span>pps</span><strong id="capStatPps">0</strong></span>

@@ -335,8 +335,11 @@ async function startCaptureStream() {
     capture.lastWindow.pps = dt > 0 ? capture.lastWindow.count / dt : 0;
     capture.lastWindow.t = now;
     capture.lastWindow.count = 0;
+    const elapsed = (now - capture.startedAtMs) / 1000;
+    const stateEl = $('capStatState');
+    if (stateEl?.classList.contains('running')) stateEl.textContent = `capturing · ${elapsed.toFixed(1)}s`;
     refreshCaptureStats();
-  }, 1000);
+  }, 500);
   try {
     while (true) {
       const { value, done } = await reader.read();
@@ -791,6 +794,15 @@ async function loadExamples() {
   }
 }
 
+function validateProfileFields() {
+  const p = $('protocol').value;
+  if (p === 'arp' || p === 'udp' || p === 'icmp') {
+    if (!$('srcMac').value || !$('dstMac').value) return 'Source / Destination MAC is empty. Lock the peer in the top link strip, or fill manually.';
+    if (p !== 'arp' && (!$('srcIp').value || !$('dstIp').value)) return 'Source / Destination IP is empty.';
+  }
+  return null;
+}
+
 async function build() {
   setStatus('Preparing frame preview...');
   const result = await api('/api/build', { method: 'POST', body: JSON.stringify(getProfile()) });
@@ -799,6 +811,8 @@ async function build() {
 }
 
 async function send() {
+  const err = validateProfileFields();
+  if (err) { setStatus(err, true); alert(err); return; }
   setStatus('Sending packet...');
   const result = await api('/api/send', { method: 'POST', body: JSON.stringify(getProfile()) });
   showResult(result);
@@ -1351,16 +1365,17 @@ function renderPairCard() {
   const fmtMac = (m) => m || '--:--:--:--:--:--';
   const fmtIp = (i) => i?.ipv4?.[0]?.local || '-';
   if ($('ctrlSenderName')) {
-    $('ctrlSenderName').textContent = sender?.name || '-';
+    $('ctrlSenderName').textContent = sender?.name || '— set in Interface picker —';
     $('ctrlSenderMac').textContent = fmtMac(sender?.mac);
     $('ctrlSenderIp').textContent = fmtIp(sender);
     $('ctrlSenderUrl').textContent = sUrl || '(this PC)';
-    $('ctrlReceiverName').textContent = receiver?.name || '-';
+    $('ctrlReceiverName').textContent = receiver?.name || '— probe peer in the link strip above —';
     $('ctrlReceiverMac').textContent = fmtMac(receiver?.mac);
     $('ctrlReceiverIp').textContent = fmtIp(receiver);
-    $('ctrlReceiverUrl').textContent = rUrl || '(set peer above)';
+    $('ctrlReceiverUrl').textContent = rUrl || '(peer not set)';
     const ready = sender && receiver && sUrl && rUrl;
     $('pairWarning').classList.toggle('hidden', Boolean(ready));
+    document.querySelector('.pairCard')?.classList.toggle('pairIncomplete', !ready);
   }
 }
 
@@ -1521,7 +1536,14 @@ if (savedLocalIf && state.interfaces.find((i) => i.name === savedLocalIf)) {
 $('peerUrlPin').value = state.peer.url;
 renderLinkStrip();
 if (state.peer.url) probePeer().catch(() => {});
-try { await build(); } catch (err) { console.warn('initial build skipped:', err.message); }
+try {
+  await build();
+} catch (err) {
+  console.warn('initial build skipped:', err.message);
+  $('decoded').textContent = '// Build needs Source MAC / Source IP / Destination MAC.\n// Lock to peer above (or pick a profile) and press "Preview Frame".';
+  $('hexdump').textContent = '';
+}
+setStatus('Ready');
 clearCapture();
 if (_autoStart) setTimeout(() => $('captureStart')?.click(), 800);
 // Honour URL hash like #capture / #control / #sender to jump to a tab on load
