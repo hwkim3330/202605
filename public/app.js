@@ -179,35 +179,223 @@ function packetInfo(decoded) {
   return decoded.ethernet?.etherType || '';
 }
 
-function renderPackets() {
-  if (state.packets.length === 0) {
-    $('packetRows').innerHTML = '<tr><td colspan="7" class="empty">No captured packets yet</td></tr>';
+const capture = {
+  packets: [],
+  reader: null,
+  abort: null,
+  selectedIdx: -1,
+  startedAtMs: 0,
+  totalBytes: 0,
+  lastWindow: { t: 0, count: 0, pps: 0 },
+  filter: '',
+  maxRows: 5000
+};
+
+function rowProtoClass(decoded) {
+  if (decoded.arp) return 'proto-arp';
+  if (decoded.icmp) return 'proto-icmp';
+  if (decoded.udp) return 'proto-udp';
+  if (decoded.ipv4?.protocol === 6) return 'proto-tcp';
+  return '';
+}
+
+function frameMatchesFilter(packet, filter) {
+  if (!filter) return true;
+  const f = filter.trim().toLowerCase();
+  if (!f) return true;
+  const d = packet.decoded || {};
+  // Tokens: udp / tcp / icmp / arp / vlan / ipv4
+  if (f === 'udp') return Boolean(d.udp);
+  if (f === 'tcp') return d.ipv4?.protocol === 6;
+  if (f === 'icmp') return Boolean(d.icmp);
+  if (f === 'arp') return Boolean(d.arp);
+  if (f === 'vlan') return Boolean(d.vlan);
+  if (f === 'ipv4') return Boolean(d.ipv4);
+  if (f.startsWith('mac:')) {
+    const m = f.slice(4).trim();
+    return (d.ethernet?.srcMac || '').toLowerCase().includes(m)
+      || (d.ethernet?.dstMac || '').toLowerCase().includes(m);
+  }
+  if (f.startsWith('ip:')) {
+    const m = f.slice(3).trim();
+    return (d.ipv4?.src || '').includes(m) || (d.ipv4?.dst || '').includes(m);
+  }
+  if (f.startsWith('port:')) {
+    const m = Number(f.slice(5).trim());
+    return d.udp?.srcPort === m || d.udp?.dstPort === m;
+  }
+  // default: substring match against the JSON
+  return JSON.stringify(d).toLowerCase().includes(f);
+}
+
+function appendPacketRow(packet) {
+  const tbody = $('packetRows');
+  const empty = $('packetEmpty');
+  if (empty) empty.classList.add('hidden');
+  const decoded = packet.decoded || {};
+  const src = decoded.ipv4?.src || decoded.arp?.senderIp || decoded.ethernet?.srcMac || '-';
+  const dst = decoded.ipv4?.dst || decoded.arp?.targetIp || decoded.ethernet?.dstMac || '-';
+  const t = packet.timestamp;
+  const d = new Date(t * 1000);
+  const ms = String(d.getMilliseconds()).padStart(3, '0');
+  const tStr = `${d.toLocaleTimeString('en-GB')}.${ms}`;
+  const proto = protocolName(decoded);
+  const idx = packet._idx;
+  const tr = document.createElement('tr');
+  tr.dataset.idx = String(idx);
+  tr.className = rowProtoClass(decoded);
+  tr.innerHTML = `<td class="colNum">${idx + 1}</td><td class="colTime">${tStr}</td><td>${src}</td><td>${dst}</td><td class="colProto">${proto}</td><td class="colLen">${packet.length}</td><td>${packetInfo(decoded)}</td>`;
+  tr.addEventListener('click', () => selectPacket(idx));
+  tbody.appendChild(tr);
+  // cap rows in DOM
+  while (tbody.children.length > capture.maxRows) tbody.removeChild(tbody.firstChild);
+  if ($('captureFollow').checked) {
+    const list = $('packetRows').parentElement.parentElement;
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+function selectPacket(idx) {
+  capture.selectedIdx = idx;
+  const pkt = capture.packets[idx];
+  if (!pkt) return;
+  $('captureDecoded').textContent = JSON.stringify(pkt.decoded, null, 2);
+  $('captureHexdump').textContent = pkt.hexdump || '';
+  document.querySelectorAll('#packetRows tr').forEach((r) => r.classList.toggle('selected', r.dataset.idx === String(idx)));
+}
+
+function refreshCaptureStats() {
+  $('capStatPkts').textContent = capture.packets.filter((p) => frameMatchesFilter(p, capture.filter)).length || capture.packets.length;
+  $('capStatBytes').textContent = humanBytes(capture.totalBytes);
+  $('capStatPps').textContent = capture.lastWindow.pps.toFixed(0);
+}
+
+function humanBytes(b) {
+  if (b < 1024) return `${b}`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(2)} MB`;
+}
+
+function clearCapture() {
+  capture.packets = [];
+  capture.totalBytes = 0;
+  capture.selectedIdx = -1;
+  capture.lastWindow = { t: 0, count: 0, pps: 0 };
+  $('packetRows').innerHTML = '';
+  $('captureDecoded').textContent = '';
+  $('captureHexdump').textContent = '';
+  $('packetEmpty')?.classList.remove('hidden');
+  refreshCaptureStats();
+}
+
+async function startCaptureStream() {
+  if (capture.reader) return;
+  clearCapture();
+  $('capStatState').textContent = 'capturing';
+  $('capStatState').classList.add('running');
+  $('captureStart').disabled = true;
+  $('captureStop').disabled = false;
+  capture.startedAtMs = performance.now();
+  capture.lastWindow = { t: capture.startedAtMs, count: 0, pps: 0 };
+  capture.filter = $('captureDisplayFilter').value.trim();
+  const promisc = $('capturePromisc').checked;
+  const body = {
+    interface: $('interfaceSelect').value,
+    timeoutSec: 0,
+    maxFrames: 0,
+    srcMac: promisc ? '' : ($('captureSrcMac').value.trim() || ''),
+    dstMac: promisc ? '' : ($('captureDstMac').value.trim() || ''),
+    etherType: promisc ? '' : ($('captureEtherType').value.trim() || '')
+  };
+  const ctrl = new AbortController();
+  capture.abort = ctrl;
+  let res;
+  try {
+    res = await fetch('/api/capture-stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  } catch (err) {
+    finishCaptureStream(`error: ${err.message}`);
+    throw err;
+  }
+  if (!res.ok || !res.body) {
+    finishCaptureStream(`error: HTTP ${res.status}`);
     return;
   }
-  $('packetRows').innerHTML = state.packets.map((packet, index) => {
-    const decoded = packet.decoded;
-    const src = decoded.ipv4?.src || decoded.arp?.senderIp || decoded.ethernet?.srcMac || '-';
-    const dst = decoded.ipv4?.dst || decoded.arp?.targetIp || decoded.ethernet?.dstMac || '-';
-    const time = new Date(packet.timestamp * 1000).toLocaleTimeString();
-    return `
-      <tr data-packet-index="${index}">
-        <td>${index + 1}</td>
-        <td>${time}</td>
-        <td>${src}</td>
-        <td>${dst}</td>
-        <td>${protocolName(decoded)}</td>
-        <td>${packet.length}</td>
-        <td>${packetInfo(decoded)}</td>
-      </tr>
-    `;
-  }).join('');
-  document.querySelectorAll('[data-packet-index]').forEach((row) => {
-    row.addEventListener('click', () => {
-      const packet = state.packets[Number(row.dataset.packetIndex)];
-      $('captureDecoded').textContent = JSON.stringify(packet.decoded, null, 2);
-      $('captureHexdump').textContent = packet.hexdump || '';
-    });
-  });
+  const reader = res.body.getReader();
+  capture.reader = reader;
+  const dec = new TextDecoder();
+  let buf = '';
+  const statTimer = setInterval(() => {
+    const now = performance.now();
+    const dt = (now - capture.lastWindow.t) / 1000;
+    capture.lastWindow.pps = dt > 0 ? capture.lastWindow.count / dt : 0;
+    capture.lastWindow.t = now;
+    capture.lastWindow.count = 0;
+    refreshCaptureStats();
+  }, 1000);
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === 'frame') {
+          ev._idx = capture.packets.length;
+          capture.packets.push(ev);
+          capture.totalBytes += ev.length;
+          capture.lastWindow.count += 1;
+          if (frameMatchesFilter(ev, capture.filter)) appendPacketRow(ev);
+        } else if (ev.type === 'log') {
+          setStatus(`agent: ${ev.stderr}`, true);
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') setStatus(err.message, true);
+  } finally {
+    clearInterval(statTimer);
+    finishCaptureStream('stopped');
+  }
+}
+
+function finishCaptureStream(label) {
+  capture.reader = null;
+  capture.abort = null;
+  $('captureStart').disabled = false;
+  $('captureStop').disabled = true;
+  $('capStatState').classList.remove('running');
+  $('capStatState').textContent = label || 'idle';
+  refreshCaptureStats();
+}
+
+function stopCaptureStream() {
+  try { capture.abort?.abort(); } catch {}
+  try { capture.reader?.cancel(); } catch {}
+}
+
+function reapplyFilter() {
+  capture.filter = $('captureDisplayFilter').value.trim();
+  $('packetRows').innerHTML = '';
+  $('packetEmpty')?.classList.toggle('hidden', capture.packets.length > 0);
+  for (const p of capture.packets) {
+    if (frameMatchesFilter(p, capture.filter)) appendPacketRow(p);
+  }
+  refreshCaptureStats();
+}
+
+function renderPackets() {
+  // legacy entry point kept for compatibility: reapplies filter on existing buffer
+  reapplyFilter();
 }
 
 function protocolSummary(profile) {
@@ -617,33 +805,7 @@ async function send() {
   setStatus(`Sent ${result.stdout.framesSent} frame(s), ${result.stdout.bytesSent} bytes`);
 }
 
-async function capture() {
-  const timeoutSec = Number($('captureTimeout').value || 10);
-  setStatus(`Capture running for ${timeoutSec}s...`);
-  const result = await api('/api/capture', {
-    method: 'POST',
-    body: JSON.stringify({
-      interface: $('interfaceSelect').value,
-      timeoutSec,
-      timeoutMs: (timeoutSec * 1000) + 2000,
-      maxFrames: Number($('captureMaxFrames').value || 30),
-      srcMac: $('captureSrcMac').value.trim(),
-      dstMac: $('captureDstMac').value.trim(),
-      etherType: $('captureEtherType').value.trim()
-    })
-  });
-  const frames = result.stdout.frames || [];
-  state.packets = frames;
-  renderPackets();
-  if (frames[0]) {
-    $('captureDecoded').textContent = JSON.stringify(frames[0].decoded, null, 2);
-    $('captureHexdump').textContent = frames[0].hexdump || '';
-  } else {
-    $('captureDecoded').textContent = '';
-    $('captureHexdump').textContent = '';
-  }
-  setStatus(`Capture complete: ${frames.length} frame(s)`);
-}
+// `capture()` legacy function removed; use startCaptureStream / stopCaptureStream.
 
 function renderReport(report) {
   state.report = report;
@@ -863,10 +1025,17 @@ $('send').addEventListener('click', () => send().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
-$('capture').addEventListener('click', () => capture().catch((err) => {
+$('captureStart').addEventListener('click', () => startCaptureStream().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
+$('captureStop').addEventListener('click', stopCaptureStream);
+$('captureClear').addEventListener('click', clearCapture);
+$('captureDisplayFilter').addEventListener('input', () => {
+  // debounce
+  clearTimeout(window._capFilterTimer);
+  window._capFilterTimer = setTimeout(reapplyFilter, 120);
+});
 $('runReport').addEventListener('click', () => runReport().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
@@ -1338,4 +1507,4 @@ $('peerUrlPin').value = state.peer.url;
 renderLinkStrip();
 if (state.peer.url) probePeer().catch(() => {});
 await build();
-renderPackets();
+clearCapture();

@@ -1,0 +1,21 @@
+{
+  "id": "payload-size-integrity",
+  "name": "Payload and Frame Size Integrity",
+  "profileGroup": "02 Integrity",
+  "description": "Payload pattern and Ethernet frame size sweep up to standard non-jumbo Ethernet frame length.",
+  "standardRefs": [
+    { "id": "IEEE802.3", "title": "Ethernet MAC frame format and frame size" },
+    { "id": "RFC768", "title": "UDP payload transport", "url": "https://www.rfc-editor.org/rfc/rfc768" },
+    { "id": "RFC791", "title": "IPv4 header/checksum", "url": "https://www.rfc-editor.org/rfc/rfc791" }
+  ],
+  "steps": [
+    { "kind": "packet", "profileKey": "05_payload_pattern_aa55", "count": 5, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "06_payload_counter_256", "count": 5, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "07_frame_size_64", "count": 3, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "08_frame_size_128", "count": 3, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "09_frame_size_256", "count": 3, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "10_frame_size_512", "count": 3, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "11_frame_size_1024", "count": 3, "intervalMs": 50 },
+    { "kind": "packet", "profileKey": "08_frame_size_1514", "count": 3, "intervalMs": 50 }
+  ]
+}

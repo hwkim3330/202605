@@ -1,0 +1,16 @@
+{
+  "id": "switching-policy-multicast",
+  "name": "Switching, Multicast, and Policy",
+  "profileGroup": "04 Switch",
+  "description": "Unknown unicast, multicast, ACL candidate, and guarded broadcast behavior for switch/FDB tests.",
+  "standardRefs": [
+    { "id": "IEEE802.1D/802.1Q", "title": "Bridge forwarding, filtering database, VLAN forwarding behavior" },
+    { "id": "RFC1112", "title": "IPv4 multicast MAC mapping reference" }
+  ],
+  "steps": [
+    { "kind": "packet", "profileKey": "12_unknown_unicast", "count": 3, "intervalMs": 200 },
+    { "kind": "packet", "profileKey": "13_l2_multicast", "count": 3, "intervalMs": 200 },
+    { "kind": "packet", "profileKey": "14_acl_udp_block_candidate", "count": 3, "intervalMs": 200 },
+    { "kind": "packet", "profileKey": "27_broadcast_storm_guard", "count": 10, "intervalMs": 50 }
+  ]
+}

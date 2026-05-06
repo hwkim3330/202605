@@ -1,0 +1,19 @@
+{
+  "id": "rfc-core-l2-l3-l4",
+  "name": "RFC Core L2/L3/L4 Bring-up",
+  "profileGroup": "01 Basic",
+  "description": "On-wire ARP, IPv4, ICMP Echo, UDP unicast, and UDP sequence validation for first link bring-up.",
+  "standardRefs": [
+    { "id": "RFC826", "title": "Address Resolution Protocol", "url": "https://www.rfc-editor.org/rfc/rfc826" },
+    { "id": "RFC791", "title": "Internet Protocol", "url": "https://www.rfc-editor.org/rfc/rfc791" },
+    { "id": "RFC792", "title": "Internet Control Message Protocol", "url": "https://www.rfc-editor.org/rfc/rfc792" },
+    { "id": "RFC768", "title": "User Datagram Protocol", "url": "https://www.rfc-editor.org/rfc/rfc768" }
+  ],
+  "steps": [
+    { "kind": "packet", "profileKey": "01_arp_request", "count": 3, "intervalMs": 200 },
+    { "kind": "delay", "delayMs": 200 },
+    { "kind": "packet", "profileKey": "02_icmp_echo", "count": 3, "intervalMs": 200 },
+    { "kind": "packet", "profileKey": "03_udp_unicast_basic", "count": 5, "intervalMs": 100 },
+    { "kind": "packet", "profileKey": "04_udp_sequence", "count": 10, "intervalMs": 50 }
+  ]
+}

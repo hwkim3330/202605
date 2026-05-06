@@ -398,9 +398,75 @@ def command_capture() -> None:
     print(json.dumps({"ok": True, "frames": frames}, ensure_ascii=False))
 
 
+def command_capture_stream() -> None:
+    req = read_json()
+    interface = req.get("interface")
+    if not interface:
+        fail("interface is required")
+    timeout_sec = float(req.get("timeoutSec", 0) or 0)
+    max_frames = int(req.get("maxFrames", 0) or 0)
+    ether_type_filter = (req.get("etherType") or "").lower() or None
+    dst_mac_filter = (req.get("dstMac") or "").lower()
+    src_mac_filter = (req.get("srcMac") or "").lower()
+    try:
+        sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
+        sock.bind((interface, 0))
+        sock.settimeout(0.25)
+    except PermissionError:
+        fail("raw socket permission denied. Run the server/agent with sudo or CAP_NET_RAW.")
+        return
+    except Exception as exc:
+        fail(str(exc))
+        return
+    print(json.dumps({"type": "start", "interface": interface, "timestampNs": time.time_ns()}), flush=True)
+    deadline = time.monotonic() + timeout_sec if timeout_sec > 0 else None
+    count = 0
+    try:
+        while True:
+            if deadline and time.monotonic() >= deadline:
+                break
+            if max_frames and count >= max_frames:
+                break
+            try:
+                frame, addr = sock.recvfrom(65535)
+            except socket.timeout:
+                continue
+            rx_ns = time.time_ns()
+            decoded = decode_frame(frame)
+            eth = decoded.get("ethernet", {})
+            if ether_type_filter and eth.get("etherType") != ether_type_filter:
+                continue
+            if dst_mac_filter and eth.get("dstMac", "").lower() != dst_mac_filter:
+                continue
+            if src_mac_filter and eth.get("srcMac", "").lower() != src_mac_filter:
+                continue
+            count += 1
+            print(json.dumps({
+                "type": "frame",
+                "n": count,
+                "timestamp": rx_ns / 1e9,
+                "rxTimestampNs": rx_ns,
+                "length": len(frame),
+                "frameHex": frame.hex(),
+                "hexdump": hexdump(frame[:256]),
+                "decoded": decoded,
+            }), flush=True)
+    except (BrokenPipeError, KeyboardInterrupt):
+        pass
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
+        try:
+            print(json.dumps({"type": "end", "count": count}), flush=True)
+        except BrokenPipeError:
+            pass
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ethernet Packet Lab raw-socket agent")
-    parser.add_argument("command", choices=["interfaces", "build", "send", "capture"])
+    parser.add_argument("command", choices=["interfaces", "build", "send", "capture", "capture-stream"])
     args = parser.parse_args()
     if args.command == "interfaces":
         list_interfaces()
@@ -410,6 +476,8 @@ def main() -> None:
         command_send()
     elif args.command == "capture":
         command_capture()
+    elif args.command == "capture-stream":
+        command_capture_stream()
 
 
 if __name__ == "__main__":

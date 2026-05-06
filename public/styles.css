@@ -338,6 +338,228 @@ input[readonly], select[readonly] {
   cursor: not-allowed;
 }
 
+.captureViewWS {
+  grid-template-columns: 1fr;
+}
+
+.wiresharkPane {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 10px;
+  padding: 12px 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.captureBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  flex-wrap: wrap;
+}
+
+.wsStart {
+  min-width: 100px;
+  background: linear-gradient(135deg, #0ea5e9, #0f6f78);
+  border: 0;
+  font-size: 13px;
+}
+
+.wsStart[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wsStop {
+  color: #9b1c1c;
+  border-color: #f3c2c2;
+}
+
+.wsStop[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.captureBar .check {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.captureBar .check input { width: auto; }
+
+#captureDisplayFilter {
+  flex: 1 1 240px;
+  min-width: 200px;
+  padding: 7px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.captureStats {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.statChip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 4px 10px;
+  background: rgba(15, 23, 42, 0.05);
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statChip span {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.statChip strong {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+#capStatState {
+  flex-direction: row;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 6px 12px;
+}
+
+#capStatState.running {
+  background: rgba(20, 83, 45, 0.12);
+  color: #14532d;
+}
+
+#capStatState.running::before {
+  content: '●';
+  margin-right: 6px;
+  color: #16a34a;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.captureFilters {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 10px;
+  padding: 6px 12px;
+}
+
+.filterRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.filterRow label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.packetListLive {
+  position: relative;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: auto;
+  min-height: 0;
+}
+
+.packetListLive table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.packetListLive thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef5f6;
+  text-align: left;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #455160;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--line);
+}
+
+.packetListLive tbody tr {
+  border-bottom: 1px solid #f0f3f5;
+  cursor: pointer;
+  transition: background 0.05s ease;
+}
+
+.packetListLive tbody tr:hover {
+  background: #f8fbfc;
+}
+
+.packetListLive tbody tr.selected {
+  background: rgba(14, 165, 233, 0.14);
+}
+
+.packetListLive tbody tr.proto-arp { background: rgba(245, 158, 11, 0.06); }
+.packetListLive tbody tr.proto-icmp { background: rgba(168, 85, 247, 0.06); }
+.packetListLive tbody tr.proto-udp { background: rgba(14, 165, 233, 0.04); }
+.packetListLive tbody tr.proto-tcp { background: rgba(34, 197, 94, 0.06); }
+
+.packetListLive tbody td {
+  padding: 5px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.packetListLive .colNum { width: 56px; color: var(--muted); }
+.packetListLive .colTime { width: 110px; color: var(--muted); }
+.packetListLive .colProto { width: 80px; }
+.packetListLive .colLen { width: 64px; text-align: right; color: var(--muted); }
+
+.wsEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.wsEmpty.hidden { display: none; }
+
 .ghostBtn {
   background: #ffffff;
   color: var(--accent);

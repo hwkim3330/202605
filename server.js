@@ -9,6 +9,7 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
 const reportsDir = join(root, 'reports');
 const testCasesDir = join(root, 'testcases');
+const testProfilesDir = join(root, 'testprofiles');
 const agentPath = join(root, 'tools', 'packet_agent.py');
 const port = Number(process.env.PORT || 8080);
 
@@ -244,6 +245,65 @@ async function loadTestCases() {
       });
     } catch {
       // Ignore broken draft files so one bad test case does not break the UI.
+    }
+  }
+  return items;
+}
+
+async function expandTestProfile(profileSuite) {
+  const { profiles } = await loadExampleItems();
+  const steps = [];
+  for (const step of profileSuite.steps || []) {
+    if (step.kind === 'delay') {
+      steps.push({
+        kind: 'delay',
+        name: step.name || `Delay ${Number(step.delayMs || 100)} ms`,
+        delayMs: Number(step.delayMs || 100)
+      });
+      continue;
+    }
+    const profile = step.profile || profiles[step.profileKey];
+    if (!profile) continue;
+    steps.push({
+      kind: 'packet',
+      name: step.name || profile.name || step.profileKey,
+      enabled: step.enabled !== false,
+      checked: step.checked !== false,
+      count: Math.max(1, Number(step.count || profile.count || 1)),
+      intervalMs: Math.max(0, Number(step.intervalMs ?? profile.intervalMs ?? 0)),
+      profile
+    });
+  }
+  return {
+    schemaVersion: 1,
+    id: profileSuite.id || slugifyId(profileSuite.name),
+    name: profileSuite.name || profileSuite.id || 'Standard Profile',
+    description: profileSuite.description || '',
+    standardRefs: profileSuite.standardRefs || [],
+    profileGroup: profileSuite.profileGroup || 'Standard',
+    steps
+  };
+}
+
+async function loadTestProfiles() {
+  await mkdir(testProfilesDir, { recursive: true });
+  const files = (await readdir(testProfilesDir)).filter((file) => file.endsWith('.json')).sort();
+  const items = [];
+  for (const file of files) {
+    try {
+      const raw = JSON.parse(await readFile(join(testProfilesDir, file), 'utf8'));
+      const testCase = await expandTestProfile(raw);
+      items.push({
+        id: file.replace(/\.json$/, ''),
+        name: testCase.name,
+        description: testCase.description,
+        profileGroup: testCase.profileGroup,
+        standardRefs: testCase.standardRefs,
+        stepCount: testCase.steps.length,
+        testCase
+      });
+    } catch {
+      // Ignore malformed profile files.
     }
   }
   return items;
@@ -1022,6 +1082,11 @@ async function handleApi(req, res) {
       return sendJson(res, 200, { ok: true, items });
     }
 
+    if (req.method === 'GET' && req.url === '/api/test-profiles') {
+      const items = await loadTestProfiles();
+      return sendJson(res, 200, { ok: true, items });
+    }
+
     if (req.method === 'POST' && req.url === '/api/test-cases') {
       const body = await readRequestJson(req);
       const testCase = await saveTestCase(body);
@@ -1123,6 +1188,37 @@ async function handleApi(req, res) {
       const body = await readRequestJson(req);
       const result = await runAgent(['capture'], body, Number(body.timeoutMs || 15000) + 5000);
       return sendJson(res, result.ok ? 200 : 400, result);
+    }
+
+    if (req.method === 'POST' && req.url === '/api/capture-stream') {
+      const body = await readRequestJson(req);
+      res.writeHead(200, {
+        'content-type': 'application/x-ndjson; charset=utf-8',
+        'cache-control': 'no-cache',
+        'x-accel-buffering': 'no'
+      });
+      const child = spawn('python3', [agentPath, 'capture-stream'], {
+        cwd: root,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      child.stdin.end(JSON.stringify(body));
+      child.stdout.on('data', (chunk) => {
+        if (!res.writableEnded) res.write(chunk);
+      });
+      child.stderr.on('data', (chunk) => {
+        const txt = chunk.toString('utf8').trim();
+        if (!res.writableEnded && txt) res.write(JSON.stringify({ type: 'log', stderr: txt }) + '\n');
+      });
+      const cleanup = () => {
+        try { child.kill('SIGTERM'); } catch {}
+        setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 1500).unref();
+      };
+      child.on('close', () => {
+        if (!res.writableEnded) res.end();
+      });
+      req.on('close', cleanup);
+      req.on('aborted', cleanup);
+      return;
     }
 
     return sendJson(res, 404, { ok: false, error: 'Unknown API route' });

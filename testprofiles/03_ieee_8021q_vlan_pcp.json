@@ -1,0 +1,16 @@
+{
+  "id": "ieee-8021q-vlan-pcp",
+  "name": "IEEE 802.1Q VLAN and PCP",
+  "profileGroup": "03 VLAN",
+  "description": "802.1Q tagged frame preservation, VID change, and PCP priority field validation.",
+  "standardRefs": [
+    { "id": "IEEE802.1Q", "title": "Virtual LANs, VLAN tag, PCP, DEI, VID" },
+    { "id": "IEEE802.1AS/TSN-prep", "title": "PCP to traffic-class mapping precondition" }
+  ],
+  "steps": [
+    { "kind": "packet", "profileKey": "09_vlan10_udp_pcp0", "count": 3, "intervalMs": 100 },
+    { "kind": "packet", "profileKey": "10_vlan10_udp_pcp7", "count": 3, "intervalMs": 100 },
+    { "kind": "packet", "profileKey": "11_vlan20_isolation", "count": 3, "intervalMs": 100 },
+    { "kind": "packet", "profileKey": "25_mixed_pcp_burst", "count": 8, "intervalMs": 25 }
+  ]
+}

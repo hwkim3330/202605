@@ -1,0 +1,18 @@
+{
+  "id": "tsn-prep-streams",
+  "name": "TSN Prep Streams",
+  "profileGroup": "05 TSN",
+  "description": "Periodic UDP, PCP marked stream, PSFP stream candidates, benchmark, and jitter profiles before TAS/PSFP/FRER tests.",
+  "standardRefs": [
+    { "id": "IEEE802.1Qbv", "title": "Time-Aware Shaper scheduled traffic preparation" },
+    { "id": "IEEE802.1Qci", "title": "Per-stream filtering and policing stream identification preparation" },
+    { "id": "IEEE802.1CB", "title": "FRER sequence/recovery preparation" }
+  ],
+  "steps": [
+    { "kind": "packet", "profileKey": "15_periodic_udp_1ms", "count": 20, "intervalMs": 1 },
+    { "kind": "packet", "profileKey": "16_psfp_stream_a", "count": 5, "intervalMs": 100 },
+    { "kind": "packet", "profileKey": "17_psfp_stream_b", "count": 5, "intervalMs": 100 },
+    { "kind": "packet", "profileKey": "23_latency_benchmark", "count": 100, "intervalMs": 1 },
+    { "kind": "packet", "profileKey": "24_jitter_periodic_500us", "count": 100, "intervalMs": 0.5 }
+  ]
+}

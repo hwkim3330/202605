@@ -205,6 +205,7 @@
                   <span>Interleave packets and delay events, then send selected rows or the full list.</span>
                 </div>
                 <div class="sequenceTools">
+                  <select id="profileSuiteSelect"></select>
                   <select id="caseSelect"></select>
                   <input id="caseName" autocomplete="off" placeholder="Test case name">
                   <button id="newCase">New</button>
@@ -262,56 +263,52 @@
           </section>
         </section>
 
-        <section id="captureView" class="roleView">
-          <aside class="sidebar">
-            <label>
-              Source MAC filter
-              <input id="captureSrcMac" autocomplete="off" placeholder="optional">
-            </label>
-            <label>
-              Destination MAC filter
-              <input id="captureDstMac" autocomplete="off" placeholder="optional">
-            </label>
-            <div class="grid2">
-              <label>
-                EtherType
-                <input id="captureEtherType" autocomplete="off" placeholder="0x0800">
+        <section id="captureView" class="roleView captureViewWS">
+          <section class="workPane wiresharkPane">
+            <div class="captureBar">
+              <button id="captureStart" class="primaryAction wsStart">▶ Start</button>
+              <button id="captureStop" class="ghostBtn wsStop" disabled>■ Stop</button>
+              <button id="captureClear" class="ghostBtn">Clear</button>
+              <label class="check">
+                <input id="captureFollow" type="checkbox" checked>
+                <span>Auto-scroll</span>
               </label>
-              <label>
-                Timeout sec
-                <input id="captureTimeout" type="number" min="1" value="10">
+              <label class="check">
+                <input id="capturePromisc" type="checkbox">
+                <span>No filter (sniff all)</span>
               </label>
+              <input id="captureDisplayFilter" autocomplete="off" placeholder="display filter — e.g. udp, arp, vlan, mac:c8:4d:..">
+              <div class="captureStats">
+                <span class="statChip"><span>pkts</span><strong id="capStatPkts">0</strong></span>
+                <span class="statChip"><span>pps</span><strong id="capStatPps">0</strong></span>
+                <span class="statChip"><span>bytes</span><strong id="capStatBytes">0</strong></span>
+                <span class="statChip" id="capStatState">idle</span>
+              </div>
             </div>
-            <label>
-              Max frames
-              <input id="captureMaxFrames" type="number" min="1" value="30">
-            </label>
-            <button id="capture" class="primaryAction fullWidth">Start Capture</button>
-          </aside>
-
-          <section class="workPane packetArea">
-            <div class="heroStrip captureStrip">
-              <strong>Capture</strong>
-              <span>Capture frames on this server PC only. On the other PC, open its own local UI.</span>
-            </div>
-            <div class="packetList">
-              <div class="sectionTitle">Packet List</div>
+            <details class="captureFilters">
+              <summary class="advancedSummary">Capture filters (BPF-ish, pre-decoded)</summary>
+              <div class="filterRow">
+                <label>Source MAC<input id="captureSrcMac" autocomplete="off" placeholder="optional"></label>
+                <label>Destination MAC<input id="captureDstMac" autocomplete="off" placeholder="optional"></label>
+                <label>EtherType<input id="captureEtherType" autocomplete="off" placeholder="0x0800"></label>
+              </div>
+            </details>
+            <div class="packetListLive">
               <table>
                 <thead>
                   <tr>
-                    <th>No.</th>
-                    <th>Time</th>
+                    <th class="colNum">#</th>
+                    <th class="colTime">Time</th>
                     <th>Source</th>
                     <th>Destination</th>
-                    <th>Protocol</th>
-                    <th>Length</th>
+                    <th class="colProto">Protocol</th>
+                    <th class="colLen">Length</th>
                     <th>Info</th>
                   </tr>
                 </thead>
-                <tbody id="packetRows">
-                  <tr><td colspan="7" class="empty">No captured packets yet</td></tr>
-                </tbody>
+                <tbody id="packetRows"></tbody>
               </table>
+              <div id="packetEmpty" class="empty wsEmpty">No packets yet — pick an interface and press <strong>Start</strong>.</div>
             </div>
             <section class="detailGrid">
               <div class="detailPane">
