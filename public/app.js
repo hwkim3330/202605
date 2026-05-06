@@ -16,9 +16,30 @@ const state = {
     interfaces: [],
     iface: null
   },
+  testCases: [],
+  currentCase: {
+    id: '',
+    name: 'Untitled Test Case',
+    description: '',
+    steps: []
+  },
+  selectedStep: -1,
   localRole: localStorage.getItem('localRole') || 'sender',
   locked: localStorage.getItem('autoLock') !== '0'
 };
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function slugify(value) {
+  return String(value || 'test-case')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || `test-case-${Date.now()}`;
+}
 
 function setStatus(message, isError = false) {
   $('status').textContent = message;
@@ -186,6 +207,262 @@ function renderPackets() {
       $('captureHexdump').textContent = packet.hexdump || '';
     });
   });
+}
+
+function protocolSummary(profile) {
+  if (!profile) return '-';
+  const parts = [];
+  if (profile.vlan?.enabled) parts.push(`VLAN ${profile.vlan.id} PCP ${profile.vlan.priority}`);
+  parts.push(String(profile.protocol || 'udp').toUpperCase());
+  if (profile.udp) parts.push(`${profile.udp.srcPort || '-'}→${profile.udp.dstPort || '-'}`);
+  return parts.join(' / ');
+}
+
+function payloadSummary(profile) {
+  const payload = payloadData(profile || {});
+  if (!payload) return '-';
+  if (payload.mode === 'sequence') return payload.template || 'sequence';
+  if (payload.mode === 'repeat') return `${payload.size || 0}B ${payload.byte || '0x00'}`;
+  if (payload.mode === 'counter' || payload.mode === 'random' || payload.mode === 'benchmark') return `${payload.mode} ${payload.size || 0}B`;
+  if (payload.mode === 'hex') return 'hex';
+  return String(payload.data || '').slice(0, 38) || '-';
+}
+
+function syncCaseForm() {
+  $('caseName').value = state.currentCase.name || '';
+  $('caseDescription').value = state.currentCase.description || '';
+}
+
+function caseFromForm() {
+  const name = $('caseName').value.trim() || 'Untitled Test Case';
+  return {
+    ...state.currentCase,
+    id: state.currentCase.id || slugify(name),
+    name,
+    description: $('caseDescription').value.trim(),
+    steps: state.currentCase.steps || []
+  };
+}
+
+function renderCaseSelect() {
+  if (!state.testCases.length) {
+    $('caseSelect').innerHTML = '<option value="">No saved test cases</option>';
+    return;
+  }
+  $('caseSelect').innerHTML = state.testCases.map((item) => (
+    `<option value="${item.id}">${item.name} (${item.stepCount})</option>`
+  )).join('');
+  if (state.currentCase.id && state.testCases.find((item) => item.id === state.currentCase.id)) {
+    $('caseSelect').value = state.currentCase.id;
+  }
+}
+
+function renderCaseRows() {
+  const steps = state.currentCase.steps || [];
+  if (!steps.length) {
+    $('caseRows').innerHTML = '<tr><td colspan="8" class="empty">No steps yet</td></tr>';
+    $('caseStepPreview').textContent = '';
+    return;
+  }
+  $('caseRows').innerHTML = steps.map((step, index) => {
+    const profile = step.profile || {};
+    const selected = index === state.selectedStep ? ' class="selectedRow"' : '';
+    if (step.kind === 'delay') {
+      return `
+        <tr data-step-index="${index}"${selected}>
+          <td>${index + 1}</td>
+          <td>Delay</td>
+          <td>${step.name || 'Delay'}</td>
+          <td>-</td>
+          <td>-</td>
+          <td><input class="miniInput" data-step-delay="${index}" type="number" min="0" value="${step.delayMs || 0}"> ms</td>
+          <td>-</td>
+          <td><div class="stepActions"><button data-step-up="${index}">↑</button><button data-step-down="${index}">↓</button><button data-step-remove="${index}">Remove</button></div></td>
+        </tr>
+      `;
+    }
+    return `
+      <tr data-step-index="${index}"${selected}>
+        <td>${index + 1}</td>
+        <td>Packet</td>
+        <td>${step.name || profile.name || 'Packet'}</td>
+        <td>${protocolSummary(profile)}</td>
+        <td><input class="miniInput" data-step-count="${index}" type="number" min="1" value="${step.count || profile.count || 1}"></td>
+        <td><input class="miniInput" data-step-interval="${index}" type="number" min="0" value="${step.intervalMs ?? profile.intervalMs ?? 0}"> ms</td>
+        <td>${payloadSummary(profile)}</td>
+        <td><div class="stepActions"><button data-step-load="${index}">Load</button><button data-step-up="${index}">↑</button><button data-step-down="${index}">↓</button><button data-step-remove="${index}">Remove</button></div></td>
+      </tr>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-step-index]').forEach((row) => {
+    row.addEventListener('click', () => {
+      state.selectedStep = Number(row.dataset.stepIndex);
+      $('caseStepPreview').textContent = JSON.stringify(state.currentCase.steps[state.selectedStep], null, 2);
+      renderCaseRows();
+    });
+  });
+  document.querySelectorAll('[data-step-count]').forEach((input) => {
+    input.addEventListener('change', () => {
+      state.currentCase.steps[Number(input.dataset.stepCount)].count = Math.max(1, Number(input.value || 1));
+    });
+  });
+  document.querySelectorAll('[data-step-interval]').forEach((input) => {
+    input.addEventListener('change', () => {
+      state.currentCase.steps[Number(input.dataset.stepInterval)].intervalMs = Math.max(0, Number(input.value || 0));
+    });
+  });
+  document.querySelectorAll('[data-step-delay]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const step = state.currentCase.steps[Number(input.dataset.stepDelay)];
+      step.delayMs = Math.max(0, Number(input.value || 0));
+      step.name = `Delay ${step.delayMs} ms`;
+      renderCaseRows();
+    });
+  });
+  document.querySelectorAll('[data-step-load]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const step = state.currentCase.steps[Number(button.dataset.stepLoad)];
+      if (step?.profile) setProfile(step.profile);
+    });
+  });
+  document.querySelectorAll('[data-step-up]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const index = Number(button.dataset.stepUp);
+      if (index <= 0) return;
+      const tmp = state.currentCase.steps[index - 1];
+      state.currentCase.steps[index - 1] = state.currentCase.steps[index];
+      state.currentCase.steps[index] = tmp;
+      state.selectedStep = index - 1;
+      renderCaseRows();
+    });
+  });
+  document.querySelectorAll('[data-step-down]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const index = Number(button.dataset.stepDown);
+      if (index >= state.currentCase.steps.length - 1) return;
+      const tmp = state.currentCase.steps[index + 1];
+      state.currentCase.steps[index + 1] = state.currentCase.steps[index];
+      state.currentCase.steps[index] = tmp;
+      state.selectedStep = index + 1;
+      renderCaseRows();
+    });
+  });
+  document.querySelectorAll('[data-step-remove]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      state.currentCase.steps.splice(Number(button.dataset.stepRemove), 1);
+      state.selectedStep = -1;
+      renderCaseRows();
+    });
+  });
+
+  if (state.selectedStep >= 0 && state.currentCase.steps[state.selectedStep]) {
+    $('caseStepPreview').textContent = JSON.stringify(state.currentCase.steps[state.selectedStep], null, 2);
+  }
+}
+
+function setCurrentCase(testCase) {
+  state.currentCase = cloneJson(testCase || {
+    id: '',
+    name: 'Untitled Test Case',
+    description: '',
+    steps: []
+  });
+  state.selectedStep = -1;
+  syncCaseForm();
+  renderCaseSelect();
+  renderCaseRows();
+}
+
+async function loadTestCases() {
+  const result = await api('/api/test-cases');
+  state.testCases = result.items || [];
+  renderCaseSelect();
+  if (state.testCases.length && !state.currentCase.steps.length) {
+    setCurrentCase(state.testCases[0].testCase);
+  } else {
+    renderCaseRows();
+  }
+}
+
+function addCurrentPacketToCase() {
+  const profile = getProfile();
+  const selected = state.exampleItems.find((entry) => entry.key === $('profileSelect').value);
+  state.currentCase.steps.push({
+    kind: 'packet',
+    name: selected?.name || profile.name || `${String(profile.protocol || 'udp').toUpperCase()} packet`,
+    enabled: true,
+    count: Number($('count').value || profile.count || 1),
+    intervalMs: Number($('intervalMs').value || profile.intervalMs || 0),
+    profile
+  });
+  state.selectedStep = state.currentCase.steps.length - 1;
+  renderCaseRows();
+}
+
+function addDelayToCase() {
+  const delayMs = Math.max(0, Number($('caseDelayMs').value || 100));
+  state.currentCase.steps.push({ kind: 'delay', name: `Delay ${delayMs} ms`, delayMs });
+  state.selectedStep = state.currentCase.steps.length - 1;
+  renderCaseRows();
+}
+
+async function saveCurrentCase() {
+  const testCase = caseFromForm();
+  const result = await api('/api/test-cases', { method: 'POST', body: JSON.stringify(testCase) });
+  setCurrentCase(result.testCase);
+  await loadTestCases();
+  setStatus(`Saved test case: ${result.testCase.name}`);
+}
+
+async function deleteCurrentCase() {
+  const id = state.currentCase.id || $('caseSelect').value;
+  if (!id) return;
+  if (!confirm(`Delete test case "${state.currentCase.name || id}"?`)) return;
+  await api(`/api/test-cases/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  setCurrentCase({ id: '', name: 'Untitled Test Case', description: '', steps: [] });
+  await loadTestCases();
+  setStatus('Test case deleted');
+}
+
+async function runCurrentCase() {
+  setStatus('Running test case on wire...');
+  await ensurePeerReady();
+  syncControlFromPeer();
+  const testCase = caseFromForm();
+  const result = await api('/api/run-test-case', {
+    method: 'POST',
+    body: JSON.stringify({
+      senderUrl: $('senderNodeUrl').value,
+      receiverUrl: $('receiverNodeUrl').value,
+      senderInterface: $('senderNodeInterface').value,
+      receiverInterface: $('receiverNodeInterface').value,
+      testCase
+    })
+  });
+  $('caseRunSummary').textContent = JSON.stringify(result.report.summary, null, 2);
+  $('reportSummary').innerHTML = `
+    <div><span>Status</span><strong>${result.report.ok ? 'PASS' : 'FAIL'}</strong></div>
+    <div><span>Sent</span><strong>${result.report.summary.framesSent}</strong></div>
+    <div><span>Matched</span><strong>${result.report.summary.matched}</strong></div>
+  `;
+  $('reportRows').innerHTML = result.report.steps.map((step, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>Case</td>
+      <td>${step.name}</td>
+      <td class="${step.ok ? 'passText' : 'failText'}">${step.ok ? 'PASS' : 'FAIL'}</td>
+      <td>${step.framesSent ?? '-'}</td>
+      <td>${step.kind}</td>
+      <td>${step.kind === 'delay' ? `${step.delayMs} ms` : `${step.matchCount || 0} match`}</td>
+    </tr>
+  `).join('');
+  $('openCaseReport').classList.remove('disabled');
+  setStatus(`Test case ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.summary.matched} match(es)`, !result.report.ok);
 }
 
 async function loadInterfaces() {
@@ -596,6 +873,25 @@ $('runSweep').addEventListener('click', () => runSweep().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
+$('caseSelect').addEventListener('change', () => {
+  const item = state.testCases.find((entry) => entry.id === $('caseSelect').value);
+  if (item) setCurrentCase(item.testCase);
+});
+$('newCase').addEventListener('click', () => setCurrentCase({ id: '', name: 'Untitled Test Case', description: '', steps: [] }));
+$('saveCase').addEventListener('click', () => saveCurrentCase().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('deleteCase').addEventListener('click', () => deleteCurrentCase().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('addCurrentPacket').addEventListener('click', addCurrentPacketToCase);
+$('addDelay').addEventListener('click', addDelayToCase);
+$('runCase').addEventListener('click', () => runCurrentCase().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
 $('senderNodeInterface').addEventListener('change', renderNodeGrid);
 $('receiverNodeInterface').addEventListener('change', renderNodeGrid);
 
@@ -903,6 +1199,7 @@ $('receiverNodeInterface').addEventListener('change', () => {
 });
 
 await loadExamples();
+await loadTestCases();
 await loadInterfaces();
 const savedLocalIf = localStorage.getItem('localInterface');
 if (savedLocalIf && state.interfaces.find((i) => i.name === savedLocalIf)) {

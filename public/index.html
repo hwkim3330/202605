@@ -27,6 +27,7 @@
           <button class="modeTab active" data-view="senderView">Sender</button>
           <button class="modeTab" data-view="captureView">Capture</button>
           <button class="modeTab" data-view="controlView">Control</button>
+          <button class="modeTab" data-view="caseView">Cases</button>
         </div>
         <div class="toolbarField">
           <span>Interface</span>
@@ -382,6 +383,79 @@
                   <tr><td colspan="7" class="empty">No report generated yet</td></tr>
                 </tbody>
               </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="caseView" class="roleView caseView">
+          <aside class="sidebar">
+            <label>
+              Test Case
+              <select id="caseSelect"></select>
+            </label>
+            <label>
+              Name
+              <input id="caseName" autocomplete="off" placeholder="Basic Link Bring-up">
+            </label>
+            <label>
+              Description
+              <textarea id="caseDescription" rows="4" placeholder="What this test proves"></textarea>
+            </label>
+            <div class="grid2">
+              <button id="newCase">New</button>
+              <button id="saveCase" class="primaryAction">Save</button>
+            </div>
+            <button id="deleteCase" class="dangerAction fullWidth">Delete</button>
+            <div class="caseTools">
+              <button id="addCurrentPacket" class="fullWidth">Add Current Packet</button>
+              <div class="grid2">
+                <label>
+                  Delay ms
+                  <input id="caseDelayMs" type="number" min="0" value="100">
+                </label>
+                <button id="addDelay" class="caseInlineButton">Add Delay</button>
+              </div>
+            </div>
+            <button id="runCase" class="primaryAction fullWidth">Run On Wire</button>
+            <a id="openCaseReport" class="linkButton disabled" href="/reports/testcase-latest.html" target="_blank" rel="noreferrer">Open Case Report</a>
+          </aside>
+
+          <section class="workPane casePane">
+            <div class="heroStrip caseStrip">
+              <div>
+                <strong>Test Cases</strong>
+                <span>Build a packet list with delays, repeat counts, and intervals. Save it as JSON and run it across the selected two-node link.</span>
+              </div>
+            </div>
+            <div class="packetList">
+              <div class="sectionTitle">Packet Sequence</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>No.</th>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Protocol</th>
+                    <th>Count</th>
+                    <th>Interval</th>
+                    <th>Payload</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="caseRows">
+                  <tr><td colspan="8" class="empty">No steps yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="detailGrid">
+              <div class="detailPane">
+                <div class="sectionTitle">Selected Step</div>
+                <pre id="caseStepPreview"></pre>
+              </div>
+              <div class="detailPane">
+                <div class="sectionTitle">Run Summary</div>
+                <pre id="caseRunSummary"></pre>
+              </div>
             </div>
           </section>
         </section>

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
 const reportsDir = join(root, 'reports');
+const testCasesDir = join(root, 'testcases');
 const agentPath = join(root, 'tools', 'packet_agent.py');
 const port = Number(process.env.PORT || 8080);
 
@@ -133,6 +134,21 @@ function firstIpv4(iface) {
   return iface?.ipv4?.[0]?.local || '';
 }
 
+function slugifyId(value) {
+  const base = String(value || 'test-case')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return base || `test-case-${Date.now()}`;
+}
+
+function testCasePath(id) {
+  const safe = slugifyId(id);
+  return join(testCasesDir, `${safe}.json`);
+}
+
 function profileForE2E(profile, senderIface, receiverIface) {
   const next = JSON.parse(JSON.stringify(profile));
   const senderIp = firstIpv4(senderIface);
@@ -207,6 +223,66 @@ function isExpectedFrame(frame, sentDecoded, senderIface, receiverIface) {
   }
 
   return true;
+}
+
+async function loadTestCases() {
+  await mkdir(testCasesDir, { recursive: true });
+  const files = (await readdir(testCasesDir)).filter((file) => file.endsWith('.json')).sort();
+  const items = [];
+  for (const file of files) {
+    try {
+      const testCase = JSON.parse(await readFile(join(testCasesDir, file), 'utf8'));
+      items.push({
+        id: file.replace(/\.json$/, ''),
+        name: testCase.name || file.replace(/\.json$/, ''),
+        description: testCase.description || '',
+        stepCount: Array.isArray(testCase.steps) ? testCase.steps.length : 0,
+        updatedAt: testCase.updatedAt || '',
+        testCase
+      });
+    } catch {
+      // Ignore broken draft files so one bad test case does not break the UI.
+    }
+  }
+  return items;
+}
+
+function normalizeTestCase(input) {
+  const now = new Date().toISOString();
+  const id = slugifyId(input.id || input.name);
+  const steps = Array.isArray(input.steps) ? input.steps.map((step, index) => {
+    if (step.kind === 'delay') {
+      return {
+        kind: 'delay',
+        name: step.name || `Delay ${Number(step.delayMs || 100)} ms`,
+        delayMs: Math.max(0, Number(step.delayMs || 100))
+      };
+    }
+    return {
+      kind: 'packet',
+      name: step.name || step.profile?.name || `Packet ${index + 1}`,
+      enabled: step.enabled !== false,
+      count: Math.max(1, Number(step.count || step.profile?.count || 1)),
+      intervalMs: Math.max(0, Number(step.intervalMs ?? step.profile?.intervalMs ?? 0)),
+      profile: step.profile || {}
+    };
+  }) : [];
+  return {
+    schemaVersion: 1,
+    id,
+    name: input.name || id,
+    description: input.description || '',
+    createdAt: input.createdAt || now,
+    updatedAt: now,
+    steps
+  };
+}
+
+async function saveTestCase(input) {
+  await mkdir(testCasesDir, { recursive: true });
+  const testCase = normalizeTestCase(input);
+  await writeFile(testCasePath(testCase.id), JSON.stringify(testCase, null, 2));
+  return testCase;
 }
 
 function reportHtml(report) {
@@ -672,6 +748,162 @@ async function runFrameSizeSweep(reqBody) {
   return report;
 }
 
+function testCaseReportHtml(report) {
+  const statusClass = report.ok ? 'pass' : 'fail';
+  const rows = report.steps.map((step, index) => `
+    <tr class="${step.ok ? 'pass' : step.kind === 'delay' ? '' : 'fail'}">
+      <td>${index + 1}</td>
+      <td>${escapeHtml(step.kind)}</td>
+      <td>${escapeHtml(step.name)}</td>
+      <td>${step.kind === 'delay' ? `${step.delayMs} ms` : `${step.framesSent}/${step.expectedCount}`}</td>
+      <td>${step.kind === 'delay' ? '-' : step.matchCount}</td>
+      <td>${step.ok ? 'PASS' : step.kind === 'delay' ? 'DONE' : 'FAIL'}</td>
+      <td>${escapeHtml(step.error || step.protocol || '')}</td>
+    </tr>
+  `).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ethernet Packet Lab Test Case</title>
+  <style>
+    body{margin:24px;font:14px/1.45 system-ui,sans-serif;color:#17202a}
+    h1{margin:0 0 4px}.meta{color:#62707f;margin-bottom:16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:14px 0}
+    .box{border:1px solid #d2dae3;border-radius:8px;padding:10px 12px;background:#fff}
+    .box span{display:block;color:#62707f;font-size:12px}.box strong{font-size:24px}
+    .pass{color:#14532d;font-weight:800}.fail{color:#9b1c1c;font-weight:800}
+    table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border-bottom:1px solid #d2dae3;padding:8px;text-align:left}th{background:#eef5f6}
+  </style>
+</head>
+<body>
+  <h1>Ethernet Packet Lab Test Case</h1>
+  <div class="meta">${escapeHtml(report.name)} — ${escapeHtml(report.generatedAt)}</div>
+  <div class="meta">${escapeHtml(report.sender.url)}/${escapeHtml(report.sender.interface)} → ${escapeHtml(report.receiver.url)}/${escapeHtml(report.receiver.interface)}</div>
+  <div class="grid">
+    <div class="box"><span>Status</span><strong class="${statusClass}">${report.ok ? 'PASS' : 'FAIL'}</strong></div>
+    <div class="box"><span>Steps</span><strong>${report.summary.total}</strong></div>
+    <div class="box"><span>Packets sent</span><strong>${report.summary.framesSent}</strong></div>
+    <div class="box"><span>Matched</span><strong>${report.summary.matched}</strong></div>
+    <div class="box"><span>Captured</span><strong>${report.summary.captured}</strong></div>
+  </div>
+  <table>
+    <thead><tr><th>No.</th><th>Type</th><th>Name</th><th>Tx</th><th>Rx Match</th><th>Status</th><th>Info</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
+}
+
+async function runTestCase(reqBody) {
+  const senderUrl = normalizeBaseUrl(reqBody.senderUrl);
+  const receiverUrl = normalizeBaseUrl(reqBody.receiverUrl);
+  const testCase = normalizeTestCase(reqBody.testCase || {});
+  if (!testCase.steps.length) throw new Error('test case has no steps');
+
+  const [senderInfo, receiverInfo] = await Promise.all([
+    remoteJson(senderUrl, '/api/interfaces'),
+    remoteJson(receiverUrl, '/api/interfaces')
+  ]);
+  const senderIface = selectInterface(senderInfo.stdout?.interfaces || [], reqBody.senderInterface);
+  const receiverIface = selectInterface(receiverInfo.stdout?.interfaces || [], reqBody.receiverInterface);
+  const packetSteps = testCase.steps.filter((step) => step.kind === 'packet' && step.enabled !== false);
+  const expectedFrames = packetSteps.reduce((sum, step) => sum + Math.max(1, Number(step.count || 1)), 0);
+  const activeMs = testCase.steps.reduce((sum, step) => {
+    if (step.kind === 'delay') return sum + Number(step.delayMs || 0);
+    return sum + (Math.max(0, Number(step.intervalMs || 0)) * Math.max(1, Number(step.count || 1)));
+  }, 0);
+  const captureTimeoutSec = Number(reqBody.timeoutSec || Math.max(8, Math.ceil(activeMs / 1000) + 5));
+  const captureBody = {
+    interface: receiverIface.name,
+    timeoutSec: captureTimeoutSec,
+    timeoutMs: captureTimeoutSec * 1000 + 5000,
+    maxFrames: Number(reqBody.maxFrames || expectedFrames + 100),
+    srcMac: senderIface.mac
+  };
+
+  const capturePromise = remoteJson(receiverUrl, '/api/capture', { method: 'POST', body: captureBody });
+  await new Promise((resolve) => setTimeout(resolve, Number(reqBody.captureLeadMs || 800)));
+
+  const sentSteps = [];
+  for (const step of testCase.steps) {
+    if (step.kind === 'delay') {
+      const delayMs = Number(step.delayMs || 0);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      sentSteps.push({ kind: 'delay', name: step.name, delayMs, ok: true });
+      continue;
+    }
+    if (step.enabled === false) {
+      sentSteps.push({ kind: 'packet', name: step.name, skipped: true, ok: true, framesSent: 0, expectedCount: 0 });
+      continue;
+    }
+    const txProfile = profileForE2E(step.profile, senderIface, receiverIface);
+    txProfile.count = Math.max(1, Number(step.count || txProfile.count || 1));
+    txProfile.intervalMs = Math.max(0, Number(step.intervalMs ?? txProfile.intervalMs ?? 0));
+    const sendResult = await remoteJson(senderUrl, '/api/send', {
+      method: 'POST',
+      body: { ...txProfile, timeoutMs: captureTimeoutSec * 1000 + 10000 }
+    });
+    sentSteps.push({
+      kind: 'packet',
+      name: step.name,
+      ok: sendResult.ok,
+      expectedCount: txProfile.count,
+      framesSent: sendResult.stdout?.framesSent || 0,
+      protocol: decodedProtocol(sendResult.stdout?.decoded),
+      sentDecoded: sendResult.stdout?.decoded,
+      txProfile
+    });
+  }
+
+  const captureResult = await capturePromise;
+  const frames = captureResult.stdout?.frames || [];
+  const usedFrameIndexes = new Set();
+  const packetResults = sentSteps.map((step) => {
+    if (step.kind !== 'packet' || step.skipped) return step;
+    const matched = [];
+    frames.forEach((frame, frameIndex) => {
+      if (usedFrameIndexes.has(frameIndex)) return;
+      if (!isExpectedFrame(frame, step.sentDecoded, senderIface, receiverIface)) return;
+      usedFrameIndexes.add(frameIndex);
+      matched.push(frame);
+    });
+    return {
+      ...step,
+      ok: step.ok && matched.length >= step.expectedCount,
+      matchCount: matched.length,
+      sampleFrames: matched.slice(0, 5),
+      sentDecoded: undefined
+    };
+  });
+  const framesSent = packetResults.reduce((sum, step) => sum + Number(step.framesSent || 0), 0);
+  const matched = packetResults.reduce((sum, step) => sum + Number(step.matchCount || 0), 0);
+  const failed = packetResults.filter((step) => step.kind === 'packet' && !step.ok).length;
+  const report = {
+    generatedAt: new Date().toISOString(),
+    ok: failed === 0,
+    id: testCase.id,
+    name: testCase.name,
+    description: testCase.description,
+    sender: { url: senderUrl, interface: senderIface.name, mac: senderIface.mac, ip: firstIpv4(senderIface) },
+    receiver: { url: receiverUrl, interface: receiverIface.name, mac: receiverIface.mac, ip: firstIpv4(receiverIface) },
+    summary: {
+      total: packetResults.length,
+      failed,
+      framesSent,
+      matched,
+      captured: frames.length
+    },
+    steps: packetResults,
+    capturedFrames: frames.slice(0, 500),
+    testCase
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'testcase-latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'testcase-latest.html'), testCaseReportHtml(report));
+  return report;
+}
+
 function sweepReportHtml(report) {
   const sizes = report.results.map((r) => r.size);
   const tx = report.results.map((r) => r.stats.throughputMbps.toFixed(2));
@@ -714,6 +946,23 @@ async function handleApi(req, res) {
       return sendJson(res, 200, { ok: true, profiles, items });
     }
 
+    if (req.method === 'GET' && req.url === '/api/test-cases') {
+      const items = await loadTestCases();
+      return sendJson(res, 200, { ok: true, items });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/test-cases') {
+      const body = await readRequestJson(req);
+      const testCase = await saveTestCase(body);
+      return sendJson(res, 200, { ok: true, testCase });
+    }
+
+    if (req.method === 'DELETE' && req.url?.startsWith('/api/test-cases/')) {
+      const id = decodeURIComponent(req.url.split('/').pop() || '');
+      await unlink(testCasePath(id));
+      return sendJson(res, 200, { ok: true, id: slugifyId(id) });
+    }
+
     if (req.method === 'POST' && req.url === '/api/run-report') {
       const report = await runProfileReport();
       return sendJson(res, report.summary.fail === 0 ? 200 : 400, {
@@ -749,6 +998,17 @@ async function handleApi(req, res) {
         report,
         html: '/reports/sweep-latest.html',
         json: '/reports/sweep-latest.json'
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/run-test-case') {
+      const body = await readRequestJson(req);
+      const report = await runTestCase(body);
+      return sendJson(res, report.ok ? 200 : 400, {
+        ok: report.ok,
+        report,
+        html: '/reports/testcase-latest.html',
+        json: '/reports/testcase-latest.json'
       });
     }
 

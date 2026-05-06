@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "id": "basic-link-bringup",
+  "name": "Basic Link Bring-up",
+  "description": "ARP, UDP sequence, payload pattern, and VLAN PCP smoke test for a two-PC Ethernet lab link.",
+  "createdAt": "2026-05-06T00:00:00.000Z",
+  "updatedAt": "2026-05-06T00:00:00.000Z",
+  "steps": [
+    {
+      "kind": "packet",
+      "name": "ARP request",
+      "enabled": true,
+      "count": 3,
+      "intervalMs": 200,
+      "profile": {
+        "name": "ARP Request",
+        "protocol": "arp",
+        "srcMac": "02:00:00:00:00:01",
+        "dstMac": "ff:ff:ff:ff:ff:ff",
+        "arp": {
+          "operation": 1,
+          "senderMac": "02:00:00:00:00:01",
+          "senderIp": "192.168.100.10",
+          "targetMac": "00:00:00:00:00:00",
+          "targetIp": "192.168.100.20"
+        }
+      }
+    },
+    {
+      "kind": "delay",
+      "name": "Settle 300 ms",
+      "delayMs": 300
+    },
+    {
+      "kind": "packet",
+      "name": "UDP sequence payload",
+      "enabled": true,
+      "count": 10,
+      "intervalMs": 50,
+      "profile": {
+        "name": "UDP Sequence",
+        "protocol": "udp",
+        "srcMac": "02:00:00:00:00:01",
+        "dstMac": "02:00:00:00:00:02",
+        "ipv4": {
+          "src": "192.168.100.10",
+          "dst": "192.168.100.20",
+          "ttl": 64
+        },
+        "udp": {
+          "srcPort": 50000,
+          "dstPort": 50001
+        },
+        "payload": {
+          "mode": "sequence",
+          "template": "KETI_TEST_SEQ_{seq:06d}",
+          "start": 1
+        }
+      }
+    },
+    {
+      "kind": "packet",
+      "name": "VLAN 10 PCP 7 burst",
+      "enabled": true,
+      "count": 8,
+      "intervalMs": 25,
+      "profile": {
+        "name": "VLAN 10 PCP 7",
+        "protocol": "udp",
+        "srcMac": "02:00:00:00:00:01",
+        "dstMac": "02:00:00:00:00:02",
+        "vlan": {
+          "enabled": true,
+          "id": 10,
+          "priority": 7
+        },
+        "ipv4": {
+          "src": "192.168.100.10",
+          "dst": "192.168.100.20",
+          "ttl": 64
+        },
+        "udp": {
+          "srcPort": 50007,
+          "dstPort": 50007
+        },
+        "payload": {
+          "mode": "text",
+          "data": "TAS_PCP7_SEQ"
+        }
+      }
+    }
+  ]
+}

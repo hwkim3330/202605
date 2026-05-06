@@ -737,9 +737,9 @@ input[readonly], select[readonly] {
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(105px, 1fr));
+  grid-template-columns: repeat(4, minmax(96px, 1fr));
   gap: 6px;
-  min-width: 330px;
+  min-width: 420px;
 }
 
 .modeTab {
@@ -840,6 +840,10 @@ tbody tr:hover {
   background: #e7f3f4;
 }
 
+tbody tr.selectedRow {
+  background: #dff0f2;
+}
+
 .empty {
   color: var(--muted);
   text-align: center;
@@ -913,6 +917,10 @@ tbody tr:hover {
 
 .controlStrip {
   border-left: 5px solid #4f46e5;
+}
+
+.caseStrip {
+  border-left: 5px solid #a45b10;
 }
 
 .controlView {
@@ -1003,6 +1011,52 @@ tbody tr:hover {
 
 .fullWidth {
   width: 100%;
+}
+
+.dangerAction {
+  background: #9b1c1c;
+  border-color: #9b1c1c;
+}
+
+.dangerAction:hover {
+  background: #741313;
+}
+
+.caseView {
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+}
+
+.casePane {
+  grid-template-rows: auto minmax(280px, 1fr) minmax(220px, 0.8fr);
+}
+
+.caseTools {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.caseInlineButton {
+  align-self: end;
+}
+
+.stepActions {
+  display: flex;
+  gap: 5px;
+}
+
+.stepActions button {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.miniInput {
+  width: 72px;
+  min-height: 28px;
+  padding: 4px 6px;
 }
 
 .split {

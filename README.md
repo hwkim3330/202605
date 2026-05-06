@@ -126,6 +126,35 @@ reports/latest.json
 
 The report confirms profile correctness, frame length, protocol decode, VLAN/PCP decode, and build errors. It does not prove PC A to PC B wire delivery; for that, run `Capture` on the receiver PC while sending from the sender PC.
 
+## Test Cases
+
+Open `Cases` to build reusable packet sequences.
+
+A test case is a JSON packet list stored in `testcases/`. It can contain:
+
+- `packet` steps: a complete packet profile plus repeat `count` and `intervalMs`
+- `delay` steps: a wait between packet groups
+
+Typical flow:
+
+1. Configure one packet in `Sender`.
+2. Open `Cases`.
+3. Press `Add Current Packet`.
+4. Adjust count/interval in the sequence table.
+5. Add delays if needed.
+6. Save the test case.
+7. Probe the peer in the top link strip.
+8. Press `Run On Wire`.
+
+The test case runner opens capture on the receiver node, sends each packet step from the sender node in order, then writes:
+
+```text
+reports/testcase-latest.html
+reports/testcase-latest.json
+```
+
+The built-in `testcases/basic-link-bringup.json` covers ARP, UDP sequence payload, and VLAN PCP burst smoke tests.
+
 ## Recommended Test Order
 
 See [docs/packet-test-plan.md](docs/packet-test-plan.md).
@@ -172,6 +201,7 @@ sudo python3 tools/packet_agent.py send < examples/03_udp_unicast_basic.json
 - `tools/packet_agent.py`: Python raw-socket packet engine.
 - `public/`: browser UI and KETI logo.
 - `examples/`: test profiles.
+- `testcases/`: reusable packet-list test cases.
 - `docs/`: operating and test-plan documentation.
 
 Node handles UI/API. Python handles privileged packet work. This avoids fragile Node native packet addons while using standard Linux raw sockets.
