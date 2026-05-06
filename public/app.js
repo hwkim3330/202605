@@ -543,10 +543,16 @@ function syncControlFromPeer() {
   const peerUrl = state.peer.url;
   const localIfName = $('interfaceSelect').value;
   const peerIfName = state.peer.iface?.name || state.peer.interface || '';
+  const localPack = { url: localUrl, interfaces: state.interfaces };
+  const peerPack = state.peer.interfaces.length ? { url: peerUrl, interfaces: state.peer.interfaces } : null;
   if (state.localRole === 'sender') {
+    state.nodes.sender = localPack;
+    if (peerPack) state.nodes.receiver = peerPack;
     $('senderNodeUrl').value = localUrl;
     $('receiverNodeUrl').value = peerUrl;
   } else {
+    state.nodes.receiver = localPack;
+    if (peerPack) state.nodes.sender = peerPack;
     $('senderNodeUrl').value = peerUrl;
     $('receiverNodeUrl').value = localUrl;
   }
@@ -615,12 +621,58 @@ $('linkArrow').addEventListener('click', () => {
   renderLinkStrip();
 });
 $('useMacBtn').addEventListener('click', lockToPeer);
-$('interfaceSelect').addEventListener('change', renderLinkStrip);
+$('interfaceSelect').addEventListener('change', () => {
+  localStorage.setItem('localInterface', $('interfaceSelect').value);
+  renderLinkStrip();
+});
+
+$('senderNodeInterface').addEventListener('change', () => {
+  if (state.localRole === 'sender') {
+    const name = $('senderNodeInterface').value;
+    if (state.interfaces.find((i) => i.name === name)) {
+      $('interfaceSelect').value = name;
+      localStorage.setItem('localInterface', name);
+      updateInterfaceInfo();
+      renderLinkStrip();
+    }
+  } else {
+    state.peer.interface = $('senderNodeInterface').value;
+    state.peer.iface = state.peer.interfaces.find((i) => i.name === state.peer.interface) || null;
+    localStorage.setItem('peerInterface', state.peer.interface);
+    if ($('peerInterfacePin').querySelector(`option[value="${state.peer.interface}"]`)) {
+      $('peerInterfacePin').value = state.peer.interface;
+    }
+    renderLinkStrip();
+  }
+});
+
+$('receiverNodeInterface').addEventListener('change', () => {
+  if (state.localRole === 'receiver') {
+    const name = $('receiverNodeInterface').value;
+    if (state.interfaces.find((i) => i.name === name)) {
+      $('interfaceSelect').value = name;
+      localStorage.setItem('localInterface', name);
+      updateInterfaceInfo();
+      renderLinkStrip();
+    }
+  } else {
+    state.peer.interface = $('receiverNodeInterface').value;
+    state.peer.iface = state.peer.interfaces.find((i) => i.name === state.peer.interface) || null;
+    localStorage.setItem('peerInterface', state.peer.interface);
+    if ($('peerInterfacePin').querySelector(`option[value="${state.peer.interface}"]`)) {
+      $('peerInterfacePin').value = state.peer.interface;
+    }
+    renderLinkStrip();
+  }
+});
 
 await loadExamples();
 await loadInterfaces();
-$('senderNodeUrl').value = window.location.origin;
-$('receiverNodeUrl').value = '';
+const savedLocalIf = localStorage.getItem('localInterface');
+if (savedLocalIf && state.interfaces.find((i) => i.name === savedLocalIf)) {
+  $('interfaceSelect').value = savedLocalIf;
+  updateInterfaceInfo();
+}
 $('peerUrlPin').value = state.peer.url;
 renderLinkStrip();
 if (state.peer.url) probePeer().catch(() => {});
