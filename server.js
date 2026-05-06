@@ -414,22 +414,37 @@ function summarize(arr) {
   };
 }
 
+function extractBenchmarkFromHex(frameHex) {
+  // Fallback for old receiver agents that don't decode the KETI marker.
+  // Locate "4b455449" (b"KETI") in the hex, then the next 4 bytes are seq, the next 8 are tx ns.
+  if (typeof frameHex !== 'string') return null;
+  const idx = frameHex.indexOf('4b455449');
+  if (idx < 0 || frameHex.length < idx + 8 + 8 + 16) return null;
+  const seqHex = frameHex.slice(idx + 8, idx + 8 + 8);
+  const tsHex = frameHex.slice(idx + 8 + 8, idx + 8 + 8 + 16);
+  const seq = parseInt(seqHex, 16);
+  const txTimestampNs = BigInt('0x' + tsHex);
+  return { seq, txTimestampNs: Number(txTimestampNs) };
+}
+
 function analyzeBenchmark(txRecords, frames, sentBytes, elapsedSec) {
   const txBySeq = new Map();
   for (const rec of txRecords) txBySeq.set(rec.seq, rec);
   const matched = [];
   const rxByCapture = [];
   for (const frame of frames) {
-    const bench = frame.decoded?.benchmark;
+    let bench = frame.decoded?.benchmark;
+    if (!bench) bench = extractBenchmarkFromHex(frame.frameHex);
     if (!bench) continue;
     rxByCapture.push(frame);
     const tx = txBySeq.get(bench.seq);
     if (!tx) continue;
+    const rxNs = frame.rxTimestampNs ?? Math.round((frame.timestamp || 0) * 1e9);
     matched.push({
       seq: bench.seq,
       txTimestampNs: tx.txTimestampNs,
-      rxTimestampNs: frame.rxTimestampNs,
-      latencyNs: frame.rxTimestampNs - tx.txTimestampNs,
+      rxTimestampNs: rxNs,
+      latencyNs: rxNs - tx.txTimestampNs,
       length: frame.length
     });
   }
@@ -511,9 +526,9 @@ th{background:#eef5f6}
   <div class="box"><span>Loss</span><strong>${fmt(s.lossPct, 2)}%</strong></div>
   <div class="box"><span>Tx Throughput</span><strong>${fmt(s.throughputMbps)} Mbps</strong></div>
   <div class="box"><span>Rx Throughput</span><strong>${fmt(s.rxThroughputMbps)} Mbps</strong></div>
-  <div class="box"><span>Latency p50</span><strong>${fmt(s.latencyUs.p50)} µs</strong></div>
-  <div class="box"><span>Latency p95</span><strong>${fmt(s.latencyUs.p95)} µs</strong></div>
-  <div class="box"><span>Latency p99</span><strong>${fmt(s.latencyUs.p99)} µs</strong></div>
+  <div class="box"><span>Latency p50 (skew-adj.)</span><strong>${fmt(s.latencyAdjustedUs.p50)} µs</strong></div>
+  <div class="box"><span>Latency p95 (skew-adj.)</span><strong>${fmt(s.latencyAdjustedUs.p95)} µs</strong></div>
+  <div class="box"><span>Latency p99 (skew-adj.)</span><strong>${fmt(s.latencyAdjustedUs.p99)} µs</strong></div>
   <div class="box"><span>Jitter (mean |Δlat|)</span><strong>${fmt(s.jitterUs.mean)} µs</strong></div>
   <div class="box"><span>Inter-arrival σ</span><strong>${fmt(s.interArrivalUs.stddev)} µs</strong></div>
 </div>

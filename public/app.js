@@ -471,7 +471,7 @@ async function runBenchmark() {
     <div><span>Recv</span><strong>${s.rxCount}</strong></div>
     <div><span>Loss</span><strong>${s.lossPct.toFixed(2)}%</strong></div>
     <div><span>Tx Mbps</span><strong>${s.throughputMbps.toFixed(2)}</strong></div>
-    <div><span>Lat p95 µs</span><strong>${(s.latencyUs.p95||0).toFixed(1)}</strong></div>
+    <div><span>Lat p95 µs (skew-adj.)</span><strong>${(s.latencyAdjustedUs?.p95||0).toFixed(1)}</strong></div>
     <div><span>Jitter µs</span><strong>${(s.jitterUs.mean||0).toFixed(2)}</strong></div>
   `;
   setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`);
