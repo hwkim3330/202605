@@ -4,7 +4,8 @@ const state = {
   examples: {},
   exampleItems: [],
   interfaces: [],
-  packets: []
+  packets: [],
+  report: null
 };
 
 function setStatus(message, isError = false) {
@@ -270,6 +271,35 @@ async function capture() {
   setStatus(`Capture complete: ${frames.length} frame(s)`);
 }
 
+function renderReport(report) {
+  state.report = report;
+  $('reportSummary').innerHTML = `
+    <div><span>Total</span><strong>${report.summary.total}</strong></div>
+    <div><span>Pass</span><strong>${report.summary.pass}</strong></div>
+    <div><span>Fail</span><strong>${report.summary.fail}</strong></div>
+  `;
+  $('reportRows').innerHTML = report.results.map((item) => `
+    <tr>
+      <td>${item.priority}</td>
+      <td>${item.category}</td>
+      <td>${item.name}</td>
+      <td class="${item.ok ? 'passText' : 'failText'}">${item.ok ? 'PASS' : 'FAIL'}</td>
+      <td>${item.length ?? '-'}</td>
+      <td>${item.protocol || '-'}</td>
+      <td>${item.error || item.info || ''}</td>
+    </tr>
+  `).join('');
+  $('openReport').classList.remove('disabled');
+  $('openReportJson').classList.remove('disabled');
+}
+
+async function runReport() {
+  setStatus('Running validation report...');
+  const result = await api('/api/run-report', { method: 'POST', body: '{}' });
+  renderReport(result.report);
+  setStatus(`Report complete: ${result.report.summary.pass}/${result.report.summary.total} pass`, result.report.summary.fail > 0);
+}
+
 document.querySelectorAll('[data-example]').forEach((button) => {
   button.addEventListener('click', () => {
     const item = state.exampleItems.find((entry) => entry.key.includes(button.dataset.example));
@@ -308,6 +338,10 @@ $('send').addEventListener('click', () => send().catch((err) => {
   alert(err.message);
 }));
 $('capture').addEventListener('click', () => capture().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('runReport').addEventListener('click', () => runReport().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));

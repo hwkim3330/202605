@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { createReadStream, existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
+const reportsDir = join(root, 'reports');
 const agentPath = join(root, 'tools', 'packet_agent.py');
 const port = Number(process.env.PORT || 8080);
 
@@ -70,6 +71,128 @@ function runAgent(args, stdinJson = null, timeoutMs = 15000) {
   });
 }
 
+async function loadExampleItems() {
+  const files = (await readdir(join(root, 'examples'))).filter((file) => file.endsWith('.json')).sort();
+  const profiles = {};
+  const items = [];
+  for (const file of files) {
+    const profile = JSON.parse(await readFile(join(root, 'examples', file), 'utf8'));
+    const key = file.replace(/\.json$/, '');
+    profiles[key] = profile;
+    items.push({
+      key,
+      file,
+      name: profile.name || key,
+      category: profile.category || 'General',
+      priority: profile.priority || 99,
+      description: profile.description || '',
+      profile
+    });
+  }
+  items.sort((a, b) => a.priority - b.priority || a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  return { profiles, items };
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function reportHtml(report) {
+  const rows = report.results.map((item) => `
+    <tr class="${item.ok ? 'pass' : 'fail'}">
+      <td>${item.priority}</td>
+      <td>${escapeHtml(item.category)}</td>
+      <td>${escapeHtml(item.name)}</td>
+      <td>${item.ok ? 'PASS' : 'FAIL'}</td>
+      <td>${item.length ?? '-'}</td>
+      <td>${escapeHtml(item.protocol || '-')}</td>
+      <td>${escapeHtml(item.error || item.info || '')}</td>
+    </tr>
+  `).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ethernet Packet Lab Report</title>
+  <style>
+    body { margin: 24px; font: 14px/1.45 system-ui, sans-serif; color: #17202a; }
+    h1 { margin: 0 0 4px; }
+    .meta { color: #62707f; margin-bottom: 18px; }
+    .summary { display: flex; gap: 12px; margin: 16px 0; }
+    .box { border: 1px solid #d2dae3; border-radius: 8px; padding: 10px 12px; min-width: 130px; }
+    .box strong { display: block; font-size: 22px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #d2dae3; padding: 8px; text-align: left; }
+    th { background: #eef5f6; }
+    tr.pass td:nth-child(4) { color: #14532d; font-weight: 700; }
+    tr.fail td:nth-child(4) { color: #9b1c1c; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Ethernet Packet Lab Report</h1>
+  <div class="meta">Generated ${escapeHtml(report.generatedAt)} on ${escapeHtml(report.node.hostname || 'local node')}</div>
+  <div class="summary">
+    <div class="box"><span>Total</span><strong>${report.summary.total}</strong></div>
+    <div class="box"><span>Pass</span><strong>${report.summary.pass}</strong></div>
+    <div class="box"><span>Fail</span><strong>${report.summary.fail}</strong></div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Category</th><th>Profile</th><th>Status</th><th>Length</th><th>Protocol</th><th>Info</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
+}
+
+async function runProfileReport() {
+  const { items } = await loadExampleItems();
+  const interfaces = await runAgent(['interfaces']);
+  const results = [];
+  for (const item of items) {
+    const result = await runAgent(['build'], item.profile, 10000);
+    const decoded = result.stdout?.decoded;
+    const protocol = decoded?.arp ? 'ARP' : decoded?.icmp ? 'ICMP' : decoded?.udp ? 'UDP' : decoded?.ethernet?.etherType;
+    results.push({
+      key: item.key,
+      priority: item.priority,
+      category: item.category,
+      name: item.name,
+      description: item.description,
+      ok: result.ok && Boolean(decoded),
+      length: decoded?.length,
+      protocol,
+      info: decoded?.vlan ? `VLAN ${decoded.vlan.id} PCP ${decoded.vlan.priority}` : decoded?.ethernet?.etherType,
+      error: result.ok ? '' : (result.stdout?.error || result.stderr || 'build failed')
+    });
+  }
+  const pass = results.filter((item) => item.ok).length;
+  const report = {
+    generatedAt: new Date().toISOString(),
+    node: {
+      hostname: process.env.HOSTNAME || '',
+      cwd: root
+    },
+    interfaces: interfaces.stdout?.interfaces || [],
+    summary: {
+      total: results.length,
+      pass,
+      fail: results.length - pass
+    },
+    results
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'latest.html'), reportHtml(report));
+  return report;
+}
+
 async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/interfaces') {
@@ -78,25 +201,18 @@ async function handleApi(req, res) {
     }
 
     if (req.method === 'GET' && req.url === '/api/examples') {
-      const files = (await readdir(join(root, 'examples'))).filter((file) => file.endsWith('.json')).sort();
-      const profiles = {};
-      const items = [];
-      for (const file of files) {
-        const profile = JSON.parse(await readFile(join(root, 'examples', file), 'utf8'));
-        const key = file.replace(/\.json$/, '');
-        profiles[key] = profile;
-        items.push({
-          key,
-          file,
-          name: profile.name || key,
-          category: profile.category || 'General',
-          priority: profile.priority || 99,
-          description: profile.description || '',
-          profile
-        });
-      }
-      items.sort((a, b) => a.priority - b.priority || a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      const { profiles, items } = await loadExampleItems();
       return sendJson(res, 200, { ok: true, profiles, items });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/run-report') {
+      const report = await runProfileReport();
+      return sendJson(res, report.summary.fail === 0 ? 200 : 400, {
+        ok: report.summary.fail === 0,
+        report,
+        html: '/reports/latest.html',
+        json: '/reports/latest.json'
+      });
     }
 
     if (req.method === 'POST' && req.url === '/api/build') {
@@ -126,6 +242,15 @@ async function handleApi(req, res) {
 function serveStatic(req, res) {
   const requestPath = decodeURIComponent(new URL(req.url, `http://${req.headers.host}`).pathname);
   const clean = normalize(requestPath).replace(/^(\.\.[/\\])+/, '');
+  if (clean.startsWith('/reports/')) {
+    const reportPath = join(root, clean);
+    if (reportPath.startsWith(reportsDir) && existsSync(reportPath)) {
+      const type = mimeTypes.get(extname(reportPath)) || 'text/html; charset=utf-8';
+      res.writeHead(200, { 'content-type': type });
+      createReadStream(reportPath).pipe(res);
+      return;
+    }
+  }
   const relative = clean === '/' ? '/index.html' : clean;
   const filePath = join(publicDir, relative);
 

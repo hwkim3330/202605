@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --bg: #eef2f5;
+  --bg: #edf1f4;
   --panel: #ffffff;
   --text: #18212b;
   --muted: #62707f;
@@ -80,7 +80,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 14px 22px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--line);
   background: #fdfefe;
 }
@@ -88,20 +88,20 @@ textarea {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   min-width: 0;
 }
 
 .brand img {
-  width: 92px;
-  height: 42px;
+  width: 132px;
+  height: 54px;
   object-fit: contain;
   flex: 0 0 auto;
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 21px;
+  font-size: 24px;
   letter-spacing: 0;
 }
 
@@ -111,7 +111,7 @@ textarea {
 }
 
 .workspace {
-  padding: 16px;
+  padding: 14px 16px;
   min-height: 0;
 }
 
@@ -129,22 +129,24 @@ textarea {
 
 .sidebar {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
-  max-height: calc(100vh - 138px);
+  max-height: calc(100vh - 178px);
   overflow: auto;
 }
 
 h2 {
-  margin: 10px 0 2px;
-  font-size: 15px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
   letter-spacing: 0;
 }
 
 label {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   color: var(--muted);
+  font-size: 13px;
 }
 
 label input,
@@ -185,7 +187,7 @@ label textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 9px 16px;
   border-bottom: 1px solid var(--line);
   background: #f8fafb;
 }
@@ -194,7 +196,7 @@ label textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 16px;
+  padding: 7px 16px;
   border-bottom: 1px solid var(--line);
   background: #fff8e6;
   color: #5a4214;
@@ -219,9 +221,9 @@ label textarea {
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  grid-template-columns: repeat(3, minmax(105px, 1fr));
   gap: 6px;
-  min-width: 260px;
+  min-width: 330px;
 }
 
 .modeTab {
@@ -260,7 +262,7 @@ label textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: linear-gradient(180deg, #f8fafb 0%, #eef6f7 100%);
-  padding: 10px;
+  padding: 12px;
   font-weight: 700;
 }
 
@@ -340,8 +342,8 @@ tbody tr:hover {
 
 .roleView {
   display: none;
-  grid-template-columns: minmax(310px, 390px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 14px;
   min-height: 0;
 }
 
@@ -363,7 +365,7 @@ tbody tr:hover {
   gap: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   color: #233441;
   background: linear-gradient(180deg, #ffffff 0%, #f7fafb 100%);
 }
@@ -391,6 +393,71 @@ tbody tr:hover {
 
 .captureStrip {
   border-left: 5px solid #14532d;
+}
+
+.controlStrip {
+  border-left: 5px solid #4f46e5;
+}
+
+.controlView {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
+.controlPane {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.reportSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.reportSummary div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.reportSummary span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reportSummary strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 24px;
+}
+
+.passText {
+  color: #14532d;
+  font-weight: 800;
+}
+
+.failText {
+  color: #9b1c1c;
+  font-weight: 800;
+}
+
+.linkButton {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--accent-strong);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.linkButton.disabled {
+  pointer-events: none;
+  color: #9aa6b2;
+  background: #f4f6f8;
 }
 
 .actionStack {
@@ -462,7 +529,7 @@ pre {
   border-radius: 6px;
   background: #f8fafb;
   color: var(--muted);
-  padding: 8px 10px;
+  padding: 7px 10px;
   font-size: 13px;
 }
 
@@ -508,7 +575,7 @@ pre {
   }
 
   .brand img {
-    width: 78px;
+    width: 108px;
   }
 
   .toolbar {
@@ -529,6 +596,10 @@ pre {
 
   .modeTabs {
     min-width: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .reportSummary {
     grid-template-columns: 1fr;
   }
 

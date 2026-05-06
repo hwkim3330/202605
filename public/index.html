@@ -26,6 +26,7 @@
         <div class="modeTabs">
           <button class="modeTab active" data-view="senderView">Sender</button>
           <button class="modeTab" data-view="captureView">Capture</button>
+          <button class="modeTab" data-view="controlView">Control</button>
         </div>
         <div class="toolbarField">
           <span>Interface</span>
@@ -42,13 +43,11 @@
       <section class="workspace">
         <section id="senderView" class="roleView active">
           <aside class="sidebar">
-            <h2>Selected Interface</h2>
             <div class="interfaceBox">
               <div id="selectedInterfaceName">-</div>
               <div id="selectedInterfaceMac" class="muted">-</div>
             </div>
 
-            <h2>Packet Template</h2>
             <div class="buttonRow">
               <button data-example="udp">UDP</button>
               <button data-example="icmp">ICMP</button>
@@ -177,7 +176,6 @@
 
         <section id="captureView" class="roleView">
           <aside class="sidebar">
-            <h2>Capture Filter</h2>
             <label>
               Source MAC filter
               <input id="captureSrcMac" autocomplete="off" placeholder="optional">
@@ -237,6 +235,51 @@
                 <pre id="captureHexdump"></pre>
               </div>
             </section>
+          </section>
+        </section>
+
+        <section id="controlView" class="roleView controlView">
+          <aside class="sidebar">
+            <div class="interfaceBox">
+              <div>Local Node</div>
+              <div class="muted">This server controls this PC only.</div>
+            </div>
+            <button id="runReport" class="primaryAction fullWidth">Run Validation Report</button>
+            <a id="openReport" class="linkButton disabled" href="/reports/latest.html" target="_blank" rel="noreferrer">Open Latest Report</a>
+            <a id="openReportJson" class="linkButton disabled" href="/reports/latest.json" target="_blank" rel="noreferrer">Open JSON</a>
+          </aside>
+
+          <section class="workPane controlPane">
+            <div class="heroStrip controlStrip">
+              <div>
+                <strong>Control</strong>
+                <span>Run local profile validation and generate a report for this node.</span>
+              </div>
+            </div>
+            <div class="reportSummary" id="reportSummary">
+              <div><span>Total</span><strong>-</strong></div>
+              <div><span>Pass</span><strong>-</strong></div>
+              <div><span>Fail</span><strong>-</strong></div>
+            </div>
+            <div class="packetList">
+              <div class="sectionTitle">Validation Results</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>No.</th>
+                    <th>Category</th>
+                    <th>Profile</th>
+                    <th>Status</th>
+                    <th>Length</th>
+                    <th>Protocol</th>
+                    <th>Info</th>
+                  </tr>
+                </thead>
+                <tbody id="reportRows">
+                  <tr><td colspan="7" class="empty">No report generated yet</td></tr>
+                </tbody>
+              </table>
+            </div>
           </section>
         </section>
 

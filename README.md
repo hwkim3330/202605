@@ -19,7 +19,8 @@ If PC B opens `http://PC_A_IP:8080`, it controls PC A's NICs, not PC B's NICs.
 
 ## Features
 
-- Sender and Capture views.
+- Sender, Capture, and Control views.
+- One-click local profile validation with HTML/JSON report generation.
 - Linux `AF_PACKET` raw-socket send/capture engine.
 - Ethernet II, 802.1Q VLAN, IPv4, UDP, ICMP Echo, and ARP.
 - Wireshark-style packet list, decode panel, and hex panel.
@@ -81,6 +82,19 @@ Then restart:
 4. Start with ARP, ICMP, and UDP. Then move to payload pattern, size sweep, VLAN/PCP, switching, policy, and TSN-prep profiles.
 
 `Preview Frame` only builds and decodes locally. It does not transmit.
+
+## Reports
+
+Open `Control` and press `Run Validation Report`.
+
+This validates every built-in profile locally by building and decoding the frame. It writes:
+
+```text
+reports/latest.html
+reports/latest.json
+```
+
+The report confirms profile correctness, frame length, protocol decode, VLAN/PCP decode, and build errors. It does not prove PC A to PC B wire delivery; for that, run `Capture` on the receiver PC while sending from the sender PC.
 
 ## Recommended Test Order
 
