@@ -298,14 +298,14 @@ async function startCaptureStream() {
   capture.startedAtMs = performance.now();
   capture.lastWindow = { t: capture.startedAtMs, count: 0, pps: 0 };
   capture.filter = $('captureDisplayFilter').value.trim();
-  const promisc = $('capturePromisc').checked;
+  // Pre-decode filters are manual only (collapsed advanced panel). Default = sniff all.
   const body = {
     interface: $('interfaceSelect').value,
     timeoutSec: 0,
     maxFrames: 0,
-    srcMac: promisc ? '' : ($('captureSrcMac').value.trim() || ''),
-    dstMac: promisc ? '' : ($('captureDstMac').value.trim() || ''),
-    etherType: promisc ? '' : ($('captureEtherType').value.trim() || '')
+    srcMac: $('captureSrcMac')?.value.trim() || '',
+    dstMac: $('captureDstMac')?.value.trim() || '',
+    etherType: $('captureEtherType')?.value.trim() || ''
   };
   const ctrl = new AbortController();
   capture.abort = ctrl;
@@ -1009,6 +1009,7 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     button.classList.add('active');
     $(button.dataset.view).classList.add('active');
     if (button.dataset.view === 'controlView') renderPairCard();
+    document.body.classList.toggle('captureMode', button.dataset.view === 'captureView');
   });
 });
 
@@ -1218,9 +1219,10 @@ function applyLock() {
     $('dstMac').readOnly = true;
     $('dstIp').readOnly = true;
   }
-  // Capture filters: incoming frames from peer NIC, addressed to local NIC
-  if (peer) $('captureSrcMac').value = peer.mac;
-  if (local) $('captureDstMac').value = local.mac;
+  // Note: Capture page is now Wireshark-style (sniff all by default), so we
+  // intentionally do NOT auto-fill captureSrcMac / captureDstMac from the
+  // pinned pair. Pre-decode filters in the collapsed "Capture filters" panel
+  // remain manual so the user can explicitly narrow the sniff.
 }
 
 function setLockUi() {

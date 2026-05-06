@@ -342,14 +342,57 @@ input[readonly], select[readonly] {
   grid-template-columns: 1fr;
 }
 
+/* When the Capture tab is active, suppress the (now unrelated) peer link strip so
+   the capture pane fills the viewport like a real packet analyser. */
+body.captureMode .linkStrip { display: none; }
+body.captureMode .toolbar { padding: 6px 16px; }
+
 .wiresharkPane {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  gap: 10px;
-  padding: 12px 16px;
+  grid-template-rows: auto auto minmax(0, 3fr) minmax(0, 2fr);
+  gap: 8px;
+  padding: 8px 10px;
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.wiresharkPane .detailGrid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 8px;
+  min-height: 0;
+}
+
+.wiresharkPane .detailPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.wiresharkPane .detailPane .sectionTitle {
+  padding: 6px 10px;
+  background: #eef5f6;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #455160;
+  font-weight: 700;
+}
+
+.wiresharkPane .detailPane pre {
+  flex: 1;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre;
 }
 
 .captureBar {
