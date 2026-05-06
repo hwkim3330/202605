@@ -25,27 +25,40 @@ Manual start for actual send/capture:
 sudo env PATH="$PATH" npm start
 ```
 
-Open `http://<pc-ip>:8080`.
+Open each PC's own local UI:
 
-If PC B is connected to PC A's USB/Ethernet interface, use the IP assigned to that interface. Link-local addresses usually look like `169.254.x.x`.
+```text
+PC A -> http://localhost:8080
+PC B -> http://localhost:8080
+```
+
+Do not open PC A's `:8080` from PC B expecting to control PC B's NIC. The browser talks to the server it opened, and the server controls only its own local interfaces.
+
+Remote URL access is only for intentionally controlling a different lab PC:
+
+```text
+http://<lab-pc-ip>:8080
+```
 
 ## Receiver flow
 
-1. Select the test interface.
-2. Open `Capture`.
-3. Keep filters empty for the first test.
-4. Press `Start Capture`.
+1. On the receiver PC itself, open `http://localhost:8080`.
+2. Select the receiver test interface.
+3. Open `Capture`.
+4. Keep filters empty for the first test.
+5. Press `Start Capture`.
 
 The default UI leaves receive filters empty so broadcast and unknown-destination tests are visible. Add Source MAC, Destination MAC, or EtherType filters only when the capture stream is too noisy.
 
 ## Sender flow
 
-1. Select the test interface.
-2. Open `Sender`.
-3. Choose a Test Profile, starting with ARP, ICMP, then UDP.
-4. Set Destination MAC/IP and Source MAC/IP.
-5. Press `Preview Frame` if you want to inspect bytes.
-6. Press `Send Packet`.
+1. On the sender PC itself, open `http://localhost:8080`.
+2. Select the sender test interface.
+3. Open `Sender`.
+4. Choose a Test Profile, starting with ARP, ICMP, then UDP.
+5. Set Destination MAC/IP and Source MAC/IP.
+6. Press `Preview Frame` if you want to inspect bytes.
+7. Press `Send Packet`.
 
 ## CLI examples
 

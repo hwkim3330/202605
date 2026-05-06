@@ -64,16 +64,19 @@ Open the UI:
 http://localhost:8080
 ```
 
-From the second PC, open this PC's interface address:
+For two-PC tests, run this app on both PCs. Each browser controls only the machine where its Node/Python server is running:
 
 ```text
-http://<this-pc-ip>:8080
+PC A browser -> http://localhost:8080 on PC A
+PC B browser -> http://localhost:8080 on PC B
 ```
 
-For the current link-local setup, the address may look like:
+Opening `http://<other-pc-ip>:8080` from a remote browser does not control the remote browser's local NIC. It controls the NICs on the PC running that server. Use remote access only for observation or if you intentionally want to control that other PC.
+
+If you need to access a headless lab PC from another machine, open that lab PC's server address:
 
 ```text
-http://169.254.5.7:8080
+http://<lab-pc-ip>:8080
 ```
 
 ## Lab Flow
@@ -85,9 +88,9 @@ The UI is split into two work modes:
 
 Typical two-PC flow:
 
-1. Select the test interface on both PCs.
-2. On the receiver PC, open `Capture` and press `Start Capture`.
-3. On the sender PC, open `Sender`, set destination MAC/IP and payload, then press `Send Packet`.
+1. Start `./run-lab.sh` on PC A and PC B.
+2. On PC B, open PC B's own `http://localhost:8080`, then open `Capture` and press `Start Capture`.
+3. On PC A, open PC A's own `http://localhost:8080`, then open `Sender`, set destination MAC/IP and payload, then press `Send Packet`.
 4. Use ARP/ICMP/UDP profiles first, then move to payload, size, VLAN, PCP, and TSN-prep profiles.
 
 `Preview Frame` only generates and decodes the frame locally in the `Sender` view. It does not transmit anything.
