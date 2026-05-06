@@ -244,17 +244,41 @@
               <div>Local Node</div>
               <div class="muted">This server controls this PC only.</div>
             </div>
+            <label>
+              Sender Node URL
+              <input id="senderNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
+            </label>
+            <label>
+              Sender Interface
+              <select id="senderNodeInterface"></select>
+            </label>
+            <label>
+              Receiver Node URL
+              <input id="receiverNodeUrl" autocomplete="off" placeholder="http://169.254.x.x:8080">
+            </label>
+            <label>
+              Receiver Interface
+              <select id="receiverNodeInterface"></select>
+            </label>
+            <button id="probeNodes" class="fullWidth">Probe Nodes</button>
+            <button id="runE2E" class="primaryAction fullWidth">Run E2E Test</button>
             <button id="runReport" class="primaryAction fullWidth">Run Validation Report</button>
             <a id="openReport" class="linkButton disabled" href="/reports/latest.html" target="_blank" rel="noreferrer">Open Latest Report</a>
+            <a id="openE2EReport" class="linkButton disabled" href="/reports/e2e-latest.html" target="_blank" rel="noreferrer">Open E2E Report</a>
             <a id="openReportJson" class="linkButton disabled" href="/reports/latest.json" target="_blank" rel="noreferrer">Open JSON</a>
+            <a id="openE2EJson" class="linkButton disabled" href="/reports/e2e-latest.json" target="_blank" rel="noreferrer">Open E2E JSON</a>
           </aside>
 
           <section class="workPane controlPane">
             <div class="heroStrip controlStrip">
               <div>
                 <strong>Control</strong>
-                <span>Run local profile validation and generate a report for this node.</span>
+                <span>Probe two nodes, run receiver capture plus sender transmit, and generate reports.</span>
               </div>
+            </div>
+            <div class="nodeGrid" id="nodeGrid">
+              <div><span>Sender</span><strong>-</strong><small>-</small></div>
+              <div><span>Receiver</span><strong>-</strong><small>-</small></div>
             </div>
             <div class="reportSummary" id="reportSummary">
               <div><span>Total</span><strong>-</strong></div>

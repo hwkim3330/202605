@@ -5,7 +5,11 @@ const state = {
   exampleItems: [],
   interfaces: [],
   packets: [],
-  report: null
+  report: null,
+  nodes: {
+    sender: null,
+    receiver: null
+  }
 };
 
 function setStatus(message, isError = false) {
@@ -293,6 +297,95 @@ function renderReport(report) {
   $('openReportJson').classList.remove('disabled');
 }
 
+function renderInterfaceOptions(selectId, interfaces) {
+  $(selectId).innerHTML = interfaces.map((iface) => {
+    const ip = iface.ipv4?.[0]?.local || '';
+    return `<option value="${iface.name}">${iface.name} (${iface.state})${ip ? ` - ${ip}` : ''}</option>`;
+  }).join('');
+}
+
+function renderNodeGrid() {
+  const sender = state.nodes.sender;
+  const receiver = state.nodes.receiver;
+  const senderIface = sender?.interfaces?.find((iface) => iface.name === $('senderNodeInterface').value);
+  const receiverIface = receiver?.interfaces?.find((iface) => iface.name === $('receiverNodeInterface').value);
+  $('nodeGrid').innerHTML = `
+    <div>
+      <span>Sender</span>
+      <strong>${senderIface?.name || '-'}</strong>
+      <small>${sender?.url || '-'} ${senderIface?.ipv4?.[0]?.local || ''}</small>
+    </div>
+    <div>
+      <span>Receiver</span>
+      <strong>${receiverIface?.name || '-'}</strong>
+      <small>${receiver?.url || '-'} ${receiverIface?.ipv4?.[0]?.local || ''}</small>
+    </div>
+  `;
+}
+
+async function probeNode(url, role) {
+  const result = await api('/api/probe-node', {
+    method: 'POST',
+    body: JSON.stringify({ url })
+  });
+  state.nodes[role] = { url: result.url, interfaces: result.interfaces };
+  renderInterfaceOptions(role === 'sender' ? 'senderNodeInterface' : 'receiverNodeInterface', result.interfaces);
+}
+
+async function probeNodes() {
+  setStatus('Probing remote nodes...');
+  await Promise.all([
+    probeNode($('senderNodeUrl').value, 'sender'),
+    probeNode($('receiverNodeUrl').value, 'receiver')
+  ]);
+  renderNodeGrid();
+  setStatus('Nodes ready');
+}
+
+function renderE2EReport(report) {
+  $('reportSummary').innerHTML = `
+    <div><span>Status</span><strong>${report.ok ? 'PASS' : 'FAIL'}</strong></div>
+    <div><span>Captured</span><strong>${report.captureSummary.total}</strong></div>
+    <div><span>Matched</span><strong>${report.matchCount}</strong></div>
+  `;
+  $('reportRows').innerHTML = report.capturedFrames.length
+    ? report.capturedFrames.map((frame, index) => {
+      const decoded = frame.decoded || {};
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td>E2E</td>
+          <td>${decoded.arp ? 'ARP' : decoded.icmp ? 'ICMP' : decoded.udp ? 'UDP' : decoded.ethernet?.etherType || '-'}</td>
+          <td class="passText">MATCH</td>
+          <td>${frame.length}</td>
+          <td>${decoded.ethernet?.srcMac || '-'}</td>
+          <td>${decoded.ipv4?.src || decoded.arp?.senderIp || ''} -> ${decoded.ipv4?.dst || decoded.arp?.targetIp || ''}</td>
+        </tr>
+      `;
+    }).join('')
+    : '<tr><td colspan="7" class="empty">No matching frames captured</td></tr>';
+  $('openE2EReport').classList.remove('disabled');
+  $('openE2EJson').classList.remove('disabled');
+}
+
+async function runE2E() {
+  setStatus('Running end-to-end test...');
+  const result = await api('/api/e2e-test', {
+    method: 'POST',
+    body: JSON.stringify({
+      senderUrl: $('senderNodeUrl').value,
+      receiverUrl: $('receiverNodeUrl').value,
+      senderInterface: $('senderNodeInterface').value,
+      receiverInterface: $('receiverNodeInterface').value,
+      profile: getProfile(),
+      timeoutSec: 5,
+      maxFrames: 50
+    })
+  });
+  renderE2EReport(result.report);
+  setStatus(`E2E ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.matchCount} matching frame(s)`, !result.report.ok);
+}
+
 async function runReport() {
   setStatus('Running validation report...');
   const result = await api('/api/run-report', { method: 'POST', body: '{}' });
@@ -345,8 +438,20 @@ $('runReport').addEventListener('click', () => runReport().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
+$('probeNodes').addEventListener('click', () => probeNodes().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('runE2E').addEventListener('click', () => runE2E().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('senderNodeInterface').addEventListener('change', renderNodeGrid);
+$('receiverNodeInterface').addEventListener('change', renderNodeGrid);
 
 await loadExamples();
 await loadInterfaces();
+$('senderNodeUrl').value = window.location.origin;
+$('receiverNodeUrl').value = '';
 await build();
 renderPackets();

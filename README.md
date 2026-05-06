@@ -83,6 +83,32 @@ Then restart:
 
 `Preview Frame` only builds and decodes locally. It does not transmit.
 
+## One-screen Two-node Control
+
+For a direct link or link-local test, run this app on both PCs, then control both nodes from one browser:
+
+```text
+Sender PC   http://169.254.5.7:8080
+Receiver PC http://169.254.148.199:8080
+```
+
+1. Open either PC's UI.
+2. Open `Control`.
+3. Enter the sender node URL and receiver node URL.
+4. Press `Probe Nodes`.
+5. Select the sender and receiver test interfaces.
+6. Choose the test profile and packet fields in `Sender`.
+7. Return to `Control` and press `Run E2E Test`.
+
+The E2E test starts capture on the receiver node, sends the selected profile from the sender node, matches the captured Ethernet frame by source MAC, destination, protocol, VLAN, IP, and UDP/ICMP/ARP fields, then writes:
+
+```text
+reports/e2e-latest.html
+reports/e2e-latest.json
+```
+
+Both PCs must allow TCP `8080` from the link-local network. If a node does not probe, check cable/link state, the `169.254.x.x/16` address, firewall policy, and whether `./run-lab.sh` is still running on that node.
+
 ## Reports
 
 Open `Control` and press `Run Validation Report`.

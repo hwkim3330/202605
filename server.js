@@ -16,6 +16,7 @@ const mimeTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.js', 'application/javascript; charset=utf-8'],
   ['.json', 'application/json; charset=utf-8'],
+  ['.png', 'image/png'],
   ['.svg', 'image/svg+xml; charset=utf-8']
 ]);
 
@@ -100,6 +101,112 @@ function escapeHtml(value) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function normalizeBaseUrl(value) {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) throw new Error('node URL is required');
+  return raw.startsWith('http://') || raw.startsWith('https://') ? raw : `http://${raw}`;
+}
+
+async function remoteJson(baseUrl, path, options = {}) {
+  const url = `${normalizeBaseUrl(baseUrl)}${path}`;
+  const response = await fetch(url, {
+    method: options.method || 'GET',
+    headers: { 'content-type': 'application/json' },
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  const body = await response.json();
+  if (!response.ok || body.ok === false) {
+    throw new Error(body.error || body.stderr || `remote request failed: ${url}`);
+  }
+  return body;
+}
+
+function selectInterface(interfaces, name) {
+  const iface = interfaces.find((item) => item.name === name);
+  if (!iface) throw new Error(`interface not found: ${name}`);
+  return iface;
+}
+
+function firstIpv4(iface) {
+  return iface?.ipv4?.[0]?.local || '';
+}
+
+function profileForE2E(profile, senderIface, receiverIface) {
+  const next = JSON.parse(JSON.stringify(profile));
+  const senderIp = firstIpv4(senderIface);
+  const receiverIp = firstIpv4(receiverIface);
+  next.interface = senderIface.name;
+  next.srcMac = senderIface.mac;
+  if (next.protocol === 'arp') {
+    next.dstMac = 'ff:ff:ff:ff:ff:ff';
+    next.arp = {
+      ...(next.arp || {}),
+      operation: 1,
+      senderMac: senderIface.mac,
+      senderIp,
+      targetMac: '00:00:00:00:00:00',
+      targetIp: receiverIp
+    };
+  } else {
+    next.dstMac = receiverIface.mac;
+    next.ipv4 = {
+      ...(next.ipv4 || {}),
+      src: senderIp,
+      dst: receiverIp,
+      ttl: next.ipv4?.ttl || 64
+    };
+  }
+  return next;
+}
+
+function decodedProtocol(decoded) {
+  if (decoded?.arp) return 'arp';
+  if (decoded?.udp) return 'udp';
+  if (decoded?.icmp) return 'icmp';
+  return decoded?.ethernet?.etherType || 'ethernet';
+}
+
+function sameValue(left, right) {
+  return String(left ?? '').toLowerCase() === String(right ?? '').toLowerCase();
+}
+
+function isExpectedFrame(frame, sentDecoded, senderIface, receiverIface) {
+  const decoded = frame.decoded || {};
+  if (!sameValue(decoded.ethernet?.srcMac, senderIface.mac)) return false;
+  if (sentDecoded?.ethernet?.dstMac && !sameValue(decoded.ethernet?.dstMac, sentDecoded.ethernet.dstMac)) return false;
+  if (decodedProtocol(decoded) !== decodedProtocol(sentDecoded)) return false;
+
+  if (sentDecoded?.vlan) {
+    if (!decoded.vlan) return false;
+    if (decoded.vlan.id !== sentDecoded.vlan.id) return false;
+    if (decoded.vlan.priority !== sentDecoded.vlan.priority) return false;
+  }
+
+  if (sentDecoded?.arp) {
+    return sameValue(decoded.arp?.senderIp, sentDecoded.arp.senderIp)
+      && sameValue(decoded.arp?.targetIp, sentDecoded.arp.targetIp)
+      && sameValue(decoded.arp?.senderMac, senderIface.mac);
+  }
+
+  if (sentDecoded?.ipv4) {
+    if (!sameValue(decoded.ipv4?.src, sentDecoded.ipv4.src)) return false;
+    if (!sameValue(decoded.ipv4?.dst, sentDecoded.ipv4.dst || firstIpv4(receiverIface))) return false;
+  }
+
+  if (sentDecoded?.udp) {
+    return decoded.udp?.srcPort === sentDecoded.udp.srcPort
+      && decoded.udp?.dstPort === sentDecoded.udp.dstPort;
+  }
+
+  if (sentDecoded?.icmp) {
+    return decoded.icmp?.type === sentDecoded.icmp.type
+      && decoded.icmp?.id === sentDecoded.icmp.id
+      && decoded.icmp?.seq === sentDecoded.icmp.seq;
+  }
+
+  return true;
 }
 
 function reportHtml(report) {
@@ -193,6 +300,96 @@ async function runProfileReport() {
   return report;
 }
 
+function e2eReportHtml(report) {
+  const rows = report.capturedFrames.map((frame, index) => {
+    const decoded = frame.decoded || {};
+    const proto = decoded.arp ? 'ARP' : decoded.icmp ? 'ICMP' : decoded.udp ? 'UDP' : decoded.ethernet?.etherType || '-';
+    const src = decoded.ipv4?.src || decoded.arp?.senderIp || decoded.ethernet?.srcMac || '-';
+    const dst = decoded.ipv4?.dst || decoded.arp?.targetIp || decoded.ethernet?.dstMac || '-';
+    return `<tr><td>${index + 1}</td><td>${escapeHtml(proto)}</td><td>${escapeHtml(src)}</td><td>${escapeHtml(dst)}</td><td>${frame.length}</td><td>${escapeHtml(decoded.ethernet?.srcMac || '-')}</td></tr>`;
+  }).join('');
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ethernet Packet Lab E2E Report</title>
+  <style>
+    body { margin: 24px; font: 14px/1.45 system-ui, sans-serif; color: #17202a; }
+    .pass { color: #14532d; font-weight: 800; }
+    .fail { color: #9b1c1c; font-weight: 800; }
+    .box { border: 1px solid #d2dae3; border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border-bottom: 1px solid #d2dae3; padding: 8px; text-align: left; }
+    th { background: #eef5f6; }
+  </style>
+</head>
+<body>
+  <h1>Ethernet Packet Lab E2E Report</h1>
+  <div>Generated ${escapeHtml(report.generatedAt)}</div>
+  <div class="box">
+    <div>Status: <span class="${report.ok ? 'pass' : 'fail'}">${report.ok ? 'PASS' : 'FAIL'}</span></div>
+    <div>Profile: ${escapeHtml(report.profileName)}</div>
+    <div>Sender: ${escapeHtml(report.sender.url)} / ${escapeHtml(report.sender.interface)}</div>
+    <div>Receiver: ${escapeHtml(report.receiver.url)} / ${escapeHtml(report.receiver.interface)}</div>
+    <div>Captured matching frames: ${report.matchCount}</div>
+  </div>
+  <table>
+    <thead><tr><th>No.</th><th>Protocol</th><th>Source</th><th>Destination</th><th>Length</th><th>Source MAC</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6">No frames captured</td></tr>'}</tbody>
+  </table>
+</body>
+</html>`;
+}
+
+async function runE2ETest(reqBody) {
+  const senderUrl = normalizeBaseUrl(reqBody.senderUrl);
+  const receiverUrl = normalizeBaseUrl(reqBody.receiverUrl);
+  const profile = reqBody.profile;
+  if (!profile) throw new Error('profile is required');
+
+  const [senderInfo, receiverInfo] = await Promise.all([
+    remoteJson(senderUrl, '/api/interfaces'),
+    remoteJson(receiverUrl, '/api/interfaces')
+  ]);
+  const senderInterfaces = senderInfo.stdout?.interfaces || [];
+  const receiverInterfaces = receiverInfo.stdout?.interfaces || [];
+  const senderIface = selectInterface(senderInterfaces, reqBody.senderInterface);
+  const receiverIface = selectInterface(receiverInterfaces, reqBody.receiverInterface);
+  const txProfile = profileForE2E(profile, senderIface, receiverIface);
+  const captureBody = {
+    interface: receiverIface.name,
+    timeoutSec: Number(reqBody.timeoutSec || 5),
+    timeoutMs: Number(reqBody.timeoutMs || 8000),
+    maxFrames: Number(reqBody.maxFrames || 50),
+    srcMac: senderIface.mac
+  };
+
+  const capturePromise = remoteJson(receiverUrl, '/api/capture', { method: 'POST', body: captureBody });
+  await new Promise((resolve) => setTimeout(resolve, Number(reqBody.captureLeadMs || 500)));
+  const sendResult = await remoteJson(senderUrl, '/api/send', { method: 'POST', body: txProfile });
+  const captureResult = await capturePromise;
+  const frames = captureResult.stdout?.frames || [];
+  const sentDecoded = sendResult.stdout?.decoded;
+  const matching = frames.filter((frame) => isExpectedFrame(frame, sentDecoded, senderIface, receiverIface));
+  const report = {
+    generatedAt: new Date().toISOString(),
+    ok: sendResult.ok && matching.length > 0,
+    profileName: profile.name || profile.protocol || 'custom profile',
+    sender: { url: senderUrl, interface: senderIface.name, mac: senderIface.mac, ip: firstIpv4(senderIface) },
+    receiver: { url: receiverUrl, interface: receiverIface.name, mac: receiverIface.mac, ip: firstIpv4(receiverIface) },
+    sent: sendResult.stdout,
+    expectedProtocol: decodedProtocol(sentDecoded),
+    captureSummary: { total: frames.length, matching: matching.length },
+    matchCount: matching.length,
+    capturedFrames: matching,
+    txProfile
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'e2e-latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'e2e-latest.html'), e2eReportHtml(report));
+  return report;
+}
+
 async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/interfaces') {
@@ -212,6 +409,23 @@ async function handleApi(req, res) {
         report,
         html: '/reports/latest.html',
         json: '/reports/latest.json'
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/probe-node') {
+      const body = await readRequestJson(req);
+      const info = await remoteJson(body.url, '/api/interfaces');
+      return sendJson(res, 200, { ok: true, url: normalizeBaseUrl(body.url), interfaces: info.stdout?.interfaces || [] });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/e2e-test') {
+      const body = await readRequestJson(req);
+      const report = await runE2ETest(body);
+      return sendJson(res, report.ok ? 200 : 400, {
+        ok: report.ok,
+        report,
+        html: '/reports/e2e-latest.html',
+        json: '/reports/e2e-latest.json'
       });
     }
 
