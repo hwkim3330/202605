@@ -1,0 +1,16 @@
+{
+  "name": "ethernet-packet-lab",
+  "version": "0.1.0",
+  "description": "Two-node Ethernet packet generator and receiver lab with a Node.js control UI and Linux raw-socket agent.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "agent": "python3 tools/packet_agent.py",
+    "check": "node --check server.js && python3 -m py_compile tools/packet_agent.py"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

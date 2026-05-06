@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ethernet Packet Lab</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <h1>Ethernet Packet Lab</h1>
+          <p>Linux raw socket 기반 Ethernet II 송신/수신 실험 도구</p>
+        </div>
+        <button id="refreshInterfaces">Interfaces</button>
+      </header>
+
+      <section class="workspace">
+        <aside class="panel sidebar">
+          <h2>Interface</h2>
+          <select id="interfaceSelect"></select>
+          <div id="interfaceInfo" class="muted"></div>
+
+          <h2>Profile</h2>
+          <div class="buttonRow">
+            <button data-example="udp">UDP</button>
+            <button data-example="icmp">ICMP</button>
+            <button data-example="arp">ARP</button>
+          </div>
+          <label>
+            Protocol
+            <select id="protocol">
+              <option value="udp">UDP over IPv4</option>
+              <option value="icmp">ICMP Echo</option>
+              <option value="arp">ARP</option>
+              <option value="raw">Raw EtherType</option>
+            </select>
+          </label>
+          <label>
+            Destination MAC
+            <input id="dstMac" autocomplete="off">
+          </label>
+          <label>
+            Source MAC
+            <input id="srcMac" autocomplete="off">
+          </label>
+          <label>
+            Source IP
+            <input id="srcIp" autocomplete="off">
+          </label>
+          <label>
+            Destination IP
+            <input id="dstIp" autocomplete="off">
+          </label>
+          <div class="grid2">
+            <label>
+              Source Port
+              <input id="srcPort" type="number" min="1" max="65535">
+            </label>
+            <label>
+              Dest Port
+              <input id="dstPort" type="number" min="1" max="65535">
+            </label>
+          </div>
+          <label class="check">
+            <input id="vlanEnabled" type="checkbox">
+            <span>802.1Q VLAN</span>
+          </label>
+          <div class="grid2">
+            <label>
+              VLAN ID
+              <input id="vlanId" type="number" min="0" max="4095">
+            </label>
+            <label>
+              Priority
+              <input id="vlanPriority" type="number" min="0" max="7">
+            </label>
+          </div>
+          <label>
+            Payload
+            <textarea id="payload" rows="5"></textarea>
+          </label>
+          <div class="grid2">
+            <label>
+              Count
+              <input id="count" type="number" min="1">
+            </label>
+            <label>
+              Interval ms
+              <input id="intervalMs" type="number" min="0">
+            </label>
+          </div>
+        </aside>
+
+        <section class="panel editor">
+          <div class="actions">
+            <button id="build">Build</button>
+            <button id="send">Send</button>
+            <button id="capture">Capture</button>
+          </div>
+          <div class="split">
+            <div>
+              <h2>Decoded</h2>
+              <pre id="decoded"></pre>
+            </div>
+            <div>
+              <h2>Hexdump</h2>
+              <pre id="hexdump"></pre>
+            </div>
+          </div>
+          <h2>Capture Results</h2>
+          <div id="captures" class="captures"></div>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
