@@ -1496,6 +1496,14 @@ $('receiverNodeInterface').addEventListener('change', () => {
   }
 });
 
+// Switch tab early based on URL hash, before any async loads
+(() => {
+  const hash = location.hash.replace('#', '');
+  const target = { capture: 'captureView', control: 'controlView', sender: 'senderView' }[hash];
+  if (!target) return;
+  const btn = document.querySelector(`[data-view="${target}"]`);
+  if (btn) btn.click();
+})();
 await loadExamples();
 await loadTestProfiles();
 await loadTestCases();
@@ -1510,3 +1518,11 @@ renderLinkStrip();
 if (state.peer.url) probePeer().catch(() => {});
 await build();
 clearCapture();
+// Honour URL hash like #capture / #control / #sender to jump to a tab on load
+(() => {
+  const hash = location.hash.replace('#', '');
+  const target = { capture: 'captureView', control: 'controlView', sender: 'senderView' }[hash];
+  if (!target) return;
+  const btn = document.querySelector(`[data-view="${target}"]`);
+  if (btn) btn.click();
+})();

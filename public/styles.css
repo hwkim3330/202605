@@ -113,7 +113,12 @@ textarea {
 .workspace {
   padding: 14px 16px;
   min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
 }
+
+body.captureMode .workspace { padding: 0; }
 
 .sidebar,
 .workPane,
@@ -1130,10 +1135,44 @@ tbody tr.selectedRow {
   grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
+  height: 100%;
 }
 
 .roleView.active {
   display: grid;
+}
+
+/* Capture mode: force the capture pane to fill the viewport like a real packet
+   analyser. Override the default workspace -> roleView -> workPane chain. */
+/* In capture mode, pin the wireshark pane to fill the viewport below the
+   topbar+toolbar. Working around the multi-level grid heights that don't
+   reliably propagate. */
+body.captureMode .wiresharkPane {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 158px;
+  z-index: 5;
+  background: #fafbfc;
+}
+body.captureMode .workspace {
+  height: 100%;
+  min-height: 0;
+}
+#captureView.roleView {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+#captureView .workPane {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  min-height: 0;
+  height: 100%;
 }
 
 .workPane {
