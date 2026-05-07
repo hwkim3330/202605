@@ -799,6 +799,7 @@ async function runFrameSizeSweep(reqBody) {
         throughputMbps: single.stats.throughputMbps,
         rxThroughputMbps: single.stats.rxThroughputMbps,
         latencyUs: single.stats.latencyUs,
+        latencyAdjustedUs: single.stats.latencyAdjustedUs,
         jitterUs: single.stats.jitterUs
       }
     });
@@ -1044,8 +1045,13 @@ function sweepReportHtml(report) {
   const tx = report.results.map((r) => r.stats.throughputMbps.toFixed(2));
   const rx = report.results.map((r) => r.stats.rxThroughputMbps.toFixed(2));
   const loss = report.results.map((r) => r.stats.lossPct.toFixed(2));
-  const p95 = report.results.map((r) => (r.stats.latencyUs.p95 || 0).toFixed(2));
-  const rows = report.results.map((r) => `<tr><td>${r.size}</td><td>${r.stats.txCount}</td><td>${r.stats.rxCount}</td><td>${r.stats.lossPct.toFixed(2)}%</td><td>${r.stats.throughputMbps.toFixed(2)}</td><td>${r.stats.rxThroughputMbps.toFixed(2)}</td><td>${(r.stats.latencyUs.p50||0).toFixed(2)}</td><td>${(r.stats.latencyUs.p95||0).toFixed(2)}</td><td>${(r.stats.jitterUs.mean||0).toFixed(2)}</td></tr>`).join('');
+  const p95 = report.results.map((r) => (r.stats.latencyAdjustedUs?.p95 ?? r.stats.latencyUs.p95 ?? 0).toFixed(2));
+  const rows = report.results.map((r) => {
+    const adj = r.stats.latencyAdjustedUs || {};
+    const p50 = (adj.p50 ?? r.stats.latencyUs.p50 ?? 0).toFixed(2);
+    const p95v = (adj.p95 ?? r.stats.latencyUs.p95 ?? 0).toFixed(2);
+    return `<tr><td>${r.size}</td><td>${r.stats.txCount}</td><td>${r.stats.rxCount}</td><td>${r.stats.lossPct.toFixed(2)}%</td><td>${r.stats.throughputMbps.toFixed(2)}</td><td>${r.stats.rxThroughputMbps.toFixed(2)}</td><td>${p50}</td><td>${p95v}</td><td>${(r.stats.jitterUs.mean||0).toFixed(2)}</td></tr>`;
+  }).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Frame Size Sweep</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>body{margin:24px;font:14px/1.45 system-ui;color:#17202a}.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0}.chartCard{border:1px solid #d2dae3;border-radius:10px;padding:12px}canvas{max-height:280px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border-bottom:1px solid #e2e8f0;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef5f6}</style>

@@ -1071,6 +1071,24 @@ $('build').addEventListener('click', () => build().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));
+
+// Auto-preview: rebuild the frame whenever the operator changes any sender input.
+// Debounced so rapid typing doesn't spam the agent.
+let _previewTimer = null;
+function schedulePreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(() => { build().catch(() => {}); }, 250);
+}
+const SENDER_INPUT_IDS = [
+  'protocol','dstMac','srcMac','srcIp','dstIp','srcPort','dstPort',
+  'vlanEnabled','vlanId','vlanPriority',
+  'payloadMode','payload','payloadSize','payloadByte','targetFrameLength'
+];
+SENDER_INPUT_IDS.forEach((id) => {
+  const el = $(id); if (!el) return;
+  const ev = (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
+  el.addEventListener(ev, schedulePreview);
+});
 $('send').addEventListener('click', () => send().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
