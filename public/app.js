@@ -540,8 +540,15 @@ function renderCaseRows() {
   document.querySelectorAll('[data-step-index]').forEach((row) => {
     row.addEventListener('click', () => {
       state.selectedStep = Number(row.dataset.stepIndex);
-      $('caseStepPreview').textContent = JSON.stringify(state.currentCase.steps[state.selectedStep], null, 2);
+      const step = state.currentCase.steps[state.selectedStep];
+      $('caseStepPreview').textContent = JSON.stringify(step, null, 2);
       renderCaseRows();
+      // Load the selected step's profile into the Sender form so its values
+      // are editable and the Frame Details / Bytes preview rebuilds automatically.
+      if (step?.kind === 'packet' && step.profile) {
+        setProfile(step.profile);
+        schedulePreview();
+      }
     });
   });
   document.querySelectorAll('[data-step-check]').forEach((input) => {
@@ -1077,7 +1084,19 @@ $('build').addEventListener('click', () => build().catch((err) => {
 let _previewTimer = null;
 function schedulePreview() {
   clearTimeout(_previewTimer);
-  _previewTimer = setTimeout(() => { build().catch(() => {}); }, 250);
+  _previewTimer = setTimeout(() => {
+    // Persist the live form state back into the selected Packet List step
+    // so subsequent row clicks reload the user's edits, not the original profile.
+    if (state.currentCase && state.selectedStep >= 0) {
+      const step = state.currentCase.steps[state.selectedStep];
+      if (step?.kind === 'packet') {
+        const live = getProfile();
+        step.profile = { ...step.profile, ...live };
+        $('caseStepPreview').textContent = JSON.stringify(step, null, 2);
+      }
+    }
+    build().catch(() => {});
+  }, 250);
 }
 const SENDER_INPUT_IDS = [
   'protocol','dstMac','srcMac','srcIp','dstIp','srcPort','dstPort',
@@ -1598,7 +1617,21 @@ try {
 }
 setStatus('Ready');
 clearCapture();
-if (_autoStart) setTimeout(() => $('captureStart')?.click(), 800);
+if (_autoStart) {
+  setTimeout(() => $('captureStart')?.click(), 800);
+  // Auto-click first packet after some traffic accumulates
+  setTimeout(() => {
+    fetch('/api/send', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+      interface: $('interfaceSelect').value, protocol:'udp',
+      dstMac:'c8:4d:44:20:40:5b', srcMac: localIface()?.mac,
+      ipv4:{src:firstV4(localIface()), dst:'169.254.148.199', ttl:64},
+      udp:{srcPort:40000,dstPort:50000},
+      payload:{mode:'counter', size:1400}, targetFrameLength:1500,
+      count:3, intervalMs:300
+    })});
+  }, 1500);
+  setTimeout(() => $('packetRows')?.firstElementChild?.click(), 5500);
+}
 // Honour URL hash like #capture / #control / #sender to jump to a tab on load
 (() => {
   const hash = location.hash.replace('#', '');

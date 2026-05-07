@@ -354,7 +354,7 @@ body.captureMode .toolbar { padding: 6px 16px; }
 
 .wiresharkPane {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: auto auto 1fr 38vh;
   gap: 8px;
   padding: 8px 10px;
   height: 100%;
@@ -362,17 +362,22 @@ body.captureMode .toolbar { padding: 6px 16px; }
   overflow: hidden;
 }
 
+.wiresharkPane > * { min-height: 0; min-width: 0; }
+
 .wiresharkPane .detailGrid {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 8px;
   min-height: 0;
+  height: 100%;
 }
 
 .wiresharkPane .detailPane {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 10px;
   background: #ffffff;
