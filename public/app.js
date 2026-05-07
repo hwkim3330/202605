@@ -165,17 +165,40 @@ function showResult(result) {
 }
 
 function protocolName(decoded) {
+  if (decoded.lldp) return 'LLDP';
+  if (decoded.ptp) return 'PTP';
+  if (decoded.lacp) return 'LACP';
   if (decoded.arp) return 'ARP';
+  if (decoded.icmpv6) return 'ICMPv6';
   if (decoded.icmp) return 'ICMP';
-  if (decoded.udp) return 'UDP';
+  if (decoded.tcp) return decoded.ipv6 ? 'TCP/IPv6' : 'TCP';
+  if (decoded.udp) {
+    const sp = decoded.udp.srcPort, dp = decoded.udp.dstPort;
+    if (sp === 53 || dp === 53) return 'DNS';
+    if (sp === 67 || dp === 67 || sp === 68 || dp === 68) return 'DHCP';
+    if (sp === 123 || dp === 123) return 'NTP';
+    if (sp === 5353 || dp === 5353) return 'mDNS';
+    if (sp === 319 || dp === 319 || sp === 320 || dp === 320) return 'PTP/UDP';
+    return decoded.ipv6 ? 'UDP/IPv6' : 'UDP';
+  }
+  if (decoded.ipv6) return `IPv6/${decoded.ipv6.nextHeader}`;
   if (decoded.ipv4) return `IPv4/${decoded.ipv4.protocol}`;
   return decoded.ethernet?.etherType || 'Ethernet';
 }
 
 function packetInfo(decoded) {
-  if (decoded.arp) return `${decoded.arp.senderIp} is at ${decoded.arp.senderMac}`;
-  if (decoded.udp) return `${decoded.udp.srcPort} -> ${decoded.udp.dstPort}`;
+  if (decoded.lldp) {
+    const sysName = decoded.lldp.tlvs?.find((t) => t.name === 'SystemName')?.value;
+    const portId = decoded.lldp.tlvs?.find((t) => t.name === 'PortID')?.value;
+    return `LLDP ${sysName ? sysName + ' / ' : ''}${portId || decoded.lldp.tlvCount + ' TLVs'}`;
+  }
+  if (decoded.ptp) return `${decoded.ptp.messageName} seq=${decoded.ptp.sequenceId} dom=${decoded.ptp.domain}`;
+  if (decoded.arp) return decoded.arp.operation === 1 ? `Who has ${decoded.arp.targetIp}? Tell ${decoded.arp.senderIp}` : `${decoded.arp.senderIp} is at ${decoded.arp.senderMac}`;
+  if (decoded.tcp) return `${decoded.tcp.srcPort} → ${decoded.tcp.dstPort} [${(decoded.tcp.flags || []).join(',') || '-'}] seq=${decoded.tcp.seq} ack=${decoded.tcp.ack} win=${decoded.tcp.window}`;
+  if (decoded.udp) return `${decoded.udp.srcPort} → ${decoded.udp.dstPort}  Len=${decoded.udp.length}`;
+  if (decoded.icmpv6) return `${decoded.icmpv6.typeName} (type ${decoded.icmpv6.type})`;
   if (decoded.icmp) return `type ${decoded.icmp.type}, seq ${decoded.icmp.seq}`;
+  if (decoded.ipv6) return `IPv6 next=${decoded.ipv6.nextHeader}`;
   return decoded.ethernet?.etherType || '';
 }
 
@@ -192,10 +215,13 @@ const capture = {
 };
 
 function rowProtoClass(decoded) {
+  if (decoded.lldp) return 'proto-lldp';
+  if (decoded.ptp) return 'proto-ptp';
   if (decoded.arp) return 'proto-arp';
-  if (decoded.icmp) return 'proto-icmp';
+  if (decoded.icmp || decoded.icmpv6) return 'proto-icmp';
+  if (decoded.tcp) return 'proto-tcp';
   if (decoded.udp) return 'proto-udp';
-  if (decoded.ipv4?.protocol === 6) return 'proto-tcp';
+  if (decoded.ipv6) return 'proto-ipv6';
   return '';
 }
 
@@ -204,13 +230,22 @@ function frameMatchesFilter(packet, filter) {
   const f = filter.trim().toLowerCase();
   if (!f) return true;
   const d = packet.decoded || {};
-  // Tokens: udp / tcp / icmp / arp / vlan / ipv4
+  // Tokens: udp / tcp / icmp / icmpv6 / arp / vlan / ipv4 / ipv6 / lldp / ptp / lacp / dns / dhcp / ntp / mdns
   if (f === 'udp') return Boolean(d.udp);
-  if (f === 'tcp') return d.ipv4?.protocol === 6;
+  if (f === 'tcp') return Boolean(d.tcp);
   if (f === 'icmp') return Boolean(d.icmp);
+  if (f === 'icmpv6') return Boolean(d.icmpv6);
   if (f === 'arp') return Boolean(d.arp);
   if (f === 'vlan') return Boolean(d.vlan);
   if (f === 'ipv4') return Boolean(d.ipv4);
+  if (f === 'ipv6') return Boolean(d.ipv6);
+  if (f === 'lldp') return Boolean(d.lldp);
+  if (f === 'ptp') return Boolean(d.ptp);
+  if (f === 'lacp') return Boolean(d.lacp);
+  if (f === 'dns') return d.udp && (d.udp.srcPort === 53 || d.udp.dstPort === 53);
+  if (f === 'dhcp') return d.udp && [67,68].some((p) => d.udp.srcPort === p || d.udp.dstPort === p);
+  if (f === 'ntp') return d.udp && (d.udp.srcPort === 123 || d.udp.dstPort === 123);
+  if (f === 'mdns') return d.udp && (d.udp.srcPort === 5353 || d.udp.dstPort === 5353);
   if (f.startsWith('mac:')) {
     const m = f.slice(4).trim();
     return (d.ethernet?.srcMac || '').toLowerCase().includes(m)

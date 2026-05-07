@@ -14,9 +14,19 @@ ETH_P_ALL = 0x0003
 ETH_P_IP = 0x0800
 ETH_P_ARP = 0x0806
 ETH_P_8021Q = 0x8100
+ETH_P_IPV6 = 0x86dd
+ETH_P_LLDP = 0x88cc
+ETH_P_PTP  = 0x88f7
+ETH_P_LACP = 0x8809
+ETH_P_QINQ = 0x88a8
 IP_PROTO_ICMP = 1
 IP_PROTO_TCP = 6
 IP_PROTO_UDP = 17
+IP_PROTO_ICMPV6 = 58
+PTP_TYPES = {0:"Sync",1:"Delay_Req",2:"Pdelay_Req",3:"Pdelay_Resp",8:"Follow_Up",9:"Delay_Resp",10:"Pdelay_Resp_Follow_Up",11:"Announce",12:"Signaling",13:"Management"}
+ICMPV6_TYPES = {1:"Destination Unreachable",2:"Packet Too Big",3:"Time Exceeded",4:"Parameter Problem",128:"Echo Request",129:"Echo Reply",133:"RS",134:"RA",135:"NS",136:"NA",137:"Redirect",143:"MLDv2 Report"}
+TCP_FLAG_BITS = [(0x100,"NS"),(0x80,"CWR"),(0x40,"ECE"),(0x20,"URG"),(0x10,"ACK"),(0x8,"PSH"),(0x4,"RST"),(0x2,"SYN"),(0x1,"FIN")]
+LLDP_TLVS = {0:"End",1:"ChassisID",2:"PortID",3:"TTL",4:"PortDesc",5:"SystemName",6:"SystemDesc",7:"SystemCap",8:"MgmtAddr",127:"Org"}
 
 
 def fail(message: str, code: int = 1) -> None:
@@ -216,9 +226,10 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
             "etherType": f"0x{ether_type:04x}",
         },
     }
-    if ether_type == ETH_P_8021Q and len(frame) >= 18:
+    if ether_type in (ETH_P_8021Q, ETH_P_QINQ) and len(frame) >= 18:
         tci, inner_type = struct.unpack("!HH", frame[14:18])
         decoded["vlan"] = {
+            "tpid": f"0x{ether_type:04x}",
             "priority": (tci >> 13) & 0x7,
             "dei": bool(tci & 0x1000),
             "id": tci & 0x0FFF,
@@ -226,6 +237,18 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
         }
         ether_type = inner_type
         offset = 18
+        # Q-in-Q: another 802.1Q header right after
+        if ether_type == ETH_P_8021Q and len(frame) >= offset + 4:
+            tci2, inner2 = struct.unpack("!HH", frame[offset:offset+4])
+            decoded["vlanInner"] = {
+                "tpid": "0x8100",
+                "priority": (tci2 >> 13) & 0x7,
+                "dei": bool(tci2 & 0x1000),
+                "id": tci2 & 0x0FFF,
+                "etherType": f"0x{inner2:04x}",
+            }
+            ether_type = inner2
+            offset += 4
     if ether_type == ETH_P_IP and len(frame) >= offset + 20:
         ihl = (frame[offset] & 0x0F) * 4
         proto = frame[offset + 9]
@@ -249,6 +272,112 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
         elif proto == IP_PROTO_ICMP and len(frame) >= l4 + 8:
             typ, code, csum, ident, seq = struct.unpack("!BBHHH", frame[l4 : l4 + 8])
             decoded["icmp"] = {"type": typ, "code": code, "checksum": f"0x{csum:04x}", "id": ident, "seq": seq}
+        elif proto == IP_PROTO_TCP and len(frame) >= l4 + 20:
+            sp, dp, seq, ack, off_flags, win, csum, urg = struct.unpack("!HHIIHHHH", frame[l4 : l4 + 20])
+            data_off = ((off_flags >> 12) & 0xF) * 4
+            flags = off_flags & 0x1FF
+            flag_names = [name for bit, name in TCP_FLAG_BITS if flags & bit]
+            decoded["tcp"] = {
+                "srcPort": sp, "dstPort": dp, "seq": seq, "ack": ack,
+                "dataOffset": data_off, "flags": flag_names, "flagsRaw": f"0x{flags:03x}",
+                "window": win, "checksum": f"0x{csum:04x}", "urgent": urg,
+            }
+    elif ether_type == ETH_P_IPV6 and len(frame) >= offset + 40:
+        word = struct.unpack("!I", frame[offset:offset+4])[0]
+        version = (word >> 28) & 0xF
+        tc = (word >> 20) & 0xFF
+        flow = word & 0xFFFFF
+        payload_len = struct.unpack("!H", frame[offset+4:offset+6])[0]
+        next_hdr = frame[offset+6]
+        hop_limit = frame[offset+7]
+        try:
+            src_v6 = socket.inet_ntop(socket.AF_INET6, frame[offset+8:offset+24])
+            dst_v6 = socket.inet_ntop(socket.AF_INET6, frame[offset+24:offset+40])
+        except Exception:
+            src_v6 = dst_v6 = "?"
+        decoded["ipv6"] = {
+            "version": version, "trafficClass": tc, "flowLabel": flow,
+            "payloadLength": payload_len, "nextHeader": next_hdr, "hopLimit": hop_limit,
+            "src": src_v6, "dst": dst_v6,
+        }
+        l4 = offset + 40
+        if next_hdr == IP_PROTO_UDP and len(frame) >= l4 + 8:
+            sp, dp, length, csum = struct.unpack("!HHHH", frame[l4:l4+8])
+            decoded["udp"] = {"srcPort": sp, "dstPort": dp, "length": length, "checksum": f"0x{csum:04x}"}
+        elif next_hdr == IP_PROTO_TCP and len(frame) >= l4 + 20:
+            sp, dp, seq, ack, off_flags, win, csum, urg = struct.unpack("!HHIIHHHH", frame[l4:l4+20])
+            flags = off_flags & 0x1FF
+            decoded["tcp"] = {
+                "srcPort": sp, "dstPort": dp, "seq": seq, "ack": ack,
+                "dataOffset": ((off_flags >> 12) & 0xF) * 4,
+                "flags": [name for bit, name in TCP_FLAG_BITS if flags & bit],
+                "flagsRaw": f"0x{flags:03x}", "window": win, "checksum": f"0x{csum:04x}", "urgent": urg,
+            }
+        elif next_hdr == IP_PROTO_ICMPV6 and len(frame) >= l4 + 4:
+            typ = frame[l4]
+            code = frame[l4+1]
+            csum = struct.unpack("!H", frame[l4+2:l4+4])[0]
+            decoded["icmpv6"] = {
+                "type": typ, "code": code, "typeName": ICMPV6_TYPES.get(typ, f"type {typ}"),
+                "checksum": f"0x{csum:04x}",
+            }
+    elif ether_type == ETH_P_LLDP and len(frame) >= offset + 4:
+        tlvs = []
+        p = offset
+        while p + 2 <= len(frame):
+            hdr = struct.unpack("!H", frame[p:p+2])[0]
+            ttype = (hdr >> 9) & 0x7F
+            tlen = hdr & 0x1FF
+            p += 2
+            if ttype == 0:  # End-of-LLDPDU
+                break
+            if p + tlen > len(frame):
+                break
+            value = frame[p:p+tlen]
+            entry = {"type": ttype, "name": LLDP_TLVS.get(ttype, f"TLV-{ttype}"), "length": tlen}
+            try:
+                if ttype == 1 and tlen >= 1:  # Chassis ID
+                    entry["subtype"] = value[0]
+                    entry["value"] = bytes_to_mac(value[1:7]) if value[0] == 4 and tlen >= 7 else value[1:].hex()
+                elif ttype == 2 and tlen >= 1:  # Port ID
+                    entry["subtype"] = value[0]
+                    try:
+                        entry["value"] = value[1:].decode("ascii", errors="replace")
+                    except Exception:
+                        entry["value"] = value[1:].hex()
+                elif ttype == 3 and tlen >= 2:  # TTL
+                    entry["value"] = struct.unpack("!H", value[:2])[0]
+                elif ttype in (4, 5, 6) and tlen > 0:  # Port/Sys/Sys descriptions, ASCII
+                    entry["value"] = value.decode("utf-8", errors="replace")
+                elif ttype == 127 and tlen >= 4:  # Org-specific
+                    entry["oui"] = value[:3].hex()
+                    entry["subtype"] = value[3]
+                    entry["data"] = value[4:].hex()
+                else:
+                    entry["raw"] = value.hex()
+            except Exception:
+                entry["raw"] = value.hex()
+            tlvs.append(entry)
+            p += tlen
+        decoded["lldp"] = {"tlvCount": len(tlvs), "tlvs": tlvs}
+    elif ether_type == ETH_P_PTP and len(frame) >= offset + 34:
+        h0 = frame[offset]
+        msg_type = h0 & 0x0F
+        version = frame[offset+1] & 0x0F
+        msg_len = struct.unpack("!H", frame[offset+2:offset+4])[0]
+        domain = frame[offset+4]
+        flags = struct.unpack("!H", frame[offset+6:offset+8])[0]
+        seq_id = struct.unpack("!H", frame[offset+30:offset+32])[0]
+        control = frame[offset+32]
+        log_msg_int = struct.unpack("!b", frame[offset+33:offset+34])[0]
+        decoded["ptp"] = {
+            "messageType": msg_type, "messageName": PTP_TYPES.get(msg_type, f"type {msg_type}"),
+            "version": version, "messageLength": msg_len, "domain": domain,
+            "flags": f"0x{flags:04x}", "sequenceId": seq_id, "control": control,
+            "logMessageInterval": log_msg_int,
+        }
+    elif ether_type == ETH_P_LACP:
+        decoded["lacp"] = {"raw": frame[offset:offset+min(50, len(frame)-offset)].hex()}
     elif ether_type == ETH_P_ARP and len(frame) >= offset + 28:
         arp = frame[offset : offset + 28]
         decoded["arp"] = {

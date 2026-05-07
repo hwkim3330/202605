@@ -391,7 +391,9 @@ body.captureMode .toolbar { padding: 6px 16px; }
 }
 
 .wiresharkPane .detailPane pre {
-  flex: 1;
+  flex: 1 1 0;
+  height: auto !important;
+  min-height: 0;
   margin: 0;
   padding: 8px 10px;
   overflow: auto;
@@ -582,6 +584,9 @@ body.captureMode .toolbar { padding: 6px 16px; }
 .packetListLive tbody tr.proto-icmp { background: rgba(168, 85, 247, 0.06); }
 .packetListLive tbody tr.proto-udp { background: rgba(14, 165, 233, 0.04); }
 .packetListLive tbody tr.proto-tcp { background: rgba(34, 197, 94, 0.06); }
+.packetListLive tbody tr.proto-lldp { background: rgba(236, 72, 153, 0.06); }
+.packetListLive tbody tr.proto-ptp { background: rgba(217, 70, 239, 0.06); }
+.packetListLive tbody tr.proto-ipv6 { background: rgba(99, 102, 241, 0.05); }
 
 .packetListLive tbody td {
   padding: 5px 10px;
