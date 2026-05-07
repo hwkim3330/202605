@@ -19,23 +19,15 @@ If PC B opens `http://PC_A_IP:8080`, it controls PC A's NICs, not PC B's NICs.
 
 ## Features
 
-- Sender, Capture, and Control views.
-- One-click local profile validation with HTML/JSON report generation.
-- Linux `AF_PACKET` raw-socket send/capture engine.
-- Ethernet II, 802.1Q VLAN, IPv4, UDP, ICMP Echo, and ARP.
-- Wireshark-style packet list, decode panel, and hex panel.
-- 27 built-in test profiles:
-  - ARP, ICMP, UDP
-  - sequence payload
-  - AA55 and counter payload patterns
-  - 64/128/256/512/1024/1514-byte frame-size tests
-  - VLAN 10 PCP 0/7 and VLAN 20 isolation
-  - unknown unicast, multicast, ACL candidate
-  - periodic UDP and PSFP Stream A/B candidates
-  - latency benchmark, sub-ms periodic jitter, mixed-PCP burst, MTU edge, broadcast storm guard
-- Performance benchmark mode: embedded sequence + tx timestamp in the UDP payload, capture records ns-precision rx timestamps, and the server computes per-packet latency, inter-arrival, jitter, loss, and throughput.
-- Frame-size sweep that runs the benchmark across 64..1514 B and produces a Chart.js report (throughput, loss, latency p95, jitter vs frame size).
-- HTML benchmark report with latency CDF, latency-per-packet line, inter-arrival timeline, and latency histogram (Chart.js).
+- Three-tab UI: **Sender** (craft + transmit a frame, sequence builder), **Capture** (Wireshark-style live packet list, NDJSON streaming, display filters), **Control** (two-node validation / E2E / benchmark / sweep with progress bars).
+- Pinned link strip at the top of every tab — local NIC ↔ peer NIC (URL, MAC, IPv4, role tags). One-click ⇄ to swap roles. `🔒 Locked to peer` mode auto-binds Sender's src/dst MAC + IP to the pair.
+- Linux `AF_PACKET` raw-socket send/capture engine. Ethernet II, 802.1Q VLAN, IPv4, UDP, ICMP Echo, ARP, raw EtherType.
+- 27 built-in test profiles (ARP / ICMP / UDP basics, integrity patterns, 64..1514 frame-size sweep, VLAN+PCP, switching, ACL, TSN PSFP, latency benchmark, sub-ms periodic jitter, mixed-PCP burst, MTU edge, broadcast storm guard).
+- **Live capture** (`/api/capture-stream`): agent emits one NDJSON event per frame with ns-precision rx timestamp; the UI streams them into a Wireshark-style table with auto-scroll, protocol-tinted rows, click-to-decode + hex panes, live pps / bytes / pkts chips, and a display filter (`udp / tcp / icmp / arp / vlan / mac:.. / ip:.. / port:..` + free-text substring).
+- **Performance benchmark**: payload carries `KETI` magic + uint32 seq + uint64 ns tx timestamp. Receiver matches by sequence; server reports tx/rx counts, loss %, throughput, latency min/p50/p95/p99/max/σ, jitter (mean |Δlatency|), and clock-skew-adjusted distribution. Receiver is bounded by `maxFrames=count` so an n-packet run finishes in ~n×interval + ~0.7 s of overhead instead of waiting on a capture timeout.
+- **Frame-size sweep** across 64..1514 B with Chart.js report (Tx/Rx Mbps, loss %, latency p95, jitter vs frame size). Typical 7-size sweep at count=200/interval=1ms completes in under 10 s.
+- **HTML reports** (saved to `reports/`): validation, E2E, benchmark (latency CDF + per-packet + inter-arrival timeline + histogram), sweep (4 comparison charts).
+- Per-action progress bars with realistic ETAs, status pills (idle / running / ok / fail), and offline-vs-on-the-wire badges so it's always clear which Control action will hit the NIC.
 
 ## Install
 
