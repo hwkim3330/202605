@@ -1065,8 +1065,207 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     button.classList.add('active');
     $(button.dataset.view).classList.add('active');
     if (button.dataset.view === 'controlView') renderPairCard();
+    if (button.dataset.view === 'serialView' && !state.serial.ports.length) refreshTtyList().catch(() => {});
     document.body.classList.toggle('captureMode', button.dataset.view === 'captureView');
+    document.body.classList.toggle('serialMode', button.dataset.view === 'serialView');
   });
+});
+
+// ----------- Serial / TTY console -----------
+state.serial = { ports: [], sessionId: null, reader: null, abort: null, rxCount: 0, txCount: 0 };
+
+const HEX_ESCAPE_RE = /\\x([0-9a-fA-F]{2})/g;
+function expandEscapes(s) {
+  return s
+    .replace(/\\r/g, '\r')
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\0/g, ' ')
+    .replace(HEX_ESCAPE_RE, (_m, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
+function bytesToHex(bytes) {
+  let s = '';
+  for (const b of bytes) s += b.toString(16).padStart(2, '0');
+  return s;
+}
+function hexToBytes(hex) {
+  const clean = hex.replace(/[^0-9a-fA-F]/g, '');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i += 1) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return out;
+}
+
+function appendSerialLog(text, cls) {
+  const log = $('serialLog');
+  if (!log) return;
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+}
+
+function renderRxBytes(bytes) {
+  if ($('serialHex').checked) {
+    appendSerialLog(bytesToHex(bytes).match(/.{1,2}/g).join(' ') + ' ');
+  } else {
+    let s = '';
+    for (const b of bytes) {
+      if (b === 0x0d) continue;             // collapse CRLF for terminal feel
+      if (b === 0x0a) { s += '\n'; continue; }
+      if (b === 0x09) { s += '\t'; continue; }
+      if (b >= 0x20 && b < 0x7f) s += String.fromCharCode(b);
+      else s += `·`; // middle dot for non-printable
+    }
+    appendSerialLog(s);
+  }
+}
+
+async function refreshTtyList() {
+  const r = await api('/api/tty/list');
+  state.serial.ports = r.ttys || [];
+  const sel = $('serialPort');
+  if (!state.serial.ports.length) {
+    sel.innerHTML = '<option value="">no TTY found (plug in a USB serial adapter and click ↻)</option>';
+    $('serialPortHint').textContent = 'No /dev/tty(USB|ACM)* devices visible. Plug in a USB-serial / FTDI / CDC-ACM adapter and refresh.';
+    return;
+  }
+  sel.innerHTML = state.serial.ports.map((p) => {
+    const label = [p.name, p.usbProduct || p.product || p.driver, p.usbId, p.serial]
+      .filter(Boolean).join(' · ');
+    return `<option value="${p.path}">${label}</option>`;
+  }).join('');
+  const sel0 = state.serial.ports[0];
+  $('serialPortHint').textContent = `${sel0.path}  ${sel0.manufacturer || ''} ${sel0.usbProduct || ''} ${sel0.usbId ? '['+sel0.usbId+']' : ''}`.trim();
+  sel.addEventListener('change', () => {
+    const p = state.serial.ports.find((x) => x.path === sel.value);
+    if (!p) return;
+    $('serialPortHint').textContent = `${p.path}  ${p.manufacturer || ''} ${p.usbProduct || ''} ${p.usbId ? '['+p.usbId+']' : ''}`.trim();
+  }, { once: true });
+}
+
+async function serialConnect() {
+  if (state.serial.sessionId) return;
+  const path = $('serialPort').value;
+  if (!path) { alert('Pick a TTY first.'); return; }
+  state.serial.rxCount = 0; state.serial.txCount = 0;
+  $('serRx').textContent = '0'; $('serTx').textContent = '0';
+  $('serState').textContent = 'opening…'; $('serState').className = 'statChip';
+  try {
+    const r = await api('/api/tty/open', {
+      method: 'POST',
+      body: JSON.stringify({
+        path,
+        baudRate: Number($('serialBaud').value),
+        dataBits: Number($('serialData').value),
+        parity: $('serialParity').value,
+        stopBits: Number($('serialStop').value),
+        hwFlow: $('serialFlow').checked
+      })
+    });
+    state.serial.sessionId = r.sessionId;
+  } catch (err) {
+    appendSerialLog(`open failed: ${err.message}\n`, 'err');
+    $('serState').textContent = 'idle';
+    return;
+  }
+  $('serialConnect').disabled = true;
+  $('serialDisconnect').disabled = false;
+  $('serialInput').disabled = false;
+  $('serialBreak').disabled = false;
+  $('serState').textContent = 'connected';
+  $('serState').className = 'statChip connected';
+  appendSerialLog(`-- opened ${path} @ ${$('serialBaud').value} ${$('serialData').value}${$('serialParity').value}${$('serialStop').value} --\n`, 'info');
+
+  const ctrl = new AbortController();
+  state.serial.abort = ctrl;
+  const res = await fetch(`/api/tty/stream?session=${state.serial.sessionId}`, { signal: ctrl.signal });
+  const reader = res.body.getReader();
+  state.serial.reader = reader;
+  const dec = new TextDecoder();
+  let buf = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        let ev; try { ev = JSON.parse(line); } catch { continue; }
+        if (ev.type === 'rx' && ev.hex) {
+          const bytes = hexToBytes(ev.hex);
+          state.serial.rxCount += bytes.length;
+          $('serRx').textContent = state.serial.rxCount;
+          renderRxBytes(bytes);
+        } else if (ev.type === 'error') {
+          appendSerialLog(`[err] ${ev.message}\n`, 'err');
+        } else if (ev.type === 'closed') {
+          appendSerialLog(`-- closed --\n`, 'info');
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') appendSerialLog(`[stream err] ${err.message}\n`, 'err');
+  } finally {
+    serialFinish();
+  }
+}
+
+function serialFinish() {
+  state.serial.sessionId = null;
+  state.serial.reader = null;
+  state.serial.abort = null;
+  $('serialConnect').disabled = false;
+  $('serialDisconnect').disabled = true;
+  $('serialInput').disabled = true;
+  $('serialBreak').disabled = true;
+  $('serState').textContent = 'idle';
+  $('serState').className = 'statChip';
+}
+
+async function serialDisconnect() {
+  if (!state.serial.sessionId) return;
+  const id = state.serial.sessionId;
+  try { state.serial.abort?.abort(); } catch {}
+  try { state.serial.reader?.cancel(); } catch {}
+  try { await api('/api/tty/close', { method: 'POST', body: JSON.stringify({ sessionId: id }) }); } catch {}
+  serialFinish();
+}
+
+async function serialSendInput() {
+  if (!state.serial.sessionId) return;
+  const inp = $('serialInput');
+  const eol = $('serialEol').value;
+  const text = expandEscapes(inp.value) + expandEscapes(eol);
+  if (!text) return;
+  const enc = new TextEncoder();
+  const bytes = enc.encode(text);
+  const hex = bytesToHex(bytes);
+  try {
+    await api('/api/tty/write', { method: 'POST', body: JSON.stringify({ sessionId: state.serial.sessionId, hex }) });
+    state.serial.txCount += bytes.length;
+    $('serTx').textContent = state.serial.txCount;
+    if ($('serialEcho').checked) appendSerialLog(`> ${inp.value}\n`, 'tx');
+    inp.value = '';
+  } catch (err) {
+    appendSerialLog(`tx fail: ${err.message}\n`, 'err');
+  }
+}
+
+$('serialRefresh')?.addEventListener('click', () => refreshTtyList().catch((e) => alert(e.message)));
+$('serialConnect')?.addEventListener('click', () => serialConnect().catch((e) => { setStatus(e.message, true); alert(e.message); }));
+$('serialDisconnect')?.addEventListener('click', () => serialDisconnect());
+$('serialClear')?.addEventListener('click', () => { $('serialLog').innerHTML = ''; });
+$('serialBreak')?.addEventListener('click', async () => {
+  if (!state.serial.sessionId) return;
+  try { await api('/api/tty/control', { method:'POST', body: JSON.stringify({ sessionId: state.serial.sessionId, cmd: 'break' }) }); appendSerialLog('-- break --\n', 'info'); } catch {}
+});
+$('serialInput')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); serialSendInput().catch(() => {}); }
 });
 
 $('refreshInterfaces').addEventListener('click', () => loadInterfaces().catch((err) => {
@@ -1589,7 +1788,7 @@ $('receiverNodeInterface').addEventListener('change', () => {
 // Switch tab early based on URL hash, before any async loads
 (() => {
   const hash = location.hash.replace('#', '');
-  const target = { capture: 'captureView', control: 'controlView', sender: 'senderView' }[hash];
+  const target = { capture: 'captureView', control: 'controlView', sender: 'senderView', serial: 'serialView' }[hash];
   if (!target) return;
   const btn = document.querySelector(`[data-view="${target}"]`);
   if (btn) btn.click();

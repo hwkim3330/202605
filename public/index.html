@@ -27,6 +27,7 @@
           <button class="modeTab active" data-view="senderView">Sender</button>
           <button class="modeTab" data-view="captureView">Capture</button>
           <button class="modeTab" data-view="controlView">Control</button>
+          <button class="modeTab" data-view="serialView">Serial</button>
         </div>
         <div class="toolbarField">
           <span>Interface</span>
@@ -316,6 +317,55 @@
                 <pre id="captureHexdump"></pre>
               </div>
             </section>
+          </section>
+        </section>
+
+        <section id="serialView" class="roleView serialViewTT">
+          <section class="workPane serialPane">
+            <div class="serialBar">
+              <select id="serialPort"><option value="">no TTY found</option></select>
+              <button id="serialRefresh" class="ghostBtn small" title="Re-scan /dev/tty*">↻</button>
+              <label class="check"><span>Baud</span>
+                <select id="serialBaud">
+                  <option>9600</option><option>19200</option><option>38400</option>
+                  <option>57600</option><option selected>115200</option><option>230400</option>
+                  <option>460800</option><option>921600</option><option>1500000</option>
+                  <option>3000000</option>
+                </select>
+              </label>
+              <label class="check"><span>Data</span>
+                <select id="serialData"><option>5</option><option>6</option><option>7</option><option selected>8</option></select>
+              </label>
+              <label class="check"><span>Parity</span>
+                <select id="serialParity"><option value="N">None</option><option value="E">Even</option><option value="O">Odd</option></select>
+              </label>
+              <label class="check"><span>Stop</span>
+                <select id="serialStop"><option selected>1</option><option>2</option></select>
+              </label>
+              <label class="check"><input id="serialFlow" type="checkbox"><span>RTS/CTS</span></label>
+              <button id="serialConnect" class="primaryAction wsStart">▶ Connect</button>
+              <button id="serialDisconnect" class="ghostBtn wsStop" disabled>■ Disconnect</button>
+              <div class="captureStats">
+                <span class="statChip"><span>rx</span><strong id="serRx">0</strong></span>
+                <span class="statChip"><span>tx</span><strong id="serTx">0</strong></span>
+                <span class="statChip" id="serState">idle</span>
+              </div>
+            </div>
+            <div class="serialPortHint" id="serialPortHint">Pick a TTY (USB serial / FTDI / CDC-ACM) and Connect.</div>
+            <pre id="serialLog" class="serialLog"></pre>
+            <div class="serialInputBar">
+              <select id="serialEol" title="Line ending sent after the input">
+                <option value="">No EOL</option>
+                <option value="\n">LF (\n)</option>
+                <option value="\r" selected>CR (\r)</option>
+                <option value="\r\n">CRLF (\r\n)</option>
+              </select>
+              <input id="serialInput" autocomplete="off" placeholder="type and press Enter to send… (or hex like \\x1b[A)" disabled>
+              <label class="check"><input id="serialEcho" type="checkbox" checked><span>Local echo</span></label>
+              <label class="check"><input id="serialHex" type="checkbox"><span>Hex view</span></label>
+              <button id="serialClear" class="ghostBtn small">Clear</button>
+              <button id="serialBreak" class="ghostBtn small" title="Send a serial break" disabled>BRK</button>
+            </div>
           </section>
         </section>
 

@@ -618,6 +618,81 @@ body.captureMode .toolbar { padding: 6px 16px; }
 
 .wsEmpty.hidden { display: none; }
 
+/* ----- Serial / TTY tab ----- */
+body.serialMode .linkStrip { display: none; }
+.serialViewTT {
+  grid-template-columns: 1fr;
+}
+body.serialMode .serialPane {
+  position: fixed;
+  left: 0; right: 0;
+  top: 158px; bottom: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fafbfc;
+}
+
+.serialBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+.serialBar select { width: auto; min-width: 80px; padding: 6px 8px; font-size: 12px; }
+.serialBar #serialPort { flex: 1 1 280px; }
+.serialBar .check { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+
+#serState.connected { background: rgba(20, 83, 45, 0.12); color: #14532d; }
+#serState.connected::before { content: '●'; margin-right: 6px; color: #16a34a; animation: pulse 1.4s ease-in-out infinite; }
+
+.serialPortHint {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 12px;
+}
+
+.serialLog {
+  margin: 0;
+  padding: 10px 12px;
+  background: #0b1220;
+  color: #d4f1f4;
+  border-radius: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.serialLog .tx { color: #fde68a; }
+.serialLog .err { color: #fca5a5; }
+.serialLog .info { color: #86efac; }
+
+.serialInputBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+.serialInputBar select { width: auto; min-width: 100px; }
+.serialInputBar input[type=text],
+.serialInputBar input:not([type]) {
+  flex: 1 1 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
 .ghostBtn {
   background: #ffffff;
   color: var(--accent);
@@ -1051,9 +1126,9 @@ body.captureMode .toolbar { padding: 6px 16px; }
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(105px, 1fr));
+  grid-template-columns: repeat(4, minmax(95px, 1fr));
   gap: 6px;
-  min-width: 330px;
+  min-width: 410px;
 }
 
 .modeTab {

@@ -4,6 +4,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readdirSync, readFileSync, readlinkSync } from 'node:fs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -1093,6 +1094,94 @@ new Chart(document.getElementById('jit'),{type:'line',data:{labels:sizes,dataset
 </script></body></html>`;
 }
 
+// --- Serial / TTY console support ---------------------------------------
+const ttySessions = new Map(); // id -> { child, buffer, subscribers, config }
+let nextTtyId = 1;
+const serialAgentPath = join(root, 'tools', 'serial_agent.py');
+
+function listTtys() {
+  const out = [];
+  let names;
+  try { names = readdirSync('/sys/class/tty'); } catch { return out; }
+  for (const name of names) {
+    // ttyS* (legacy 8250) ports always exist on x86 even without hardware
+    // attached, so default to USB / CDC / SoC UARTs. Add ?legacy=1 to include them.
+    if (!/^(ttyUSB|ttyACM|ttyAMA|ttymxc|ttyTHS)\d+$/.test(name)) continue;
+    const info = { path: `/dev/${name}`, name };
+    try {
+      const driver = readlinkSync(`/sys/class/tty/${name}/device/driver`).split('/').pop();
+      if (driver) info.driver = driver;
+    } catch {}
+    try {
+      const uevent = readFileSync(`/sys/class/tty/${name}/device/uevent`, 'utf8');
+      const product = uevent.match(/PRODUCT=([^\n]+)/);
+      if (product) info.product = product[1].trim();
+    } catch {}
+    // Walk up to find vendor / product strings (USB devices)
+    try {
+      let p = `/sys/class/tty/${name}/device`;
+      for (let i = 0; i < 6; i += 1) {
+        try {
+          const v = readFileSync(`${p}/idVendor`, 'utf8').trim();
+          const pr = readFileSync(`${p}/idProduct`, 'utf8').trim();
+          info.usbId = `${v}:${pr}`;
+          try { info.manufacturer = readFileSync(`${p}/manufacturer`, 'utf8').trim(); } catch {}
+          try { info.usbProduct = readFileSync(`${p}/product`, 'utf8').trim(); } catch {}
+          try { info.serial = readFileSync(`${p}/serial`, 'utf8').trim(); } catch {}
+          break;
+        } catch {}
+        p = `${p}/..`;
+      }
+    } catch {}
+    out.push(info);
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+function destroyTtySession(id) {
+  const s = ttySessions.get(id);
+  if (!s) return;
+  for (const sub of s.subscribers) {
+    try { sub.end(); } catch {}
+  }
+  try { s.child.stdin.end(JSON.stringify({ type: 'close' }) + '\n'); } catch {}
+  setTimeout(() => { try { s.child.kill('SIGTERM'); } catch {} }, 300).unref();
+  setTimeout(() => { try { s.child.kill('SIGKILL'); } catch {} }, 1500).unref();
+  ttySessions.delete(id);
+}
+
+function openTtySession(config) {
+  const id = String(nextTtyId++);
+  const child = spawn('python3', [serialAgentPath], {
+    cwd: root, stdio: ['pipe', 'pipe', 'pipe']
+  });
+  child.stdin.write(JSON.stringify(config) + '\n');
+  const session = { child, buffer: '', subscribers: [], config };
+  ttySessions.set(id, session);
+  child.stdout.on('data', (chunk) => {
+    session.buffer += chunk.toString('utf8');
+    let nl;
+    while ((nl = session.buffer.indexOf('\n')) >= 0) {
+      const line = session.buffer.slice(0, nl + 1);
+      session.buffer = session.buffer.slice(nl + 1);
+      for (const sub of session.subscribers) {
+        try { sub.write(line); } catch {}
+      }
+    }
+  });
+  child.stderr.on('data', (chunk) => {
+    const msg = JSON.stringify({ type: 'stderr', data: chunk.toString('utf8') }) + '\n';
+    for (const sub of session.subscribers) { try { sub.write(msg); } catch {} }
+  });
+  child.on('exit', () => {
+    const msg = JSON.stringify({ type: 'closed' }) + '\n';
+    for (const sub of session.subscribers) { try { sub.write(msg); sub.end(); } catch {} }
+    ttySessions.delete(id);
+  });
+  return id;
+}
+
 async function handleApi(req, res) {
   try {
     if (req.method === 'GET' && req.url === '/api/interfaces') {
@@ -1247,6 +1336,71 @@ async function handleApi(req, res) {
       req.on('close', cleanup);
       req.on('aborted', cleanup);
       return;
+    }
+
+    if (req.method === 'GET' && req.url === '/api/tty/list') {
+      return sendJson(res, 200, { ok: true, ttys: listTtys() });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/tty/open') {
+      const body = await readRequestJson(req);
+      if (!body.path) return sendJson(res, 400, { ok: false, error: 'path required' });
+      const id = openTtySession({
+        path: String(body.path),
+        baudRate: Number(body.baudRate || 115200),
+        dataBits: Number(body.dataBits || 8),
+        parity: String(body.parity || 'N'),
+        stopBits: Number(body.stopBits || 1),
+        hwFlow: Boolean(body.hwFlow)
+      });
+      return sendJson(res, 200, { ok: true, sessionId: id });
+    }
+
+    if (req.method === 'GET' && req.url.startsWith('/api/tty/stream')) {
+      const u = new URL(req.url, 'http://x');
+      const id = u.searchParams.get('session');
+      const s = ttySessions.get(id);
+      if (!s) return sendJson(res, 404, { ok: false, error: 'session not found' });
+      res.writeHead(200, {
+        'content-type': 'application/x-ndjson; charset=utf-8',
+        'cache-control': 'no-cache',
+        'x-accel-buffering': 'no'
+      });
+      res.write(JSON.stringify({ type: 'subscribed', sessionId: id, config: s.config }) + '\n');
+      s.subscribers.push(res);
+      const cleanup = () => {
+        const idx = s.subscribers.indexOf(res);
+        if (idx >= 0) s.subscribers.splice(idx, 1);
+      };
+      req.on('close', cleanup);
+      req.on('aborted', cleanup);
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/api/tty/write') {
+      const body = await readRequestJson(req);
+      const s = ttySessions.get(String(body.sessionId));
+      if (!s) return sendJson(res, 404, { ok: false, error: 'session not found' });
+      try { s.child.stdin.write(JSON.stringify({ type: 'tx', hex: String(body.hex || '') }) + '\n'); }
+      catch (err) { return sendJson(res, 500, { ok: false, error: err.message }); }
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/tty/control') {
+      const body = await readRequestJson(req);
+      const s = ttySessions.get(String(body.sessionId));
+      if (!s) return sendJson(res, 404, { ok: false, error: 'session not found' });
+      const cmd = { type: String(body.cmd) };
+      if ('value' in body) cmd.value = Boolean(body.value);
+      try { s.child.stdin.write(JSON.stringify(cmd) + '\n'); }
+      catch (err) { return sendJson(res, 500, { ok: false, error: err.message }); }
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/tty/close') {
+      const body = await readRequestJson(req);
+      destroyTtySession(String(body.sessionId));
+      return sendJson(res, 200, { ok: true });
     }
 
     return sendJson(res, 404, { ok: false, error: 'Unknown API route' });
