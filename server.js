@@ -192,15 +192,24 @@ function sameValue(left, right) {
 
 function isExpectedFrame(frame, sentDecoded, senderIface, receiverIface) {
   const decoded = frame.decoded || {};
-  if (sentDecoded?.length && decoded.length !== sentDecoded.length) return false;
+  // Length tolerance: hardware can pad short frames or, with VLAN offload, the
+  // 4-byte tag may be stripped from the visible buffer. Allow ±8 bytes.
+  if (sentDecoded?.length) {
+    const diff = Math.abs(decoded.length - sentDecoded.length);
+    if (diff > 8) return false;
+  }
   if (!sameValue(decoded.ethernet?.srcMac, senderIface.mac)) return false;
   if (sentDecoded?.ethernet?.dstMac && !sameValue(decoded.ethernet?.dstMac, sentDecoded.ethernet.dstMac)) return false;
   if (decodedProtocol(decoded) !== decodedProtocol(sentDecoded)) return false;
 
   if (sentDecoded?.vlan) {
-    if (!decoded.vlan) return false;
-    if (decoded.vlan.id !== sentDecoded.vlan.id) return false;
-    if (decoded.vlan.priority !== sentDecoded.vlan.priority) return false;
+    // VLAN id/priority match if the receiver also saw the tag; many NICs strip
+    // 802.1Q on RX (rxvlan offload) so the tag is invisible to AF_PACKET. In
+    // that case fall through and rely on L3/L4 matching.
+    if (decoded.vlan) {
+      if (decoded.vlan.id !== sentDecoded.vlan.id) return false;
+      if (decoded.vlan.priority !== sentDecoded.vlan.priority) return false;
+    }
   }
 
   if (sentDecoded?.arp) {
@@ -945,11 +954,20 @@ async function runTestCase(reqBody) {
   const usedFrameIndexes = new Set();
   const packetResults = sentSteps.map((step) => {
     if (step.kind !== 'packet' || step.skipped) return step;
+    // Pre-compute a VLAN-stripped variant of the expected hex, so receivers
+    // running with rxvlan offload (which removes the 0x8100 + TCI from the
+    // visible buffer) still match cleanly.
+    let altHex = null;
+    if (step.expectedFrameHex && step.sentDecoded?.vlan) {
+      // Ethernet header is 14B (28 hex chars). VLAN tag is 4B (8 hex chars)
+      // immediately after src/dst MAC. Drop bytes 12..16 (hex 24..32).
+      altHex = step.expectedFrameHex.slice(0, 24) + step.expectedFrameHex.slice(32);
+    }
     const matched = [];
     frames.forEach((frame, frameIndex) => {
       if (usedFrameIndexes.has(frameIndex)) return;
-      if (step.expectedCount === 1 && step.expectedFrameHex) {
-        if (frame.frameHex !== step.expectedFrameHex) return;
+      if (step.expectedFrameHex) {
+        if (frame.frameHex !== step.expectedFrameHex && (!altHex || frame.frameHex !== altHex)) return;
       } else if (!isExpectedFrame(frame, step.sentDecoded, senderIface, receiverIface)) {
         return;
       }
