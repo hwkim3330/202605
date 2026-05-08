@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ethernet Packet Lab Report</title>
+  <style>
+    body { margin: 24px; font: 14px/1.45 system-ui, sans-serif; color: #17202a; }
+    h1 { margin: 0 0 4px; }
+    .meta { color: #62707f; margin-bottom: 18px; }
+    .summary { display: flex; gap: 12px; margin: 16px 0; }
+    .box { border: 1px solid #d2dae3; border-radius: 8px; padding: 10px 12px; min-width: 130px; }
+    .box strong { display: block; font-size: 22px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #d2dae3; padding: 8px; text-align: left; }
+    th { background: #eef5f6; }
+    tr.pass td:nth-child(4) { color: #14532d; font-weight: 700; }
+    tr.fail td:nth-child(4) { color: #9b1c1c; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Ethernet Packet Lab Report</h1>
+  <div class="meta">Generated 2026-05-08T02:12:13.880Z on local node</div>
+  <div class="summary">
+    <div class="box"><span>Total</span><strong>27</strong></div>
+    <div class="box"><span>Pass</span><strong>27</strong></div>
+    <div class="box"><span>Fail</span><strong>0</strong></div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Category</th><th>Profile</th><th>Status</th><th>Length</th><th>Protocol</th><th>Info</th></tr>
+    </thead>
+    <tbody>
+    <tr class="pass">
+      <td>1</td>
+      <td>1 Basic</td>
+      <td>ARP Request</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>ARP</td>
+      <td>0x0806</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>2</td>
+      <td>1 Basic</td>
+      <td>ICMP Echo</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>ICMP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>3</td>
+      <td>1 Basic</td>
+      <td>UDP Unicast Basic</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>4</td>
+      <td>2 Integrity</td>
+      <td>UDP Sequence</td>
+      <td>PASS</td>
+      <td>85</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>5</td>
+      <td>2 Integrity</td>
+      <td>Payload Pattern AA55</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>6</td>
+      <td>2 Integrity</td>
+      <td>Payload Counter 256</td>
+      <td>PASS</td>
+      <td>298</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>7</td>
+      <td>3 Size Sweep</td>
+      <td>Frame Size 64</td>
+      <td>PASS</td>
+      <td>64</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>8</td>
+      <td>3 Size Sweep</td>
+      <td>Frame Size 128</td>
+      <td>PASS</td>
+      <td>128</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>9</td>
+      <td>3 Size Sweep</td>
+      <td>Frame Size 256</td>
+      <td>PASS</td>
+      <td>256</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>10</td>
+      <td>3 Size Sweep</td>
+      <td>Frame Size 512</td>
+      <td>PASS</td>
+      <td>512</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>11</td>
+      <td>3 Size Sweep</td>
+      <td>Frame Size 1024</td>
+      <td>PASS</td>
+      <td>1024</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>12</td>
+      <td>3 Size Sweep</td>
+      <td>Frame Size 1514</td>
+      <td>PASS</td>
+      <td>1514</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>13</td>
+      <td>4 VLAN PCP</td>
+      <td>VLAN 10 PCP 0</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 0</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>14</td>
+      <td>4 VLAN PCP</td>
+      <td>VLAN 10 PCP 7</td>
+      <td>PASS</td>
+      <td>65</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 7</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>15</td>
+      <td>4 VLAN PCP</td>
+      <td>VLAN 20 Isolation</td>
+      <td>PASS</td>
+      <td>62</td>
+      <td>UDP</td>
+      <td>VLAN 20 PCP 0</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>16</td>
+      <td>5 Switching</td>
+      <td>Unknown Unicast</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>17</td>
+      <td>5 Switching</td>
+      <td>L2 Multicast</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>18</td>
+      <td>6 ACL Policy</td>
+      <td>ACL UDP Block Candidate</td>
+      <td>PASS</td>
+      <td>60</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>19</td>
+      <td>7 TSN Prep</td>
+      <td>Periodic UDP 1 ms</td>
+      <td>PASS</td>
+      <td>79</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 7</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>20</td>
+      <td>8 TSN</td>
+      <td>PSFP Stream A</td>
+      <td>PASS</td>
+      <td>63</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 3</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>21</td>
+      <td>8 TSN</td>
+      <td>PSFP Stream B</td>
+      <td>PASS</td>
+      <td>63</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 3</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>22</td>
+      <td>9 Performance</td>
+      <td>Throughput Sweep Marker</td>
+      <td>PASS</td>
+      <td>256</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>23</td>
+      <td>9 Performance</td>
+      <td>Latency Benchmark 1k</td>
+      <td>PASS</td>
+      <td>106</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>24</td>
+      <td>8 TSN</td>
+      <td>Periodic Jitter 500 us</td>
+      <td>PASS</td>
+      <td>126</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 7</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>25</td>
+      <td>9 Performance</td>
+      <td>Mixed PCP Burst (PCP 0)</td>
+      <td>PASS</td>
+      <td>1514</td>
+      <td>UDP</td>
+      <td>VLAN 10 PCP 0</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>26</td>
+      <td>3 Size Sweep</td>
+      <td>MTU Edge 1500</td>
+      <td>PASS</td>
+      <td>1514</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  
+    <tr class="pass">
+      <td>27</td>
+      <td>5 Switching</td>
+      <td>Broadcast Storm Guard</td>
+      <td>PASS</td>
+      <td>106</td>
+      <td>UDP</td>
+      <td>0x0800</td>
+    </tr>
+  </tbody>
+  </table>
+</body>
+</html>

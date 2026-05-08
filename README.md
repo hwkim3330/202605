@@ -124,8 +124,13 @@ Every Control action persists both JSON and HTML to `reports/`:
 - `reports/e2e-latest.{html,json}` — single-profile E2E.
 - `reports/benchmark-latest.{html,json}` — latency CDF + per-packet line + inter-arrival timeline + histogram.
 - `reports/sweep-latest.{html,json}` — Tx/Rx Mbps, Loss %, Latency p95, Jitter vs frame size.
+- `reports/rfc2544-latest.{html,json}` — RFC 2544 §26 binary-search throughput per frame size.
 
 The HTML reports are self-contained (Chart.js loaded from CDN) and safe to copy off the lab PC for sharing.
+
+### Sample reports in this repo
+
+`docs/samples/` ships real HTML reports captured against a live two-PC link so you can preview what each Control action produces without running the lab yourself. See [`docs/samples/README.md`](docs/samples/README.md) for the index.
 
 ---
 

@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Frame Size Sweep</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>body{margin:24px;font:14px/1.45 system-ui;color:#17202a}.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:18px 0}.chartCard{border:1px solid #d2dae3;border-radius:10px;padding:12px}canvas{max-height:280px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border-bottom:1px solid #e2e8f0;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef5f6}</style>
+</head><body>
+<h1>Frame Size Sweep</h1><div>2026-05-08T02:12:40.075Z — count=200, interval=1ms</div>
+<div class="charts">
+<div class="chartCard"><h3>Throughput vs frame size</h3><canvas id="tp"></canvas></div>
+<div class="chartCard"><h3>Loss % vs frame size</h3><canvas id="loss"></canvas></div>
+<div class="chartCard"><h3>Latency p95 (µs)</h3><canvas id="lat"></canvas></div>
+<div class="chartCard"><h3>Jitter mean |Δlat| (µs)</h3><canvas id="jit"></canvas></div>
+</div>
+<table><thead><tr><th>Size</th><th>Tx</th><th>Rx</th><th>Loss</th><th>Tx Mbps</th><th>Rx Mbps</th><th>Lat p50µs</th><th>Lat p95µs</th><th>Jitter µs</th></tr></thead><tbody><tr><td>64</td><td>200</td><td>200</td><td>0.00%</td><td>0.45</td><td>0.45</td><td>141.06</td><td>263.42</td><td>24.70</td></tr><tr><td>128</td><td>200</td><td>200</td><td>0.00%</td><td>0.88</td><td>0.88</td><td>149.25</td><td>206.59</td><td>19.60</td></tr><tr><td>256</td><td>200</td><td>200</td><td>0.00%</td><td>1.74</td><td>1.74</td><td>93.18</td><td>169.73</td><td>39.70</td></tr><tr><td>512</td><td>200</td><td>200</td><td>0.00%</td><td>3.32</td><td>3.32</td><td>102.14</td><td>246.27</td><td>34.75</td></tr><tr><td>1024</td><td>200</td><td>200</td><td>0.00%</td><td>6.38</td><td>6.38</td><td>136.45</td><td>189.44</td><td>27.60</td></tr><tr><td>1280</td><td>200</td><td>200</td><td>0.00%</td><td>7.84</td><td>7.84</td><td>128.00</td><td>251.65</td><td>32.57</td></tr><tr><td>1514</td><td>200</td><td>200</td><td>0.00%</td><td>8.71</td><td>8.71</td><td>100.61</td><td>146.69</td><td>23.92</td></tr></tbody></table>
+<script>
+const sizes=[64,128,256,512,1024,1280,1514];
+const opts={responsive:true,animation:false,plugins:{legend:{position:'bottom'}}};
+new Chart(document.getElementById('tp'),{type:'line',data:{labels:sizes,datasets:[{label:'Tx Mbps',data:["0.45","0.88","1.74","3.32","6.38","7.84","8.71"].map(Number),borderColor:'#0ea5e9'},{label:'Rx Mbps',data:["0.45","0.88","1.74","3.32","6.38","7.84","8.71"].map(Number),borderColor:'#16a34a'}]},options:opts});
+new Chart(document.getElementById('loss'),{type:'bar',data:{labels:sizes,datasets:[{label:'%',data:["0.00","0.00","0.00","0.00","0.00","0.00","0.00"].map(Number),backgroundColor:'#ef4444'}]},options:opts});
+new Chart(document.getElementById('lat'),{type:'line',data:{labels:sizes,datasets:[{label:'p95 µs',data:["263.42","206.59","169.73","246.27","189.44","251.65","146.69"].map(Number),borderColor:'#7c3aed'}]},options:opts});
+const jit=["24.70","19.60","39.70","34.75","27.60","32.57","23.92"].map(Number);
+new Chart(document.getElementById('jit'),{type:'line',data:{labels:sizes,datasets:[{label:'µs',data:jit,borderColor:'#f59e0b'}]},options:opts});
+</script></body></html>
