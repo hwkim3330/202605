@@ -452,6 +452,24 @@
                   <a id="openSweep" class="linkButton" href="/reports/sweep-latest.html" target="_blank" rel="noreferrer">Open</a>
                 </div>
               </div>
+
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>RFC 2544 throughput <span class="badge wire">on the wire</span> <span class="badge offline">standard</span></h3>
+                  <span class="actionDesc">Binary-search the maximum loss-free frames-per-second at each frame size (64 / 128 / 256 / 512 / 1024 / 1280 / 1518). Reports loss-free fps + utilisation vs theoretical line-rate, p95 latency, jitter, plus per-iteration history.</span>
+                </div>
+                <div class="actionParams">
+                  <label>Trial s<input id="rfcTrial" type="number" min="1" max="60" value="2"></label>
+                  <label>Link Mbps<input id="rfcLink" type="number" min="10" value="1000"></label>
+                  <label>Tol. fps<input id="rfcTol" type="number" min="10" value="100"></label>
+                </div>
+                <div class="progressTrack" id="progRfc"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusRfc">idle</span>
+                  <button id="runRfc" class="primaryAction">Run</button>
+                  <a id="openRfc" class="linkButton" href="/reports/rfc2544-latest.html" target="_blank" rel="noreferrer">Open</a>
+                </div>
+              </div>
             </div>
 
             <details class="advanced">

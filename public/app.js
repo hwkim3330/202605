@@ -1394,6 +1394,44 @@ async function runBenchmark() {
   }
 }
 
+async function runRfc2544() {
+  const prog = progressFor('progRfc');
+  const trial = Number($('rfcTrial').value || 2);
+  const link = Number($('rfcLink').value || 1000);
+  const tol = Number($('rfcTol').value || 100);
+  // 7 sizes × ~7 binary-search iterations × trial seconds, generous estimate
+  const estSec = 7 * 7 * (trial + 0.7);
+  setActionStatus('statusRfc', 'running', 'binary-searching');
+  prog.start(estSec);
+  setStatus('Running RFC 2544 throughput…');
+  try {
+    await ensurePeerReady();
+    syncControlFromPeer();
+    const result = await api('/api/rfc2544', {
+      method: 'POST',
+      body: JSON.stringify({
+        senderUrl: $('senderNodeUrl').value,
+        receiverUrl: $('receiverNodeUrl').value,
+        senderInterface: $('senderNodeInterface').value,
+        receiverInterface: $('receiverNodeInterface').value,
+        trialDurationSec: trial,
+        linkRateMbps: link,
+        tolerancePps: tol
+      })
+    });
+    const sizes = result.report.results.length;
+    const avgUtil = (result.report.results.reduce((s, r) => s + (r.utilizationPct || 0), 0) / sizes).toFixed(1);
+    setActionStatus('statusRfc', 'ok', `${sizes} sizes · avg ${avgUtil}% util`);
+    prog.finish();
+    setStatus(`RFC 2544 done: ${sizes} sizes, avg ${avgUtil}% utilization`);
+    window.open('/reports/rfc2544-latest.html', '_blank');
+  } catch (err) {
+    setActionStatus('statusRfc', 'fail', 'fail');
+    prog.fail();
+    throw err;
+  }
+}
+
 async function runSweep() {
   const prog = progressFor('progSweep');
   const count = Number($('benchCount').value || 200);
@@ -1436,6 +1474,10 @@ $('runBenchmark').addEventListener('click', () => runBenchmark().catch((err) => 
   alert(err.message);
 }));
 $('runSweep').addEventListener('click', () => runSweep().catch((err) => {
+  setStatus(err.message, true);
+  alert(err.message);
+}));
+$('runRfc')?.addEventListener('click', () => runRfc2544().catch((err) => {
   setStatus(err.message, true);
   alert(err.message);
 }));

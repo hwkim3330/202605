@@ -108,6 +108,28 @@ def payload_bytes(profile: dict[str, Any], sequence: int | None = None) -> bytes
         if size <= len(header):
             return header[:size]
         return header + bytes(size - len(header))
+    if mode == "prbs":
+        # Pseudo-random bit sequences per RFC 4814 / O.150 — useful for line BER
+        # checks. Polynomial-deterministic so receiver can re-generate and verify.
+        size = int(payload.get("size", 256))
+        order = int(payload.get("order", 23))  # 7 / 15 / 23 typical
+        taps = {7: (7, 6), 15: (15, 14), 23: (23, 18), 31: (31, 28)}.get(order, (23, 18))
+        state = int(payload.get("seed", 0x7FFFFF)) & ((1 << taps[0]) - 1)
+        if state == 0:
+            state = 0x1
+        out = bytearray(size)
+        bit = 0
+        byte = 0
+        for i in range(size * 8):
+            new = ((state >> (taps[0] - 1)) ^ (state >> (taps[1] - 1))) & 1
+            state = ((state << 1) | new) & ((1 << taps[0]) - 1)
+            byte = (byte << 1) | new
+            bit += 1
+            if bit == 8:
+                out[i // 8] = byte
+                byte = 0
+                bit = 0
+        return bytes(out)
     return str(payload.get("data", "ethernet-packet-lab")).encode()
 
 
@@ -157,7 +179,13 @@ def build_udp(profile: dict[str, Any], sequence: int | None = None) -> bytes:
     dst_port = int(udp.get("dstPort", 50000))
     length = 8 + len(data)
     header = struct.pack("!HHHH", src_port, dst_port, length, 0)
-    pseudo = ip_to_bytes(profile["ipv4"]["src"]) + ip_to_bytes(profile["ipv4"]["dst"]) + struct.pack("!BBH", 0, IP_PROTO_UDP, length)
+    if profile.get("ipv6") and not profile.get("ipv4"):
+        ip = profile["ipv6"]
+        src = socket.inet_pton(socket.AF_INET6, ip["src"])
+        dst = socket.inet_pton(socket.AF_INET6, ip["dst"])
+        pseudo = src + dst + struct.pack("!IHBB", length, 0, 0, IP_PROTO_UDP)
+    else:
+        pseudo = ip_to_bytes(profile["ipv4"]["src"]) + ip_to_bytes(profile["ipv4"]["dst"]) + struct.pack("!BBH", 0, IP_PROTO_UDP, length)
     csum = checksum(pseudo + header + data)
     if csum == 0:
         csum = 0xFFFF
@@ -186,11 +214,63 @@ def build_arp(profile: dict[str, Any]) -> bytes:
     return struct.pack("!HHBBH", 1, ETH_P_IP, 6, 4, operation) + sender_mac + sender_ip + target_mac + target_ip
 
 
+def build_ipv6(profile: dict[str, Any], proto: int, l4_payload: bytes) -> bytes:
+    ip = profile.get("ipv6", {})
+    src = socket.inet_pton(socket.AF_INET6, ip["src"])
+    dst = socket.inet_pton(socket.AF_INET6, ip["dst"])
+    tc = int(ip.get("trafficClass", 0)) & 0xFF
+    flow = int(ip.get("flowLabel", 0)) & 0xFFFFF
+    word0 = (6 << 28) | (tc << 20) | flow
+    hop = int(ip.get("hopLimit", 64)) & 0xFF
+    payload_len = len(l4_payload) & 0xFFFF
+    header = struct.pack("!IHBB", word0, payload_len, proto, hop) + src + dst
+    return header + l4_payload
+
+
+def build_tcp(profile: dict[str, Any], sequence: int | None = None) -> bytes:
+    tcp = profile.get("tcp", {})
+    data = payload_bytes(profile, sequence)
+    sp = int(tcp.get("srcPort", 50000))
+    dp = int(tcp.get("dstPort", 50001))
+    seq = int(tcp.get("seq", 1))
+    ack = int(tcp.get("ack", 0))
+    flag_map = {"FIN": 0x001, "SYN": 0x002, "RST": 0x004, "PSH": 0x008, "ACK": 0x010, "URG": 0x020, "ECE": 0x040, "CWR": 0x080, "NS": 0x100}
+    flags = 0
+    for f in tcp.get("flags", ["SYN"]):
+        flags |= flag_map.get(str(f).upper(), 0)
+    win = int(tcp.get("window", 65535))
+    off_flags = (5 << 12) | flags  # 20-byte header (5 32-bit words)
+    header = struct.pack("!HHIIHHHH", sp, dp, seq, ack, off_flags, win, 0, 0)
+    # checksum (over pseudo-header + tcp + data) for IPv4 only here; IPv6 needs different pseudo
+    is_v6 = profile.get("ipv6") and not profile.get("ipv4")
+    if is_v6:
+        ip = profile["ipv6"]
+        src = socket.inet_pton(socket.AF_INET6, ip["src"])
+        dst = socket.inet_pton(socket.AF_INET6, ip["dst"])
+        pseudo = src + dst + struct.pack("!IHBB", len(header) + len(data), 0, 0, IP_PROTO_TCP)
+    else:
+        ip = profile.get("ipv4", {})
+        pseudo = ip_to_bytes(ip["src"]) + ip_to_bytes(ip["dst"]) + struct.pack("!BBH", 0, IP_PROTO_TCP, len(header) + len(data))
+    csum = checksum(pseudo + header + data)
+    if csum == 0:
+        csum = 0xFFFF
+    return struct.pack("!HHIIHHHH", sp, dp, seq, ack, off_flags, win, csum, 0) + data
+
+
 def build_frame(profile: dict[str, Any], sequence: int | None = None) -> tuple[bytes, dict[str, Any]]:
     protocol = profile.get("protocol", "udp").lower()
     if protocol == "udp":
         l4 = build_udp(profile, sequence)
-        frame = ethernet_header(profile, ETH_P_IP) + build_ipv4(profile, IP_PROTO_UDP, l4)
+        if profile.get("ipv6") and not profile.get("ipv4"):
+            frame = ethernet_header(profile, ETH_P_IPV6) + build_ipv6(profile, IP_PROTO_UDP, l4)
+        else:
+            frame = ethernet_header(profile, ETH_P_IP) + build_ipv4(profile, IP_PROTO_UDP, l4)
+    elif protocol == "tcp":
+        l4 = build_tcp(profile, sequence)
+        if profile.get("ipv6") and not profile.get("ipv4"):
+            frame = ethernet_header(profile, ETH_P_IPV6) + build_ipv6(profile, IP_PROTO_TCP, l4)
+        else:
+            frame = ethernet_header(profile, ETH_P_IP) + build_ipv4(profile, IP_PROTO_TCP, l4)
     elif protocol == "icmp":
         l4 = build_icmp(profile, sequence)
         frame = ethernet_header(profile, ETH_P_IP) + build_ipv4(profile, IP_PROTO_ICMP, l4)

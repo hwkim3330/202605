@@ -168,6 +168,28 @@ See [docs/packet-test-plan.md](docs/packet-test-plan.md) for the recommended end
 
 ---
 
+## Standards coverage
+
+| Standard | Coverage |
+|---|---|
+| **RFC 2544** §26 Throughput | Binary-search throughput discovery per frame size (64 / 128 / 256 / 512 / 1024 / 1280 / 1518) — Control card "RFC 2544 throughput". Configurable trial duration, tolerance, and link-rate baseline. Quick-mode (1–2 s trials) for feedback; raise to 60 s for the formal RFC numbers. |
+| **RFC 2544** §26.2 Latency | Per-iteration latency p50 / p95 / p99 + jitter (mean \|Δlatency\|), clock-skew adjusted. Recorded inside the RFC 2544 report as well as the standalone Benchmark card. |
+| **RFC 2544** §26.3 Frame loss rate | Recorded per binary-search iteration (the loss column in the per-size detail tables). |
+| **RFC 4814** payload patterns | Constant byte (`repeat` mode), counter (`counter` mode), pseudorandom (`random` mode), KETI benchmark marker (`benchmark` mode), and **PRBS-7 / 15 / 23 / 31** (`prbs` mode) generated from a polynomial LFSR — receiver can re-generate the same sequence from `seed` + `order` to do a cleartext BERT comparison. |
+| **RFC 5180** IPv6 benchmarking | IPv6 + UDP / TCP / ICMPv6 frame **build and decode**. Set `protocol:"udp"` (or `"tcp"`) plus `ipv6:{src,dst,hopLimit}` instead of `ipv4`. |
+| **RFC 793 / 9293** TCP | TCP frame build with full flag bits (NS / CWR / ECE / URG / ACK / PSH / RST / SYN / FIN), seq, ack, window, checksum (over IPv4 or IPv6 pseudo-header). |
+| **IEEE 802.1Q** | 802.1Q tagging (TPID / PCP / DEI / VID), and **Q-in-Q** (`0x88a8` outer + `0x8100` inner) decoded into `vlan` + `vlanInner`. |
+| **IEEE 802.3** clauses | Frame-size sweep plus the RFC 2544 1518 B size; minimum-frame padding to 60 B; configurable target frame length. AF_PACKET frames omit the 4-byte FCS, so a wire-side 1518 B frame appears as 1514 B in our buffers. |
+| **IEEE 1588 / PTP** | EtherType 0x88f7 message-type decode (Sync / Follow_Up / Delay_Req·Resp / Pdelay_Req·Resp(_FU) / Announce / Signaling / Management). Generation of arbitrary 0x88f7 frames via raw-EtherType profile. |
+| **LLDP** (IEEE 802.1AB) | Decoder walks every TLV (Chassis ID / Port ID / TTL / Port·System Name·Description / Org-specific). |
+| **LACP** (IEEE 802.1AX) | Top-level decode marker. |
+
+Not covered (out of scope for usermode AF_PACKET):
+
+- RFC 2544 §26.4 back-to-back (needs hardware-precise IFG).
+- ITU-T Y.1564 Service Activation (needs CIR/EIR shaping).
+- Hardware-timestamped one-way latency (needs PTP-disciplined NIC). The benchmark uses NTP-disciplined wall-clock with `latencyAdjustedUs` (min normalised to 0) for meaningful skew-free distribution.
+
 ## Architecture
 
 ```

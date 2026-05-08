@@ -114,12 +114,19 @@ function normalizeBaseUrl(value) {
 
 async function remoteJson(baseUrl, path, options = {}) {
   const url = `${normalizeBaseUrl(baseUrl)}${path}`;
-  const response = await fetch(url, {
-    method: options.method || 'GET',
-    headers: { 'content-type': 'application/json' },
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
-  const body = await response.json();
+  let response;
+  try {
+    response = await fetch(url, {
+      method: options.method || 'GET',
+      headers: { 'content-type': 'application/json' },
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  } catch (err) {
+    throw new Error(`fetch failed: ${url} (${err.cause?.code || err.message})`);
+  }
+  let body;
+  try { body = await response.json(); }
+  catch (err) { throw new Error(`bad json from ${url}: ${err.message}`); }
   if (!response.ok || body.ok === false) {
     throw new Error(body.error || body.stderr || `remote request failed: ${url}`);
   }
@@ -783,6 +790,122 @@ async function runBenchmark(reqBody) {
   return report;
 }
 
+async function runRfc2544Throughput(reqBody) {
+  // RFC 2544 §26 Throughput: for each frame size, binary-search the highest
+  // offered rate (frames/sec) at which the receiver still observes 0 loss.
+  // We approximate the IFG via the Python agent's intervalMs (ms between
+  // frames). For Linux usermode userland, sub-microsecond IFG isn't possible,
+  // so we report the maximum *demonstrable* loss-free rate up to the kernel's
+  // achievable cadence. Real RFC 2544 boxes use hardware schedulers.
+  const sizes = reqBody.sizes || [64, 128, 256, 512, 1024, 1280, 1518];
+  const trialDurationSec = Number(reqBody.trialDurationSec || 2);
+  const tolerance = Number(reqBody.tolerancePps || 100); // pps width to stop
+  const linkRateMbps = Number(reqBody.linkRateMbps || 1000);
+  const results = [];
+  for (const size of sizes) {
+    // Theoretical line-rate frames/sec = linkRate / ((size + 20) * 8)
+    // (preamble 7 + SFD 1 + IFG 12 = 20 bytes inter-frame on the wire)
+    const wireBits = (size + 20) * 8;
+    const theoreticalFps = Math.floor((linkRateMbps * 1e6) / wireBits);
+    // Linux usermode AF_PACKET in Python tops out around ~30k pps depending on
+    // CPU; clamp the upper bound so binary search doesn't waste iterations on
+    // unreachable rates.
+    const userlandCap = Number(reqBody.userlandCapPps || 30000);
+    let lo = 500;
+    let hi = Math.min(theoreticalFps, userlandCap);
+    let best = { fps: 0, throughputMbps: 0, lossPct: 100, txCount: 0, rxCount: 0 };
+    const iterations = [];
+    for (let iter = 0; iter < 8 && (hi - lo) > tolerance; iter += 1) {
+      const fps = Math.floor((lo + hi) / 2);
+      const intervalMs = 1000 / fps;
+      const count = Math.max(50, Math.min(8000, Math.floor(fps * trialDurationSec)));
+      const profile = {
+        name: `RFC2544 ${size}B @ ${fps} fps`,
+        protocol: 'udp',
+        udp: { srcPort: 40000, dstPort: 50000 },
+        ipv4: { ttl: 64 },
+        payload: { mode: 'benchmark', size: Math.max(16, size - 42), start: 1 },
+        targetFrameLength: size,
+        count, intervalMs
+      };
+      const single = await runBenchmark({ ...reqBody, profile, count, intervalMs });
+      const loss = single.stats.lossPct;
+      iterations.push({ fps, intervalMs: Number(intervalMs.toFixed(3)), txCount: single.stats.txCount, rxCount: single.stats.rxCount, lossPct: Number(loss.toFixed(3)), throughputMbps: Number(single.stats.throughputMbps.toFixed(2)) });
+      if (loss === 0) {
+        if (fps > best.fps) {
+          best = {
+            fps,
+            throughputMbps: Number(single.stats.throughputMbps.toFixed(2)),
+            rxThroughputMbps: Number(single.stats.rxThroughputMbps.toFixed(2)),
+            lossPct: 0,
+            txCount: single.stats.txCount,
+            rxCount: single.stats.rxCount,
+            latencyUs: single.stats.latencyAdjustedUs,
+            jitterUs: single.stats.jitterUs
+          };
+        }
+        lo = fps;
+      } else {
+        hi = fps;
+      }
+    }
+    results.push({
+      size,
+      theoreticalFps,
+      bestFps: best.fps,
+      utilizationPct: theoreticalFps ? Number((100 * best.fps / theoreticalFps).toFixed(2)) : 0,
+      best,
+      iterations
+    });
+  }
+  const report = {
+    generatedAt: new Date().toISOString(),
+    standard: 'RFC 2544 §26 (throughput) — quick mode',
+    config: { sizes, trialDurationSec, tolerance, linkRateMbps },
+    note: 'Linux usermode AF_PACKET cannot deliver hardware-precise IFG; results are an upper bound on what the agent + kernel can sustain loss-free.',
+    results
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'rfc2544-latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'rfc2544-latest.html'), rfc2544ReportHtml(report));
+  return report;
+}
+
+function rfc2544ReportHtml(report) {
+  const sizes = report.results.map((r) => r.size);
+  const theo = report.results.map((r) => r.theoreticalFps);
+  const got = report.results.map((r) => r.bestFps);
+  const util = report.results.map((r) => r.utilizationPct);
+  const mbps = report.results.map((r) => r.best.throughputMbps || 0);
+  const rows = report.results.map((r) => `<tr><td>${r.size}</td><td>${r.theoreticalFps.toLocaleString()}</td><td>${r.bestFps.toLocaleString()}</td><td>${r.utilizationPct.toFixed(2)}%</td><td>${(r.best.throughputMbps || 0).toFixed(2)}</td><td>${(r.best.latencyUs?.p95 || 0).toFixed(2)}</td><td>${(r.best.jitterUs?.mean || 0).toFixed(2)}</td><td>${r.iterations.length}</td></tr>`).join('');
+  const detail = report.results.map((r) => {
+    const itRows = r.iterations.map((it) => `<tr><td>${it.fps.toLocaleString()}</td><td>${it.intervalMs}</td><td>${it.txCount}</td><td>${it.rxCount}</td><td class="${it.lossPct === 0 ? 'pass' : 'fail'}">${it.lossPct.toFixed(2)}%</td><td>${it.throughputMbps.toFixed(2)}</td></tr>`).join('');
+    return `<h3>Frame size ${r.size} B — best ${r.bestFps.toLocaleString()} fps (${r.utilizationPct.toFixed(2)}% of line)</h3><table class="iter"><thead><tr><th>offered fps</th><th>interval ms</th><th>tx</th><th>rx</th><th>loss</th><th>Mbps</th></tr></thead><tbody>${itRows}</tbody></table>`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>RFC 2544 Throughput</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>body{margin:24px;font:14px/1.5 system-ui;color:#17202a}h1{margin:0 0 4px}.meta{color:#62707f;margin-bottom:18px}.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:16px 0}.chartCard{border:1px solid #d2dae3;border-radius:10px;padding:12px}canvas{max-height:280px}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}th,td{border-bottom:1px solid #e2e8f0;padding:6px 8px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eef5f6}.iter{margin:8px 0 18px;font-size:12px}.pass{color:#14532d;font-weight:700}.fail{color:#9b1c1c;font-weight:700}.note{background:#fff5e8;border-left:4px solid #b9651a;padding:10px 14px;border-radius:6px;color:#6b4111;margin:12px 0}</style></head><body>
+<h1>RFC 2544 Throughput Report</h1>
+<div class="meta">Generated ${escapeHtml(report.generatedAt)} · ${escapeHtml(report.standard)}</div>
+<div class="meta">Trial ${report.config.trialDurationSec}s per iteration · tolerance ${report.config.tolerance} fps · link assumed ${report.config.linkRateMbps} Mbps</div>
+<div class="note">${escapeHtml(report.note)}</div>
+<table><thead><tr><th>Size B</th><th>Theoretical fps</th><th>Loss-free fps</th><th>Utilization</th><th>Mbps</th><th>p95 lat µs</th><th>jitter µs</th><th>iters</th></tr></thead><tbody>${rows}</tbody></table>
+<div class="charts">
+  <div class="chartCard"><h3>Frames/sec achieved vs theoretical line rate</h3><canvas id="fpsChart"></canvas></div>
+  <div class="chartCard"><h3>Utilization (%)</h3><canvas id="utilChart"></canvas></div>
+  <div class="chartCard"><h3>Throughput (Mbps)</h3><canvas id="mbpsChart"></canvas></div>
+</div>
+<h2>Per-frame-size binary-search history</h2>
+${detail}
+<script>
+const sizes=${JSON.stringify(sizes)};
+const opts={responsive:true,animation:false,plugins:{legend:{position:'bottom'}}};
+new Chart(document.getElementById('fpsChart'),{type:'line',data:{labels:sizes,datasets:[{label:'theoretical',data:${JSON.stringify(theo)},borderColor:'#94a3b8',borderDash:[5,5]},{label:'loss-free',data:${JSON.stringify(got)},borderColor:'#0ea5e9'}]},options:opts});
+new Chart(document.getElementById('utilChart'),{type:'bar',data:{labels:sizes,datasets:[{label:'%',data:${JSON.stringify(util)},backgroundColor:'#0f6f78'}]},options:opts});
+new Chart(document.getElementById('mbpsChart'),{type:'line',data:{labels:sizes,datasets:[{label:'Mbps',data:${JSON.stringify(mbps)},borderColor:'#16a34a'}]},options:opts});
+</script></body></html>`;
+}
+
 async function runFrameSizeSweep(reqBody) {
   const sizes = reqBody.sizes || [64, 128, 256, 512, 1024, 1280, 1514];
   const count = Number(reqBody.count || 200);
@@ -1252,6 +1375,17 @@ async function handleApi(req, res) {
         report,
         html: '/reports/benchmark-latest.html',
         json: '/reports/benchmark-latest.json'
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/rfc2544') {
+      const body = await readRequestJson(req);
+      const report = await runRfc2544Throughput(body);
+      return sendJson(res, 200, {
+        ok: true,
+        report,
+        html: '/reports/rfc2544-latest.html',
+        json: '/reports/rfc2544-latest.json'
       });
     }
 
