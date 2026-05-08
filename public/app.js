@@ -248,7 +248,9 @@ const capture = {
   totalBytes: 0,
   lastWindow: { t: 0, count: 0, pps: 0 },
   filter: '',
-  maxRows: 5000
+  maxRows: 5000,
+  maxBuffer: 50000,
+  truncated: 0
 };
 
 function rowProtoClass(decoded) {
@@ -506,6 +508,15 @@ async function startCaptureStream() {
           capture.packets.push(ev);
           capture.totalBytes += ev.length;
           capture.lastWindow.count += 1;
+          // Cap the in-memory buffer so a long-running capture cannot OOM the
+          // tab. Drop oldest, keep newest. The DOM is already capped in
+          // appendPacketRow; this caps the underlying array (used by .pcap
+          // export and filter re-application).
+          if (capture.packets.length > capture.maxBuffer) {
+            capture.packets.shift();
+            capture.truncated += 1;
+            if (capture.truncated === 1) toast(`Capture buffer hit ${capture.maxBuffer} packets — oldest are now being dropped to keep memory bounded.`, 'warn', 6000);
+          }
           if (frameMatchesFilter(ev, capture.filter)) appendPacketRow(ev);
         } else if (ev.type === 'stats') {
           $('capStatDrops').textContent = String(ev.kernelDrops || 0);
@@ -1075,6 +1086,8 @@ function renderE2EReport(report) {
 }
 
 async function runE2E() {
+  if ($('runE2E').disabled) return;
+  $('runE2E').disabled = true;
   const prog = progressFor('progE2E');
   setActionStatus('statusE2E', 'running', 'running');
   prog.start(7);
@@ -1110,10 +1123,14 @@ async function runE2E() {
     setActionStatus('statusE2E', 'fail', 'fail');
     prog.fail();
     throw err;
+  } finally {
+    $('runE2E').disabled = false;
   }
 }
 
 async function runReport() {
+  if ($('runReport').disabled) return;
+  $('runReport').disabled = true;
   const prog = progressFor('progReport');
   setActionStatus('statusReport', 'running', 'running');
   prog.start(25);
@@ -1158,6 +1175,8 @@ async function runReport() {
     setActionStatus('statusReport', 'fail', 'fail');
     prog.fail();
     throw err;
+  } finally {
+    $('runReport').disabled = false;
   }
 }
 
@@ -1497,6 +1516,8 @@ async function ensurePeerReady() {
 }
 
 async function runBenchmark() {
+  if ($('runBenchmark').disabled) return;
+  $('runBenchmark').disabled = true;
   const prog = progressFor('progBench');
   const count = Number($('benchCount').value || 500);
   const intervalMs = Number($('benchInterval').value || 1);
@@ -1550,10 +1571,14 @@ async function runBenchmark() {
     setActionStatus('statusBench', 'fail', 'fail');
     prog.fail();
     throw err;
+  } finally {
+    $('runBenchmark').disabled = false;
   }
 }
 
 async function runRfc2544() {
+  if ($('runRfc').disabled) return;
+  $('runRfc').disabled = true;
   const prog = progressFor('progRfc');
   const trial = Number($('rfcTrial').value || 2);
   const link = Number($('rfcLink').value || 1000);
@@ -1588,10 +1613,14 @@ async function runRfc2544() {
     setActionStatus('statusRfc', 'fail', 'fail');
     prog.fail();
     throw err;
+  } finally {
+    $('runRfc').disabled = false;
   }
 }
 
 async function runSweep() {
+  if ($('runSweep').disabled) return;
+  $('runSweep').disabled = true;
   const prog = progressFor('progSweep');
   const count = Number($('benchCount').value || 200);
   const intervalMs = Number($('benchInterval').value || 1);
@@ -1625,6 +1654,8 @@ async function runSweep() {
     setActionStatus('statusSweep', 'fail', 'fail');
     prog.fail();
     throw err;
+  } finally {
+    $('runSweep').disabled = false;
   }
 }
 

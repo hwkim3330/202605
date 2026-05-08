@@ -36,9 +36,17 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
+const MAX_BODY_BYTES = 32 * 1024 * 1024; // 32 MB — protects against accidental / hostile huge POSTs.
 async function readRequestJson(req) {
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let total = 0;
+  for await (const chunk of req) {
+    total += chunk.length;
+    if (total > MAX_BODY_BYTES) {
+      throw new Error(`request body exceeds ${MAX_BODY_BYTES} bytes`);
+    }
+    chunks.push(chunk);
+  }
   if (chunks.length === 0) return {};
   const raw = Buffer.concat(chunks).toString('utf8');
   return raw.trim() ? JSON.parse(raw) : {};
@@ -1274,6 +1282,7 @@ function listTtys() {
 function destroyTtySession(id) {
   const s = ttySessions.get(id);
   if (!s) return;
+  clearTimeout(s.idleTimer);
   for (const sub of s.subscribers) {
     try { sub.end(); } catch {}
   }
@@ -1283,14 +1292,31 @@ function destroyTtySession(id) {
   ttySessions.delete(id);
 }
 
+const TTY_IDLE_TIMEOUT_MS = 60_000;
+
+function armTtyIdleTimer(id) {
+  const s = ttySessions.get(id);
+  if (!s) return;
+  clearTimeout(s.idleTimer);
+  s.idleTimer = setTimeout(() => {
+    if (!ttySessions.has(id)) return;
+    const cur = ttySessions.get(id);
+    if (cur.subscribers.length === 0) {
+      console.log(`[tty ${id}] idle for ${TTY_IDLE_TIMEOUT_MS}ms with no subscribers, closing`);
+      destroyTtySession(id);
+    }
+  }, TTY_IDLE_TIMEOUT_MS).unref();
+}
+
 function openTtySession(config) {
   const id = String(nextTtyId++);
   const child = spawn('python3', [serialAgentPath], {
     cwd: root, stdio: ['pipe', 'pipe', 'pipe']
   });
   child.stdin.write(JSON.stringify(config) + '\n');
-  const session = { child, buffer: '', subscribers: [], config };
+  const session = { child, buffer: '', subscribers: [], config, idleTimer: null };
   ttySessions.set(id, session);
+  armTtyIdleTimer(id);
   child.stdout.on('data', (chunk) => {
     session.buffer += chunk.toString('utf8');
     let nl;
@@ -1453,6 +1479,10 @@ async function handleApi(req, res) {
 
     if (req.method === 'POST' && req.url === '/api/send') {
       const body = await readRequestJson(req);
+      // Sanity-clamp counts/intervals so a fat-finger '0' or negative value
+      // can't spin the agent forever.
+      if (typeof body.count !== 'undefined') body.count = Math.max(1, Math.min(1_000_000, Number(body.count) || 1));
+      if (typeof body.intervalMs !== 'undefined') body.intervalMs = Math.max(0, Math.min(60_000, Number(body.intervalMs) || 0));
       const result = await runAgent(['send'], body, Number(body.timeoutMs || 30000));
       return sendJson(res, result.ok ? 200 : 400, result);
     }
@@ -1524,9 +1554,11 @@ async function handleApi(req, res) {
       });
       res.write(JSON.stringify({ type: 'subscribed', sessionId: id, config: s.config }) + '\n');
       s.subscribers.push(res);
+      clearTimeout(s.idleTimer);   // active subscriber cancels idle close
       const cleanup = () => {
         const idx = s.subscribers.indexOf(res);
         if (idx >= 0) s.subscribers.splice(idx, 1);
+        if (s.subscribers.length === 0) armTtyIdleTimer(id);
       };
       req.on('close', cleanup);
       req.on('aborted', cleanup);
