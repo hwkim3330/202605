@@ -248,9 +248,11 @@ const capture = {
   totalBytes: 0,
   lastWindow: { t: 0, count: 0, pps: 0 },
   filter: '',
-  maxRows: 5000,
+  maxRows: 2000,
   maxBuffer: 50000,
-  truncated: 0
+  truncated: 0,
+  pendingRows: [],
+  flushScheduled: false
 };
 
 function rowProtoClass(decoded) {
@@ -304,10 +306,7 @@ function frameMatchesFilter(packet, filter) {
   return JSON.stringify(d).toLowerCase().includes(f);
 }
 
-function appendPacketRow(packet) {
-  const tbody = $('packetRows');
-  const empty = $('packetEmpty');
-  if (empty) empty.classList.add('hidden');
+function buildPacketRow(packet) {
   const decoded = packet.decoded || {};
   const src = decoded.ipv4?.src || decoded.arp?.senderIp || decoded.ethernet?.srcMac || '-';
   const dst = decoded.ipv4?.dst || decoded.arp?.targetIp || decoded.ethernet?.dstMac || '-';
@@ -322,12 +321,40 @@ function appendPacketRow(packet) {
   tr.className = rowProtoClass(decoded);
   tr.innerHTML = `<td class="colNum">${idx + 1}</td><td class="colTime">${tStr}</td><td>${src}</td><td>${dst}</td><td class="colProto">${proto}</td><td class="colLen">${packet.length}</td><td>${packetInfo(decoded)}</td>`;
   tr.addEventListener('click', () => selectPacket(idx));
-  tbody.appendChild(tr);
-  // cap rows in DOM
-  while (tbody.children.length > capture.maxRows) tbody.removeChild(tbody.firstChild);
+  return tr;
+}
+
+function flushPendingRows() {
+  capture.flushScheduled = false;
+  const tbody = $('packetRows');
+  if (!tbody || !capture.pendingRows.length) return;
+  const empty = $('packetEmpty');
+  if (empty) empty.classList.add('hidden');
+  // Batch into a DocumentFragment so the browser does ONE layout pass per
+  // animation frame regardless of incoming frame rate.
+  const frag = document.createDocumentFragment();
+  for (const pkt of capture.pendingRows) frag.appendChild(buildPacketRow(pkt));
+  capture.pendingRows.length = 0;
+  tbody.appendChild(frag);
+  // Cap DOM rows; remove from front in one bulk op to avoid N reflows.
+  let over = tbody.children.length - capture.maxRows;
+  if (over > 0) {
+    const range = document.createRange();
+    range.setStart(tbody, 0);
+    range.setEnd(tbody, over);
+    range.deleteContents();
+  }
   if ($('captureFollow').checked) {
-    const list = $('packetRows').parentElement.parentElement;
+    const list = tbody.parentElement.parentElement;
     list.scrollTop = list.scrollHeight;
+  }
+}
+
+function appendPacketRow(packet) {
+  capture.pendingRows.push(packet);
+  if (!capture.flushScheduled) {
+    capture.flushScheduled = true;
+    requestAnimationFrame(flushPendingRows);
   }
 }
 

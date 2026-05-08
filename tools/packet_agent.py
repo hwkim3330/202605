@@ -693,15 +693,31 @@ def command_capture() -> None:
                 continue
             if src_mac_filter and eth.get("srcMac", "").lower() != src_mac_filter:
                 continue
-            frames.append({
-                "timestamp": rx_ns / 1e9,
-                "rxTimestampNs": rx_ns,
-                "interface": addr[0] if addr else interface,
-                "length": len(frame),
-                "frameHex": frame.hex(),
-                "hexdump": hexdump(frame[:256]),
-                "decoded": decoded,
-            })
+            # The benchmark/wire-validation orchestrator only needs decoded
+            # fields to match by MAC/seq; frameHex is required only when the
+            # matcher uses exact-byte matching. hexdump is for human display
+            # in the live capture stream, not the bulk capture endpoint. With
+            # 50k+ frame benchmarks the JSON return ballooned to 100MB+ when
+            # we shipped hexdump for every frame, which made fetch() OOM the
+            # client. Honor a 'lite' flag so high-rate callers can opt in.
+            if req.get("lite"):
+                frames.append({
+                    "timestamp": rx_ns / 1e9,
+                    "rxTimestampNs": rx_ns,
+                    "length": len(frame),
+                    "frameHex": frame.hex(),
+                    "decoded": decoded,
+                })
+            else:
+                frames.append({
+                    "timestamp": rx_ns / 1e9,
+                    "rxTimestampNs": rx_ns,
+                    "interface": addr[0] if addr else interface,
+                    "length": len(frame),
+                    "frameHex": frame.hex(),
+                    "hexdump": hexdump(frame[:256]),
+                    "decoded": decoded,
+                })
     except PermissionError:
         fail("raw socket permission denied. Run the server/agent with sudo or CAP_NET_RAW.")
     except Exception as exc:

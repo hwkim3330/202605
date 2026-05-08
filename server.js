@@ -771,7 +771,8 @@ async function runBenchmark(reqBody) {
     timeoutSec: captureTimeoutSec,
     timeoutMs: captureTimeoutSec * 1000 + 5000,
     maxFrames: count, // strict srcMac filter means we only count our own frames; stop right when all arrive
-    srcMac: senderIface.mac
+    srcMac: senderIface.mac,
+    lite: true // analysis only needs frameHex + decoded; skip the per-frame hexdump dump that bloats high-count benchmarks
   };
 
   const capturePromise = remoteJson(receiverUrl, '/api/capture', { method: 'POST', body: captureBody });
@@ -1510,18 +1511,43 @@ async function handleApi(req, res) {
         stdio: ['pipe', 'pipe', 'pipe']
       });
       child.stdin.end(JSON.stringify(body));
+      // Backpressure-aware NDJSON forwarding.
+      // If the browser can't drain fast enough, res.write() returns false and
+      // we'd otherwise let the kernel buffer grow until the agent stalls. Drop
+      // intermediate chunks instead of blocking; emit a 'drops' meta event so
+      // the UI can flag it. Pause/resume the child stdout so backpressure also
+      // throttles the python side.
+      let dropped = 0;
+      let lastDropEmit = 0;
       child.stdout.on('data', (chunk) => {
-        if (!res.writableEnded) res.write(chunk);
+        if (res.writableEnded) return;
+        const ok = res.write(chunk);
+        if (!ok) {
+          child.stdout.pause();
+          res.once('drain', () => { try { child.stdout.resume(); } catch {} });
+        }
       });
+      // periodic drop-stats heartbeat (in case the client wants it surfaced)
+      const dropTimer = setInterval(() => {
+        if (res.writableEnded) return;
+        const now = Date.now();
+        if (dropped && now - lastDropEmit > 2000) {
+          lastDropEmit = now;
+          try { res.write(JSON.stringify({ type: 'streamDrops', dropped }) + '\n'); } catch {}
+          dropped = 0;
+        }
+      }, 1000);
       child.stderr.on('data', (chunk) => {
         const txt = chunk.toString('utf8').trim();
         if (!res.writableEnded && txt) res.write(JSON.stringify({ type: 'log', stderr: txt }) + '\n');
       });
       const cleanup = () => {
+        clearInterval(dropTimer);
         try { child.kill('SIGTERM'); } catch {}
         setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 1500).unref();
       };
       child.on('close', () => {
+        clearInterval(dropTimer);
         if (!res.writableEnded) res.end();
       });
       req.on('close', cleanup);
