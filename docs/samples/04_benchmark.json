@@ -1,0 +1,875 @@
+{
+  "generatedAt": "2026-05-08T07:14:05.031Z",
+  "profileName": "Sample Benchmark",
+  "sender": {
+    "url": "http://localhost:8080",
+    "interface": "enxc84d44263ba6",
+    "mac": "c8:4d:44:26:3b:a6",
+    "ip": "169.254.5.7"
+  },
+  "receiver": {
+    "url": "http://169.254.148.199:8080",
+    "interface": "enxc84d4420405b",
+    "mac": "c8:4d:44:20:40:5b",
+    "ip": "169.254.148.199"
+  },
+  "config": {
+    "count": 500,
+    "intervalMs": 1,
+    "payloadSize": 64
+  },
+  "stats": {
+    "txCount": 500,
+    "rxCount": 500,
+    "lossPct": 0,
+    "elapsedSec": 0.67653284597327,
+    "sentBytes": 53000,
+    "throughputMbps": 0.6267249292087621,
+    "rxThroughputMbps": 0.6267249292087621,
+    "latencyUs": {
+      "count": 500,
+      "min": -3280.384,
+      "max": -2813.952,
+      "mean": -3152.5068799999967,
+      "stddev": 60.42242655989247,
+      "p50": -3155.712,
+      "p95": -3047.168,
+      "p99": -2889.216
+    },
+    "latencyAdjustedUs": {
+      "count": 500,
+      "min": 0,
+      "max": 466.4319999999998,
+      "mean": 127.87711999999989,
+      "stddev": 60.42242655989249,
+      "p50": 124.67200000000003,
+      "p95": 233.2159999999999,
+      "p99": 391.1680000000001
+    },
+    "interArrivalUs": {
+      "count": 499,
+      "min": 908.288,
+      "max": 4509.184,
+      "mean": 1354.7786773547095,
+      "stddev": 222.8874396475841,
+      "p50": 1319.424,
+      "p95": 1679.616,
+      "p99": 2064.64
+    },
+    "jitterUs": {
+      "count": 499,
+      "min": 0,
+      "max": 386.0479999999998,
+      "mean": 32.84290180360722,
+      "stddev": 54.94186283076873,
+      "p50": 14.592000000000098,
+      "p95": 116.22400000000016,
+      "p99": 284.672
+    },
+    "samples": [
+      {
+        "seq": 1,
+        "txTimestampNs": 1778224444286728400,
+        "rxTimestampNs": 1778224444283676400,
+        "latencyNs": -3052032,
+        "length": 106
+      },
+      {
+        "seq": 2,
+        "txTimestampNs": 1778224444288245000,
+        "rxTimestampNs": 1778224444285115400,
+        "latencyNs": -3129600,
+        "length": 106
+      },
+      {
+        "seq": 3,
+        "txTimestampNs": 1778224444289564700,
+        "rxTimestampNs": 1778224444286433500,
+        "latencyNs": -3131136,
+        "length": 106
+      },
+      {
+        "seq": 4,
+        "txTimestampNs": 1778224444290974200,
+        "rxTimestampNs": 1778224444287845400,
+        "latencyNs": -3128832,
+        "length": 106
+      },
+      {
+        "seq": 5,
+        "txTimestampNs": 1778224444292288300,
+        "rxTimestampNs": 1778224444289154000,
+        "latencyNs": -3134208,
+        "length": 106
+      },
+      {
+        "seq": 6,
+        "txTimestampNs": 1778224444293599000,
+        "rxTimestampNs": 1778224444290466300,
+        "latencyNs": -3132672,
+        "length": 106
+      },
+      {
+        "seq": 7,
+        "txTimestampNs": 1778224444295045400,
+        "rxTimestampNs": 1778224444291898000,
+        "latencyNs": -3147264,
+        "length": 106
+      },
+      {
+        "seq": 8,
+        "txTimestampNs": 1778224444297098500,
+        "rxTimestampNs": 1778224444293962800,
+        "latencyNs": -3135744,
+        "length": 106
+      },
+      {
+        "seq": 9,
+        "txTimestampNs": 1778224444298374400,
+        "rxTimestampNs": 1778224444295216400,
+        "latencyNs": -3158016,
+        "length": 106
+      },
+      {
+        "seq": 10,
+        "txTimestampNs": 1778224444299588400,
+        "rxTimestampNs": 1778224444296423700,
+        "latencyNs": -3164672,
+        "length": 106
+      },
+      {
+        "seq": 11,
+        "txTimestampNs": 1778224444300799500,
+        "rxTimestampNs": 1778224444297644000,
+        "latencyNs": -3155456,
+        "length": 106
+      },
+      {
+        "seq": 12,
+        "txTimestampNs": 1778224444302067700,
+        "rxTimestampNs": 1778224444298909400,
+        "latencyNs": -3158272,
+        "length": 106
+      },
+      {
+        "seq": 13,
+        "txTimestampNs": 1778224444303384000,
+        "rxTimestampNs": 1778224444300250000,
+        "latencyNs": -3133952,
+        "length": 106
+      },
+      {
+        "seq": 14,
+        "txTimestampNs": 1778224444304802300,
+        "rxTimestampNs": 1778224444301645000,
+        "latencyNs": -3157248,
+        "length": 106
+      },
+      {
+        "seq": 15,
+        "txTimestampNs": 1778224444306226000,
+        "rxTimestampNs": 1778224444303088600,
+        "latencyNs": -3137280,
+        "length": 106
+      },
+      {
+        "seq": 16,
+        "txTimestampNs": 1778224444307523300,
+        "rxTimestampNs": 1778224444304369400,
+        "latencyNs": -3153920,
+        "length": 106
+      },
+      {
+        "seq": 17,
+        "txTimestampNs": 1778224444308866600,
+        "rxTimestampNs": 1778224444305732000,
+        "latencyNs": -3134464,
+        "length": 106
+      },
+      {
+        "seq": 18,
+        "txTimestampNs": 1778224444310156000,
+        "rxTimestampNs": 1778224444307008300,
+        "latencyNs": -3147776,
+        "length": 106
+      },
+      {
+        "seq": 19,
+        "txTimestampNs": 1778224444311477500,
+        "rxTimestampNs": 1778224444308343000,
+        "latencyNs": -3134464,
+        "length": 106
+      },
+      {
+        "seq": 20,
+        "txTimestampNs": 1778224444313233200,
+        "rxTimestampNs": 1778224444310148400,
+        "latencyNs": -3084800,
+        "length": 106
+      },
+      {
+        "seq": 21,
+        "txTimestampNs": 1778224444315016400,
+        "rxTimestampNs": 1778224444311967500,
+        "latencyNs": -3048960,
+        "length": 106
+      },
+      {
+        "seq": 22,
+        "txTimestampNs": 1778224444316797400,
+        "rxTimestampNs": 1778224444313783000,
+        "latencyNs": -3014400,
+        "length": 106
+      },
+      {
+        "seq": 23,
+        "txTimestampNs": 1778224444318604800,
+        "rxTimestampNs": 1778224444315578000,
+        "latencyNs": -3026688,
+        "length": 106
+      },
+      {
+        "seq": 24,
+        "txTimestampNs": 1778224444320087000,
+        "rxTimestampNs": 1778224444316910000,
+        "latencyNs": -3176960,
+        "length": 106
+      },
+      {
+        "seq": 25,
+        "txTimestampNs": 1778224444321767700,
+        "rxTimestampNs": 1778224444318701300,
+        "latencyNs": -3066368,
+        "length": 106
+      },
+      {
+        "seq": 26,
+        "txTimestampNs": 1778224444323594000,
+        "rxTimestampNs": 1778224444320528100,
+        "latencyNs": -3065856,
+        "length": 106
+      },
+      {
+        "seq": 27,
+        "txTimestampNs": 1778224444325089800,
+        "rxTimestampNs": 1778224444321912600,
+        "latencyNs": -3177216,
+        "length": 106
+      },
+      {
+        "seq": 28,
+        "txTimestampNs": 1778224444326387200,
+        "rxTimestampNs": 1778224444323199700,
+        "latencyNs": -3187456,
+        "length": 106
+      },
+      {
+        "seq": 29,
+        "txTimestampNs": 1778224444327666200,
+        "rxTimestampNs": 1778224444324485600,
+        "latencyNs": -3180544,
+        "length": 106
+      },
+      {
+        "seq": 30,
+        "txTimestampNs": 1778224444328954600,
+        "rxTimestampNs": 1778224444325780500,
+        "latencyNs": -3174144,
+        "length": 106
+      },
+      {
+        "seq": 31,
+        "txTimestampNs": 1778224444330220000,
+        "rxTimestampNs": 1778224444327048000,
+        "latencyNs": -3172096,
+        "length": 106
+      },
+      {
+        "seq": 32,
+        "txTimestampNs": 1778224444331489000,
+        "rxTimestampNs": 1778224444328315100,
+        "latencyNs": -3173888,
+        "length": 106
+      },
+      {
+        "seq": 33,
+        "txTimestampNs": 1778224444333046500,
+        "rxTimestampNs": 1778224444329942300,
+        "latencyNs": -3104256,
+        "length": 106
+      },
+      {
+        "seq": 34,
+        "txTimestampNs": 1778224444334503200,
+        "rxTimestampNs": 1778224444331386400,
+        "latencyNs": -3116800,
+        "length": 106
+      },
+      {
+        "seq": 35,
+        "txTimestampNs": 1778224444335978800,
+        "rxTimestampNs": 1778224444332863500,
+        "latencyNs": -3115264,
+        "length": 106
+      },
+      {
+        "seq": 36,
+        "txTimestampNs": 1778224444337326600,
+        "rxTimestampNs": 1778224444334190600,
+        "latencyNs": -3136000,
+        "length": 106
+      },
+      {
+        "seq": 37,
+        "txTimestampNs": 1778224444338617900,
+        "rxTimestampNs": 1778224444335391500,
+        "latencyNs": -3226368,
+        "length": 106
+      },
+      {
+        "seq": 38,
+        "txTimestampNs": 1778224444339951900,
+        "rxTimestampNs": 1778224444336726300,
+        "latencyNs": -3225600,
+        "length": 106
+      },
+      {
+        "seq": 39,
+        "txTimestampNs": 1778224444341241300,
+        "rxTimestampNs": 1778224444338128000,
+        "latencyNs": -3113472,
+        "length": 106
+      },
+      {
+        "seq": 40,
+        "txTimestampNs": 1778224444342508800,
+        "rxTimestampNs": 1778224444339284500,
+        "latencyNs": -3224320,
+        "length": 106
+      },
+      {
+        "seq": 41,
+        "txTimestampNs": 1778224444343987200,
+        "rxTimestampNs": 1778224444340820200,
+        "latencyNs": -3166976,
+        "length": 106
+      },
+      {
+        "seq": 42,
+        "txTimestampNs": 1778224444345532400,
+        "rxTimestampNs": 1778224444342358800,
+        "latencyNs": -3173632,
+        "length": 106
+      },
+      {
+        "seq": 43,
+        "txTimestampNs": 1778224444347109400,
+        "rxTimestampNs": 1778224444344013800,
+        "latencyNs": -3095552,
+        "length": 106
+      },
+      {
+        "seq": 44,
+        "txTimestampNs": 1778224444348654300,
+        "rxTimestampNs": 1778224444345498400,
+        "latencyNs": -3155968,
+        "length": 106
+      },
+      {
+        "seq": 45,
+        "txTimestampNs": 1778224444350187000,
+        "rxTimestampNs": 1778224444347024400,
+        "latencyNs": -3162624,
+        "length": 106
+      },
+      {
+        "seq": 46,
+        "txTimestampNs": 1778224444351688200,
+        "rxTimestampNs": 1778224444348524000,
+        "latencyNs": -3164160,
+        "length": 106
+      },
+      {
+        "seq": 47,
+        "txTimestampNs": 1778224444353281500,
+        "rxTimestampNs": 1778224444350392300,
+        "latencyNs": -2889216,
+        "length": 106
+      },
+      {
+        "seq": 48,
+        "txTimestampNs": 1778224444354720500,
+        "rxTimestampNs": 1778224444351579000,
+        "latencyNs": -3141632,
+        "length": 106
+      },
+      {
+        "seq": 49,
+        "txTimestampNs": 1778224444356125400,
+        "rxTimestampNs": 1778224444352913000,
+        "latencyNs": -3212544,
+        "length": 106
+      },
+      {
+        "seq": 50,
+        "txTimestampNs": 1778224444357454000,
+        "rxTimestampNs": 1778224444354227200,
+        "latencyNs": -3226880,
+        "length": 106
+      },
+      {
+        "seq": 51,
+        "txTimestampNs": 1778224444359006200,
+        "rxTimestampNs": 1778224444355883000,
+        "latencyNs": -3123200,
+        "length": 106
+      },
+      {
+        "seq": 52,
+        "txTimestampNs": 1778224444360350000,
+        "rxTimestampNs": 1778224444357129000,
+        "latencyNs": -3220992,
+        "length": 106
+      },
+      {
+        "seq": 53,
+        "txTimestampNs": 1778224444361646300,
+        "rxTimestampNs": 1778224444358427100,
+        "latencyNs": -3219200,
+        "length": 106
+      },
+      {
+        "seq": 54,
+        "txTimestampNs": 1778224444363039200,
+        "rxTimestampNs": 1778224444360067800,
+        "latencyNs": -2971392,
+        "length": 106
+      },
+      {
+        "seq": 55,
+        "txTimestampNs": 1778224444364339200,
+        "rxTimestampNs": 1778224444361364700,
+        "latencyNs": -2974464,
+        "length": 106
+      },
+      {
+        "seq": 56,
+        "txTimestampNs": 1778224444365741300,
+        "rxTimestampNs": 1778224444362575600,
+        "latencyNs": -3165696,
+        "length": 106
+      },
+      {
+        "seq": 57,
+        "txTimestampNs": 1778224444367150000,
+        "rxTimestampNs": 1778224444363926800,
+        "latencyNs": -3223296,
+        "length": 106
+      },
+      {
+        "seq": 58,
+        "txTimestampNs": 1778224444368447200,
+        "rxTimestampNs": 1778224444365435400,
+        "latencyNs": -3011840,
+        "length": 106
+      },
+      {
+        "seq": 59,
+        "txTimestampNs": 1778224444369815800,
+        "rxTimestampNs": 1778224444366808600,
+        "latencyNs": -3007232,
+        "length": 106
+      },
+      {
+        "seq": 60,
+        "txTimestampNs": 1778224444371210200,
+        "rxTimestampNs": 1778224444368088000,
+        "latencyNs": -3122176,
+        "length": 106
+      },
+      {
+        "seq": 61,
+        "txTimestampNs": 1778224444372491000,
+        "rxTimestampNs": 1778224444369431300,
+        "latencyNs": -3059712,
+        "length": 106
+      },
+      {
+        "seq": 62,
+        "txTimestampNs": 1778224444373866000,
+        "rxTimestampNs": 1778224444370823000,
+        "latencyNs": -3043072,
+        "length": 106
+      },
+      {
+        "seq": 63,
+        "txTimestampNs": 1778224444375184000,
+        "rxTimestampNs": 1778224444372124700,
+        "latencyNs": -3059200,
+        "length": 106
+      },
+      {
+        "seq": 64,
+        "txTimestampNs": 1778224444376479700,
+        "rxTimestampNs": 1778224444373418500,
+        "latencyNs": -3061248,
+        "length": 106
+      },
+      {
+        "seq": 65,
+        "txTimestampNs": 1778224444377866800,
+        "rxTimestampNs": 1778224444374791400,
+        "latencyNs": -3075328,
+        "length": 106
+      },
+      {
+        "seq": 66,
+        "txTimestampNs": 1778224444379194600,
+        "rxTimestampNs": 1778224444376106500,
+        "latencyNs": -3088128,
+        "length": 106
+      },
+      {
+        "seq": 67,
+        "txTimestampNs": 1778224444380483800,
+        "rxTimestampNs": 1778224444377369600,
+        "latencyNs": -3114240,
+        "length": 106
+      },
+      {
+        "seq": 68,
+        "txTimestampNs": 1778224444381913300,
+        "rxTimestampNs": 1778224444378801000,
+        "latencyNs": -3112448,
+        "length": 106
+      },
+      {
+        "seq": 69,
+        "txTimestampNs": 1778224444383177200,
+        "rxTimestampNs": 1778224444380066600,
+        "latencyNs": -3110656,
+        "length": 106
+      },
+      {
+        "seq": 70,
+        "txTimestampNs": 1778224444384472800,
+        "rxTimestampNs": 1778224444381251800,
+        "latencyNs": -3220992,
+        "length": 106
+      },
+      {
+        "seq": 71,
+        "txTimestampNs": 1778224444385796000,
+        "rxTimestampNs": 1778224444382689500,
+        "latencyNs": -3106560,
+        "length": 106
+      },
+      {
+        "seq": 72,
+        "txTimestampNs": 1778224444388097300,
+        "rxTimestampNs": 1778224444384977200,
+        "latencyNs": -3120128,
+        "length": 106
+      },
+      {
+        "seq": 73,
+        "txTimestampNs": 1778224444389529000,
+        "rxTimestampNs": 1778224444386316500,
+        "latencyNs": -3212544,
+        "length": 106
+      },
+      {
+        "seq": 74,
+        "txTimestampNs": 1778224444390998000,
+        "rxTimestampNs": 1778224444387784000,
+        "latencyNs": -3214080,
+        "length": 106
+      },
+      {
+        "seq": 75,
+        "txTimestampNs": 1778224444392315400,
+        "rxTimestampNs": 1778224444389114000,
+        "latencyNs": -3201280,
+        "length": 106
+      },
+      {
+        "seq": 76,
+        "txTimestampNs": 1778224444393542000,
+        "rxTimestampNs": 1778224444390320400,
+        "latencyNs": -3221504,
+        "length": 106
+      },
+      {
+        "seq": 77,
+        "txTimestampNs": 1778224444394974000,
+        "rxTimestampNs": 1778224444391735800,
+        "latencyNs": -3238144,
+        "length": 106
+      },
+      {
+        "seq": 78,
+        "txTimestampNs": 1778224444396357600,
+        "rxTimestampNs": 1778224444393319200,
+        "latencyNs": -3038464,
+        "length": 106
+      },
+      {
+        "seq": 79,
+        "txTimestampNs": 1778224444397767400,
+        "rxTimestampNs": 1778224444394612700,
+        "latencyNs": -3154688,
+        "length": 106
+      },
+      {
+        "seq": 80,
+        "txTimestampNs": 1778224444402234000,
+        "rxTimestampNs": 1778224444399122000,
+        "latencyNs": -3112192,
+        "length": 106
+      },
+      {
+        "seq": 81,
+        "txTimestampNs": 1778224444403864300,
+        "rxTimestampNs": 1778224444400772600,
+        "latencyNs": -3091712,
+        "length": 106
+      },
+      {
+        "seq": 82,
+        "txTimestampNs": 1778224444405295400,
+        "rxTimestampNs": 1778224444402124800,
+        "latencyNs": -3170560,
+        "length": 106
+      },
+      {
+        "seq": 83,
+        "txTimestampNs": 1778224444406585300,
+        "rxTimestampNs": 1778224444403395000,
+        "latencyNs": -3190272,
+        "length": 106
+      },
+      {
+        "seq": 84,
+        "txTimestampNs": 1778224444407857700,
+        "rxTimestampNs": 1778224444404678700,
+        "latencyNs": -3179008,
+        "length": 106
+      },
+      {
+        "seq": 85,
+        "txTimestampNs": 1778224444409151200,
+        "rxTimestampNs": 1778224444405974000,
+        "latencyNs": -3177216,
+        "length": 106
+      },
+      {
+        "seq": 86,
+        "txTimestampNs": 1778224444410466800,
+        "rxTimestampNs": 1778224444407277000,
+        "latencyNs": -3189760,
+        "length": 106
+      },
+      {
+        "seq": 87,
+        "txTimestampNs": 1778224444411803400,
+        "rxTimestampNs": 1778224444408630000,
+        "latencyNs": -3173376,
+        "length": 106
+      },
+      {
+        "seq": 88,
+        "txTimestampNs": 1778224444413111000,
+        "rxTimestampNs": 1778224444409944600,
+        "latencyNs": -3166464,
+        "length": 106
+      },
+      {
+        "seq": 89,
+        "txTimestampNs": 1778224444414383900,
+        "rxTimestampNs": 1778224444411204000,
+        "latencyNs": -3179776,
+        "length": 106
+      },
+      {
+        "seq": 90,
+        "txTimestampNs": 1778224444415686700,
+        "rxTimestampNs": 1778224444412511200,
+        "latencyNs": -3175424,
+        "length": 106
+      },
+      {
+        "seq": 91,
+        "txTimestampNs": 1778224444417305600,
+        "rxTimestampNs": 1778224444414227200,
+        "latencyNs": -3078400,
+        "length": 106
+      },
+      {
+        "seq": 92,
+        "txTimestampNs": 1778224444418810600,
+        "rxTimestampNs": 1778224444415663600,
+        "latencyNs": -3147008,
+        "length": 106
+      },
+      {
+        "seq": 93,
+        "txTimestampNs": 1778224444420310500,
+        "rxTimestampNs": 1778224444417158100,
+        "latencyNs": -3152384,
+        "length": 106
+      },
+      {
+        "seq": 94,
+        "txTimestampNs": 1778224444422053600,
+        "rxTimestampNs": 1778224444418913300,
+        "latencyNs": -3140352,
+        "length": 106
+      },
+      {
+        "seq": 95,
+        "txTimestampNs": 1778224444423403500,
+        "rxTimestampNs": 1778224444420245000,
+        "latencyNs": -3158528,
+        "length": 106
+      },
+      {
+        "seq": 96,
+        "txTimestampNs": 1778224444424840400,
+        "rxTimestampNs": 1778224444421698800,
+        "latencyNs": -3141632,
+        "length": 106
+      },
+      {
+        "seq": 97,
+        "txTimestampNs": 1778224444426241800,
+        "rxTimestampNs": 1778224444423076400,
+        "latencyNs": -3165440,
+        "length": 106
+      },
+      {
+        "seq": 98,
+        "txTimestampNs": 1778224444427582000,
+        "rxTimestampNs": 1778224444424421400,
+        "latencyNs": -3160576,
+        "length": 106
+      },
+      {
+        "seq": 99,
+        "txTimestampNs": 1778224444429065000,
+        "rxTimestampNs": 1778224444425874400,
+        "latencyNs": -3190528,
+        "length": 106
+      },
+      {
+        "seq": 100,
+        "txTimestampNs": 1778224444430407000,
+        "rxTimestampNs": 1778224444427215400,
+        "latencyNs": -3191552,
+        "length": 106
+      }
+    ],
+    "interArrivalSamples": [
+      1438.976,
+      1318.144,
+      1411.84,
+      1308.672,
+      1312.256,
+      1431.808,
+      2064.64,
+      1253.632,
+      1207.296,
+      1220.352,
+      1265.408,
+      1340.672,
+      1394.944,
+      1443.584,
+      1280.768,
+      1362.688,
+      1276.16,
+      1334.784,
+      1805.312,
+      1819.136,
+      1815.552,
+      1795.072,
+      1331.968,
+      1791.232,
+      1826.816,
+      1384.448,
+      1287.168,
+      1285.888,
+      1294.848,
+      1267.456,
+      1267.2,
+      1627.136,
+      1444.096,
+      1477.12,
+      1327.104,
+      1200.896,
+      1334.784,
+      1401.6,
+      1156.608,
+      1535.744,
+      1538.56,
+      1655.04,
+      1484.544,
+      1526.016,
+      1499.648,
+      1868.288,
+      1186.56,
+      1334.016,
+      1314.304,
+      1655.808,
+      1245.952,
+      1298.176,
+      1640.704,
+      1296.896,
+      1210.88,
+      1351.168,
+      1508.608,
+      1373.184,
+      1279.488,
+      1343.232,
+      1391.616,
+      1301.76,
+      1293.824,
+      1372.928,
+      1315.072,
+      1263.104,
+      1431.296,
+      1265.664,
+      1185.28,
+      1437.696,
+      2287.616,
+      1339.392,
+      1467.392,
+      1330.176,
+      1206.272,
+      1415.424,
+      1583.36,
+      1293.568,
+      4509.184,
+      1650.688,
+      1352.192,
+      1270.272,
+      1283.584,
+      1295.36,
+      1303.04,
+      1352.96,
+      1314.56,
+      1259.52,
+      1307.136,
+      1715.968,
+      1436.416,
+      1494.528,
+      1755.136,
+      1331.712,
+      1453.824,
+      1377.536,
+      1345.024,
+      1453.056,
+      1340.928,
+      1391.872
+    ],
+    "capturedTotal": 500
+  }
+}

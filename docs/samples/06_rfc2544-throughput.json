@@ -1,0 +1,560 @@
+{
+  "generatedAt": "2026-05-08T07:18:22.783Z",
+  "standard": "RFC 2544 §26 (throughput) — quick mode",
+  "config": {
+    "sizes": [
+      64,
+      128,
+      256,
+      512,
+      1024,
+      1280,
+      1518
+    ],
+    "trialDurationSec": 1,
+    "tolerance": 500,
+    "linkRateMbps": 1000
+  },
+  "note": "Linux usermode AF_PACKET cannot deliver hardware-precise IFG; results are an upper bound on what the agent + kernel can sustain loss-free.",
+  "results": [
+    {
+      "size": 64,
+      "bufferSize": 60,
+      "theoreticalFps": 1488095,
+      "bestFps": 5484,
+      "utilizationPct": 0.37,
+      "best": {
+        "fps": 5484,
+        "throughputMbps": 2.03,
+        "rxThroughputMbps": 2.03,
+        "lossPct": 0,
+        "txCount": 5484,
+        "rxCount": 5484,
+        "latencyUs": {
+          "count": 5484,
+          "min": 0,
+          "max": 1192.96,
+          "mean": 17.62595477753481,
+          "stddev": 42.746283802846094,
+          "p50": 12.544000000000324,
+          "p95": 20.22400000000016,
+          "p99": 114.43200000000024
+        },
+        "jitterUs": {
+          "count": 5483,
+          "min": 0,
+          "max": 1180.1599999999999,
+          "mean": 4.795319350720423,
+          "stddev": 31.13593969339747,
+          "p50": 1.0239999999998872,
+          "p95": 13.82400000000007,
+          "p99": 65.02399999999989
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7179,
+          "lossPct": 7.368,
+          "throughputMbps": 2.56
+        },
+        {
+          "fps": 4125,
+          "intervalMs": 0.242,
+          "txCount": 4125,
+          "rxCount": 4125,
+          "lossPct": 0,
+          "throughputMbps": 1.55
+        },
+        {
+          "fps": 5937,
+          "intervalMs": 0.168,
+          "txCount": 5937,
+          "rxCount": 5484,
+          "lossPct": 7.63,
+          "throughputMbps": 2.13
+        },
+        {
+          "fps": 5031,
+          "intervalMs": 0.199,
+          "txCount": 5031,
+          "rxCount": 5031,
+          "lossPct": 0,
+          "throughputMbps": 1.91
+        },
+        {
+          "fps": 5484,
+          "intervalMs": 0.182,
+          "txCount": 5484,
+          "rxCount": 5484,
+          "lossPct": 0,
+          "throughputMbps": 2.03
+        }
+      ]
+    },
+    {
+      "size": 128,
+      "bufferSize": 124,
+      "theoreticalFps": 844594,
+      "bestFps": 14546,
+      "utilizationPct": 1.72,
+      "best": {
+        "fps": 14546,
+        "throughputMbps": 7.82,
+        "rxThroughputMbps": 7.82,
+        "lossPct": 0,
+        "txCount": 8000,
+        "rxCount": 8000,
+        "latencyUs": {
+          "count": 8000,
+          "min": 0,
+          "max": 2769.664,
+          "mean": 102.11036800000169,
+          "stddev": 133.08303803550848,
+          "p50": 123.64800000000014,
+          "p95": 143.61599999999999,
+          "p99": 196.60800000000017
+        },
+        "jitterUs": {
+          "count": 7999,
+          "min": 0.25600000000031287,
+          "max": 711.6800000000003,
+          "mean": 75.93144343042977,
+          "stddev": 16.375633274438886,
+          "p50": 77.56799999999976,
+          "p95": 88.31999999999994,
+          "p99": 104.96000000000004
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7750,
+          "lossPct": 0,
+          "throughputMbps": 5.29
+        },
+        {
+          "fps": 11375,
+          "intervalMs": 0.088,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 6.72
+        },
+        {
+          "fps": 13187,
+          "intervalMs": 0.076,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 7.26
+        },
+        {
+          "fps": 14093,
+          "intervalMs": 0.071,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 7.58
+        },
+        {
+          "fps": 14546,
+          "intervalMs": 0.069,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 7.82
+        }
+      ]
+    },
+    {
+      "size": 256,
+      "bufferSize": 252,
+      "theoreticalFps": 452898,
+      "bestFps": 14546,
+      "utilizationPct": 3.21,
+      "best": {
+        "fps": 14546,
+        "throughputMbps": 13.41,
+        "rxThroughputMbps": 13.41,
+        "lossPct": 0,
+        "txCount": 8000,
+        "rxCount": 8000,
+        "latencyUs": {
+          "count": 8000,
+          "min": 0,
+          "max": 3689.9840000000004,
+          "mean": 99.5484479999994,
+          "stddev": 179.7484570817988,
+          "p50": 102.14400000000023,
+          "p95": 127.23199999999997,
+          "p99": 183.55200000000013
+        },
+        "jitterUs": {
+          "count": 7999,
+          "min": 0.25600000000031287,
+          "max": 491.0079999999998,
+          "mean": 66.02383697962173,
+          "stddev": 17.123594360732625,
+          "p50": 65.53600000000006,
+          "p95": 84.99199999999973,
+          "p99": 98.81600000000026
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7750,
+          "lossPct": 0,
+          "throughputMbps": 9.85
+        },
+        {
+          "fps": 11375,
+          "intervalMs": 0.088,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 12.27
+        },
+        {
+          "fps": 13187,
+          "intervalMs": 0.076,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 13.65
+        },
+        {
+          "fps": 14093,
+          "intervalMs": 0.071,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 13.35
+        },
+        {
+          "fps": 14546,
+          "intervalMs": 0.069,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 13.41
+        }
+      ]
+    },
+    {
+      "size": 512,
+      "bufferSize": 508,
+      "theoreticalFps": 234962,
+      "bestFps": 14546,
+      "utilizationPct": 6.19,
+      "best": {
+        "fps": 14546,
+        "throughputMbps": 21.44,
+        "rxThroughputMbps": 21.44,
+        "lossPct": 0,
+        "txCount": 8000,
+        "rxCount": 8000,
+        "latencyUs": {
+          "count": 8000,
+          "min": 0,
+          "max": 2578.944,
+          "mean": 94.45014400000014,
+          "stddev": 112.36576907487147,
+          "p50": 125.95199999999977,
+          "p95": 143.61599999999999,
+          "p99": 266.75199999999995
+        },
+        "jitterUs": {
+          "count": 7999,
+          "min": 0,
+          "max": 1047.808,
+          "mean": 98.13751518939934,
+          "stddev": 30.9710257526449,
+          "p50": 100.096,
+          "p95": 119.29600000000028,
+          "p99": 138.23999999999978
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7750,
+          "lossPct": 0,
+          "throughputMbps": 16.21
+        },
+        {
+          "fps": 11375,
+          "intervalMs": 0.088,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 19.08
+        },
+        {
+          "fps": 13187,
+          "intervalMs": 0.076,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 20.8
+        },
+        {
+          "fps": 14093,
+          "intervalMs": 0.071,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 20.7
+        },
+        {
+          "fps": 14546,
+          "intervalMs": 0.069,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 21.44
+        }
+      ]
+    },
+    {
+      "size": 1024,
+      "bufferSize": 1020,
+      "theoreticalFps": 119731,
+      "bestFps": 14546,
+      "utilizationPct": 12.15,
+      "best": {
+        "fps": 14546,
+        "throughputMbps": 30.54,
+        "rxThroughputMbps": 30.54,
+        "lossPct": 0,
+        "txCount": 8000,
+        "rxCount": 8000,
+        "latencyUs": {
+          "count": 8000,
+          "min": 0,
+          "max": 1145.0880000000002,
+          "mean": 11.81231999999991,
+          "stddev": 31.202536918808356,
+          "p50": 9.728000000000065,
+          "p95": 16.384000000000015,
+          "p99": 66.04800000000023
+        },
+        "jitterUs": {
+          "count": 7999,
+          "min": 0,
+          "max": 1140.7359999999999,
+          "mean": 4.07516539567444,
+          "stddev": 23.612341734118495,
+          "p50": 1.024000000000342,
+          "p95": 10.239999999999782,
+          "p99": 64.51200000000017
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7750,
+          "lossPct": 0,
+          "throughputMbps": 24.47
+        },
+        {
+          "fps": 11375,
+          "intervalMs": 0.088,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 27.97
+        },
+        {
+          "fps": 13187,
+          "intervalMs": 0.076,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 28.87
+        },
+        {
+          "fps": 14093,
+          "intervalMs": 0.071,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 30.22
+        },
+        {
+          "fps": 14546,
+          "intervalMs": 0.069,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 30.54
+        }
+      ]
+    },
+    {
+      "size": 1280,
+      "bufferSize": 1276,
+      "theoreticalFps": 96153,
+      "bestFps": 14546,
+      "utilizationPct": 15.13,
+      "best": {
+        "fps": 14546,
+        "throughputMbps": 32.48,
+        "rxThroughputMbps": 32.48,
+        "lossPct": 0,
+        "txCount": 8000,
+        "rxCount": 8000,
+        "latencyUs": {
+          "count": 8000,
+          "min": 0,
+          "max": 829.9520000000002,
+          "mean": 7.046367999999946,
+          "stddev": 21.084168984917945,
+          "p50": 4.351999999999862,
+          "p95": 13.568000000000211,
+          "p99": 56.320000000000164
+        },
+        "jitterUs": {
+          "count": 7999,
+          "min": 0,
+          "max": 824.8320000000003,
+          "mean": 4.376259032379041,
+          "stddev": 19.504760615648287,
+          "p50": 1.024000000000342,
+          "p95": 17.920000000000073,
+          "p99": 56.57600000000002
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7750,
+          "lossPct": 0,
+          "throughputMbps": 26.74
+        },
+        {
+          "fps": 11375,
+          "intervalMs": 0.088,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 29.97
+        },
+        {
+          "fps": 13187,
+          "intervalMs": 0.076,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 31.6
+        },
+        {
+          "fps": 14093,
+          "intervalMs": 0.071,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 32.83
+        },
+        {
+          "fps": 14546,
+          "intervalMs": 0.069,
+          "txCount": 8000,
+          "rxCount": 8000,
+          "lossPct": 0,
+          "throughputMbps": 32.48
+        }
+      ]
+    },
+    {
+      "size": 1518,
+      "bufferSize": 1514,
+      "theoreticalFps": 81274,
+      "bestFps": 6843,
+      "utilizationPct": 8.42,
+      "best": {
+        "fps": 6843,
+        "throughputMbps": 27.77,
+        "rxThroughputMbps": 27.77,
+        "lossPct": 0,
+        "txCount": 6843,
+        "rxCount": 6843,
+        "latencyUs": {
+          "count": 6843,
+          "min": 0,
+          "max": 1438.2080000000003,
+          "mean": 27.008841736080843,
+          "stddev": 43.65701619613988,
+          "p50": 8.44800000000032,
+          "p95": 76.28800000000001,
+          "p99": 155.39200000000028
+        },
+        "jitterUs": {
+          "count": 6842,
+          "min": 0,
+          "max": 1432.5760000000002,
+          "mean": 25.460475884244378,
+          "stddev": 36.81618889674509,
+          "p50": 21.503999999999905,
+          "p95": 62.208000000000084,
+          "p99": 151.03999999999996
+        }
+      },
+      "iterations": [
+        {
+          "fps": 7750,
+          "intervalMs": 0.129,
+          "txCount": 7750,
+          "rxCount": 7350,
+          "lossPct": 5.161,
+          "throughputMbps": 28.84
+        },
+        {
+          "fps": 4125,
+          "intervalMs": 0.242,
+          "txCount": 4125,
+          "rxCount": 4125,
+          "lossPct": 0,
+          "throughputMbps": 24.18
+        },
+        {
+          "fps": 5937,
+          "intervalMs": 0.168,
+          "txCount": 5937,
+          "rxCount": 5937,
+          "lossPct": 0,
+          "throughputMbps": 26.88
+        },
+        {
+          "fps": 6843,
+          "intervalMs": 0.146,
+          "txCount": 6843,
+          "rxCount": 6843,
+          "lossPct": 0,
+          "throughputMbps": 27.77
+        },
+        {
+          "fps": 7296,
+          "intervalMs": 0.137,
+          "txCount": 7296,
+          "rxCount": 7104,
+          "lossPct": 2.632,
+          "throughputMbps": 27.89
+        }
+      ]
+    }
+  ]
+}

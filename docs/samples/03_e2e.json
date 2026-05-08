@@ -1,0 +1,356 @@
+{
+  "generatedAt": "2026-05-08T07:09:49.555Z",
+  "ok": true,
+  "profileName": "Sample E2E",
+  "sender": {
+    "url": "http://localhost:8080",
+    "interface": "enxc84d44263ba6",
+    "mac": "c8:4d:44:26:3b:a6",
+    "ip": "169.254.5.7"
+  },
+  "receiver": {
+    "url": "http://169.254.148.199:8080",
+    "interface": "enxc84d4420405b",
+    "mac": "c8:4d:44:20:40:5b",
+    "ip": "169.254.148.199"
+  },
+  "sent": {
+    "ok": true,
+    "framesSent": 8,
+    "bytesSent": 480,
+    "elapsedSec": 1.0533013269887306,
+    "startTimestampNs": 1778224184963938600,
+    "endTimestampNs": 1778224186017240600,
+    "decoded": {
+      "length": 60,
+      "ethernet": {
+        "dstMac": "c8:4d:44:20:40:5b",
+        "srcMac": "c8:4d:44:26:3b:a6",
+        "etherType": "0x0800"
+      },
+      "ipv4": {
+        "src": "169.254.5.7",
+        "dst": "169.254.148.199",
+        "ttl": 64,
+        "protocol": 17,
+        "totalLength": 44,
+        "checksumValid": true
+      },
+      "udp": {
+        "srcPort": 40000,
+        "dstPort": 50000,
+        "length": 24,
+        "checksum": "0x7c1e"
+      },
+      "benchmark": {
+        "seq": 1599291725,
+        "txTimestampNs": 5786075896396919000
+      }
+    },
+    "txRecords": []
+  },
+  "expectedProtocol": "udp",
+  "captureSummary": {
+    "total": 8,
+    "matching": 8
+  },
+  "matchCount": 8,
+  "capturedFrames": [
+    {
+      "timestamp": 1778224184.960654,
+      "rxTimestampNs": 1778224184960654000,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c254b4554495f53414d504c455f303030310000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 25 4b 45 54 49 5f 53  ...@.P..|%KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 31 00 00              AMPLE_0001..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c25"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224185.1112363,
+      "rxTimestampNs": 1778224185111236400,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c244b4554495f53414d504c455f303030320000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 24 4b 45 54 49 5f 53  ...@.P..|$KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 32 00 00              AMPLE_0002..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c24"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224185.261905,
+      "rxTimestampNs": 1778224185261905000,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c234b4554495f53414d504c455f303030330000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 23 4b 45 54 49 5f 53  ...@.P..|#KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 33 00 00              AMPLE_0003..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c23"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224185.4121482,
+      "rxTimestampNs": 1778224185412148200,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c224b4554495f53414d504c455f303030340000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 22 4b 45 54 49 5f 53  ...@.P..|\"KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 34 00 00              AMPLE_0004..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c22"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224185.562609,
+      "rxTimestampNs": 1778224185562609000,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c214b4554495f53414d504c455f303030350000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 21 4b 45 54 49 5f 53  ...@.P..|!KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 35 00 00              AMPLE_0005..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c21"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224185.7129126,
+      "rxTimestampNs": 1778224185712912600,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c204b4554495f53414d504c455f303030360000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 20 4b 45 54 49 5f 53  ...@.P..| KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 36 00 00              AMPLE_0006..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c20"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224185.8635557,
+      "rxTimestampNs": 1778224185863555600,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c1f4b4554495f53414d504c455f303030370000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 1f 4b 45 54 49 5f 53  ...@.P..|.KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 37 00 00              AMPLE_0007..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c1f"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    },
+    {
+      "timestamp": 1778224186.0138829,
+      "rxTimestampNs": 1778224186013883000,
+      "interface": "enxc84d4420405b",
+      "length": 60,
+      "frameHex": "c84d4420405bc84d44263ba608004500002c2026400040112cd0a9fe0507a9fe94c79c40c35000187c1e4b4554495f53414d504c455f303030380000",
+      "hexdump": "0000  c8 4d 44 20 40 5b c8 4d 44 26 3b a6 08 00 45 00  .MD @[.MD&;...E.\n0010  00 2c 20 26 40 00 40 11 2c d0 a9 fe 05 07 a9 fe  ., &@.@.,.......\n0020  94 c7 9c 40 c3 50 00 18 7c 1e 4b 45 54 49 5f 53  ...@.P..|.KETI_S\n0030  41 4d 50 4c 45 5f 30 30 30 38 00 00              AMPLE_0008..",
+      "decoded": {
+        "length": 60,
+        "ethernet": {
+          "dstMac": "c8:4d:44:20:40:5b",
+          "srcMac": "c8:4d:44:26:3b:a6",
+          "etherType": "0x0800"
+        },
+        "ipv4": {
+          "src": "169.254.5.7",
+          "dst": "169.254.148.199",
+          "ttl": 64,
+          "protocol": 17,
+          "totalLength": 44,
+          "checksumValid": true
+        },
+        "udp": {
+          "srcPort": 40000,
+          "dstPort": 50000,
+          "length": 24,
+          "checksum": "0x7c1e"
+        },
+        "benchmark": {
+          "seq": 1599291725,
+          "txTimestampNs": 5786075896396919000
+        }
+      }
+    }
+  ],
+  "txProfile": {
+    "name": "Sample E2E",
+    "protocol": "udp",
+    "udp": {
+      "srcPort": 40000,
+      "dstPort": 50000
+    },
+    "ipv4": {
+      "ttl": 64,
+      "src": "169.254.5.7",
+      "dst": "169.254.148.199",
+      "id": 8230
+    },
+    "payload": {
+      "mode": "sequence",
+      "template": "KETI_SAMPLE_{seq:04d}",
+      "start": 1
+    },
+    "count": 8,
+    "intervalMs": 150,
+    "interface": "enxc84d44263ba6",
+    "srcMac": "c8:4d:44:26:3b:a6",
+    "dstMac": "c8:4d:44:20:40:5b"
+  }
+}

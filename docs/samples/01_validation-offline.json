@@ -1,0 +1,388 @@
+{
+  "generatedAt": "2026-05-08T07:09:44.289Z",
+  "node": {
+    "hostname": "",
+    "cwd": "/home/keti/202605/"
+  },
+  "interfaces": [
+    {
+      "name": "docker0",
+      "mac": "96:af:3c:c4:0e:11",
+      "state": "down",
+      "mtu": 1500,
+      "ipv4": [
+        {
+          "local": "172.17.0.1",
+          "prefixlen": 16
+        }
+      ]
+    },
+    {
+      "name": "enxc84d44263ba6",
+      "mac": "c8:4d:44:26:3b:a6",
+      "state": "up",
+      "mtu": 1500,
+      "ipv4": [
+        {
+          "local": "169.254.5.7",
+          "prefixlen": 16
+        }
+      ]
+    },
+    {
+      "name": "lo",
+      "mac": "00:00:00:00:00:00",
+      "state": "unknown",
+      "mtu": 65536,
+      "ipv4": [
+        {
+          "local": "127.0.0.1",
+          "prefixlen": 8
+        }
+      ]
+    },
+    {
+      "name": "wlp0s20f3",
+      "mac": "c0:a8:10:56:b0:80",
+      "state": "up",
+      "mtu": 1500,
+      "ipv4": [
+        {
+          "local": "172.31.51.213",
+          "prefixlen": 24
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 27,
+    "pass": 27,
+    "fail": 0
+  },
+  "results": [
+    {
+      "key": "01_arp_request",
+      "priority": 1,
+      "category": "1 Basic",
+      "name": "ARP Request",
+      "description": "Broadcast ARP request for L2 path validation.",
+      "ok": true,
+      "length": 60,
+      "protocol": "ARP",
+      "info": "0x0806",
+      "error": ""
+    },
+    {
+      "key": "02_icmp_echo",
+      "priority": 2,
+      "category": "1 Basic",
+      "name": "ICMP Echo",
+      "description": "ICMP Echo Request for basic IPv4 reachability.",
+      "ok": true,
+      "length": 60,
+      "protocol": "ICMP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "03_udp_unicast_basic",
+      "priority": 3,
+      "category": "1 Basic",
+      "name": "UDP Unicast Basic",
+      "description": "Basic UDP payload for PC-FPGA-PC functional validation.",
+      "ok": true,
+      "length": 60,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "04_udp_sequence",
+      "priority": 4,
+      "category": "2 Integrity",
+      "name": "UDP Sequence",
+      "description": "Sequence payload for loss, duplicate, and ordering checks.",
+      "ok": true,
+      "length": 85,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "05_payload_pattern_aa55",
+      "priority": 5,
+      "category": "2 Integrity",
+      "name": "Payload Pattern AA55",
+      "description": "Alternating AA55 pattern for data-path integrity checks.",
+      "ok": true,
+      "length": 60,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "06_payload_counter_256",
+      "priority": 6,
+      "category": "2 Integrity",
+      "name": "Payload Counter 256",
+      "description": "0x00..0xff counter pattern for byte-order and truncation checks.",
+      "ok": true,
+      "length": 298,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "07_frame_size_64",
+      "priority": 7,
+      "category": "3 Size Sweep",
+      "name": "Frame Size 64",
+      "description": "Minimum Ethernet frame size, excluding FCS.",
+      "ok": true,
+      "length": 64,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "08_frame_size_128",
+      "priority": 8,
+      "category": "3 Size Sweep",
+      "name": "Frame Size 128",
+      "description": "128-byte UDP Ethernet frame excluding FCS.",
+      "ok": true,
+      "length": 128,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "09_frame_size_256",
+      "priority": 9,
+      "category": "3 Size Sweep",
+      "name": "Frame Size 256",
+      "description": "256-byte UDP Ethernet frame excluding FCS.",
+      "ok": true,
+      "length": 256,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "10_frame_size_512",
+      "priority": 10,
+      "category": "3 Size Sweep",
+      "name": "Frame Size 512",
+      "description": "512-byte UDP Ethernet frame excluding FCS.",
+      "ok": true,
+      "length": 512,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "11_frame_size_1024",
+      "priority": 11,
+      "category": "3 Size Sweep",
+      "name": "Frame Size 1024",
+      "description": "1024-byte UDP Ethernet frame excluding FCS.",
+      "ok": true,
+      "length": 1024,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "08_frame_size_1514",
+      "priority": 12,
+      "category": "3 Size Sweep",
+      "name": "Frame Size 1514",
+      "description": "Standard untagged max frame length excluding FCS, equivalent to 1518 bytes on wire with FCS.",
+      "ok": true,
+      "length": 1514,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "09_vlan10_udp_pcp0",
+      "priority": 13,
+      "category": "4 VLAN PCP",
+      "name": "VLAN 10 PCP 0",
+      "description": "802.1Q tagged UDP frame with VID 10 and best-effort PCP 0.",
+      "ok": true,
+      "length": 60,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 0",
+      "error": ""
+    },
+    {
+      "key": "10_vlan10_udp_pcp7",
+      "priority": 14,
+      "category": "4 VLAN PCP",
+      "name": "VLAN 10 PCP 7",
+      "description": "PCP 7 traffic candidate for later TAS scheduled traffic checks.",
+      "ok": true,
+      "length": 65,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 7",
+      "error": ""
+    },
+    {
+      "key": "11_vlan20_isolation",
+      "priority": 15,
+      "category": "4 VLAN PCP",
+      "name": "VLAN 20 Isolation",
+      "description": "VID 20 traffic for VLAN isolation and filtering checks.",
+      "ok": true,
+      "length": 62,
+      "protocol": "UDP",
+      "info": "VLAN 20 PCP 0",
+      "error": ""
+    },
+    {
+      "key": "12_unknown_unicast",
+      "priority": 16,
+      "category": "5 Switching",
+      "name": "Unknown Unicast",
+      "description": "Destination MAC intentionally unknown for flooding and FDB checks.",
+      "ok": true,
+      "length": 60,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "13_l2_multicast",
+      "priority": 17,
+      "category": "5 Switching",
+      "name": "L2 Multicast",
+      "description": "IPv4 multicast MAC frame for multicast flooding/snooping checks.",
+      "ok": true,
+      "length": 60,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "14_acl_udp_block_candidate",
+      "priority": 18,
+      "category": "6 ACL Policy",
+      "name": "ACL UDP Block Candidate",
+      "description": "UDP dst port 60001 candidate for ACL drop/counter validation.",
+      "ok": true,
+      "length": 60,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "15_periodic_udp_1ms",
+      "priority": 19,
+      "category": "7 TSN Prep",
+      "name": "Periodic UDP 1 ms",
+      "description": "1 ms periodic sequence traffic for interval, jitter, and loss checks.",
+      "ok": true,
+      "length": 79,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 7",
+      "error": ""
+    },
+    {
+      "key": "16_psfp_stream_a",
+      "priority": 20,
+      "category": "8 TSN",
+      "name": "PSFP Stream A",
+      "description": "Stream A identifier candidate: multicast DMAC, VID 10, UDP dst 50001.",
+      "ok": true,
+      "length": 63,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 3",
+      "error": ""
+    },
+    {
+      "key": "17_psfp_stream_b",
+      "priority": 21,
+      "category": "8 TSN",
+      "name": "PSFP Stream B",
+      "description": "Stream B identifier candidate: multicast DMAC, VID 10, UDP dst 50002.",
+      "ok": true,
+      "length": 63,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 3",
+      "error": ""
+    },
+    {
+      "key": "22_throughput_sweep_marker",
+      "priority": 22,
+      "category": "9 Performance",
+      "name": "Throughput Sweep Marker",
+      "description": "Marker profile referenced by frame-size sweep benchmark; uses benchmark payload with embedded sequence and timestamp.",
+      "ok": true,
+      "length": 256,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "23_latency_benchmark",
+      "priority": 23,
+      "category": "9 Performance",
+      "name": "Latency Benchmark 1k",
+      "description": "1000-packet benchmark stream with embedded tx timestamp + sequence to compute one-way latency, jitter, and loss.",
+      "ok": true,
+      "length": 106,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "24_jitter_periodic_500us",
+      "priority": 24,
+      "category": "8 TSN",
+      "name": "Periodic Jitter 500 us",
+      "description": "Sub-millisecond periodic stream (500 us, 2000 packets) with PCP 7 to evaluate TSN jitter and PSFP gating timing.",
+      "ok": true,
+      "length": 126,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 7",
+      "error": ""
+    },
+    {
+      "key": "25_mixed_pcp_burst",
+      "priority": 25,
+      "category": "9 Performance",
+      "name": "Mixed PCP Burst (PCP 0)",
+      "description": "Best-effort burst on VLAN 10 PCP 0. Combine with profile 24 on PCP 7 from a second sender to verify TSN strict priority / shaper isolates the high-priority stream.",
+      "ok": true,
+      "length": 1514,
+      "protocol": "UDP",
+      "info": "VLAN 10 PCP 0",
+      "error": ""
+    },
+    {
+      "key": "26_jumbo_mtu_edge",
+      "priority": 26,
+      "category": "3 Size Sweep",
+      "name": "MTU Edge 1500",
+      "description": "Largest standard Ethernet payload at the 1500 MTU boundary (frame length 1514, no FCS). Verifies the link does not silently fragment or drop at the edge.",
+      "ok": true,
+      "length": 1514,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    },
+    {
+      "key": "27_broadcast_storm_guard",
+      "priority": 27,
+      "category": "5 Switching",
+      "name": "Broadcast Storm Guard",
+      "description": "Short broadcast burst to confirm the switch's storm-control / rate limit kicks in. Receiver should see the configured ceiling, not the full transmit rate.",
+      "ok": true,
+      "length": 106,
+      "protocol": "UDP",
+      "info": "0x0800",
+      "error": ""
+    }
+  ]
+}
