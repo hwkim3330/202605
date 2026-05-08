@@ -8,6 +8,56 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
+    <div id="toastTray" class="toastTray" aria-live="polite"></div>
+    <div id="helpOverlay" class="helpOverlay hidden" role="dialog" aria-label="Keyboard shortcuts and help">
+      <div class="helpCard">
+        <div class="helpHead">
+          <h2>Keyboard shortcuts &amp; quick reference</h2>
+          <button id="helpClose" class="ghostBtn small" aria-label="Close help">✕</button>
+        </div>
+        <div class="helpGrid">
+          <section>
+            <h3>Tabs</h3>
+            <ul>
+              <li><kbd>1</kbd>  Sender</li>
+              <li><kbd>2</kbd>  Capture</li>
+              <li><kbd>3</kbd>  Control</li>
+              <li><kbd>4</kbd>  Serial</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Capture</h3>
+            <ul>
+              <li><kbd>S</kbd>  Start / Stop capture</li>
+              <li><kbd>C</kbd>  Clear buffer</li>
+              <li><kbd>P</kbd>  Save .pcap</li>
+              <li><kbd>/</kbd>  Focus display filter</li>
+              <li><kbd>Esc</kbd>  Stop capture</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Sender</h3>
+            <ul>
+              <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd>  Send packet</li>
+              <li><kbd>Ctrl</kbd>+<kbd>S</kbd>  Save Packet List</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Filters (Capture)</h3>
+            <p><code>tcp · udp · icmp[v6] · arp · vlan · ipv6 · lldp · ptp · lacp · dns · dhcp · ntp · mdns · tls · vxlan</code></p>
+            <p><code>mac:c8:4d  ip:169.254  port:50000</code> (or any substring of decoded JSON).</p>
+          </section>
+          <section>
+            <h3>Documentation</h3>
+            <ul>
+              <li><a href="https://github.com/hwkim3330/202605" target="_blank" rel="noreferrer">Source on GitHub</a></li>
+              <li><a href="https://github.com/hwkim3330/202605/blob/main/docs/API.md" target="_blank" rel="noreferrer">HTTP API reference</a></li>
+              <li><a href="https://github.com/hwkim3330/202605/tree/main/docs/samples" target="_blank" rel="noreferrer">Sample reports</a></li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
     <main class="app">
       <header class="topbar">
         <div class="brand">
@@ -20,6 +70,7 @@
         <div class="topActions">
           <div id="status" class="status">Ready</div>
           <button id="refreshInterfaces">Refresh</button>
+          <button id="helpButton" class="ghostBtn small" title="Keyboard shortcuts (?)">?</button>
           <a class="versionChip" href="https://github.com/hwkim3330/202605" target="_blank" rel="noreferrer" title="Source on GitHub">v <span id="versionTag">…</span></a>
         </div>
       </header>

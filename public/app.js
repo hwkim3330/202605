@@ -47,6 +47,32 @@ function setStatus(message, isError = false) {
   $('status').classList.toggle('error', isError);
 }
 
+// Toast notifications — replace alert() so the page never blocks.
+function toast(message, kind = '', timeoutMs = 4500) {
+  const tray = document.getElementById('toastTray');
+  if (!tray) return;
+  const el = document.createElement('div');
+  el.className = `toast toast-${kind}`;
+  const icon = kind === 'ok' ? '✓' : kind === 'warn' ? '⚠' : kind === 'fail' ? '✕' : 'ⓘ';
+  el.innerHTML = `<span class="icon">${icon}</span><span class="body"></span><button class="close" aria-label="Dismiss">×</button>`;
+  el.querySelector('.body').textContent = message;
+  el.querySelector('.close').addEventListener('click', () => dismiss());
+  tray.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  let t = setTimeout(dismiss, timeoutMs);
+  function dismiss() {
+    clearTimeout(t);
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 240);
+  }
+  return dismiss;
+}
+function toastError(err) {
+  const msg = err?.message || String(err);
+  setStatus(msg, true);
+  toast(msg, 'fail');
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -948,7 +974,7 @@ async function build() {
 
 async function send() {
   const err = validateProfileFields();
-  if (err) { setStatus(err, true); alert(err); return; }
+  if (err) { setStatus(err, true); toast(err, 'fail'); return; }
   setStatus('Sending packet...');
   const result = await api('/api/send', { method: 'POST', body: JSON.stringify(getProfile()) });
   showResult(result);
@@ -1240,7 +1266,7 @@ async function refreshTtyList() {
 async function serialConnect() {
   if (state.serial.sessionId) return;
   const path = $('serialPort').value;
-  if (!path) { alert('Pick a TTY first.'); return; }
+  if (!path) { toast('Pick a TTY first.','warn'); return; }
   state.serial.rxCount = 0; state.serial.txCount = 0;
   $('serRx').textContent = '0'; $('serTx').textContent = '0';
   $('serState').textContent = 'opening…'; $('serState').className = 'statChip';
@@ -1348,8 +1374,8 @@ async function serialSendInput() {
   }
 }
 
-$('serialRefresh')?.addEventListener('click', () => refreshTtyList().catch((e) => alert(e.message)));
-$('serialConnect')?.addEventListener('click', () => serialConnect().catch((e) => { setStatus(e.message, true); alert(e.message); }));
+$('serialRefresh')?.addEventListener('click', () => refreshTtyList().catch((e) => toastError(e)));
+$('serialConnect')?.addEventListener('click', () => serialConnect().catch((e) => { toastError(e); }));
 $('serialDisconnect')?.addEventListener('click', () => serialDisconnect());
 $('serialClear')?.addEventListener('click', () => { $('serialLog').innerHTML = ''; });
 $('serialBreak')?.addEventListener('click', async () => {
@@ -1361,13 +1387,11 @@ $('serialInput')?.addEventListener('keydown', (e) => {
 });
 
 $('refreshInterfaces').addEventListener('click', () => loadInterfaces().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('interfaceSelect').addEventListener('change', updateInterfaceInfo);
 $('build').addEventListener('click', () => build().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 
 // Auto-preview: rebuild the frame whenever the operator changes any sender input.
@@ -1400,17 +1424,15 @@ SENDER_INPUT_IDS.forEach((id) => {
   el.addEventListener(ev, schedulePreview);
 });
 $('send').addEventListener('click', () => send().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('captureStart').addEventListener('click', () => startCaptureStream().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('captureStop').addEventListener('click', stopCaptureStream);
 $('captureClear').addEventListener('click', clearCapture);
 $('captureSavePcap')?.addEventListener('click', () => {
-  if (!capture.packets.length) { alert('No packets buffered yet — start a capture first.'); return; }
+  if (!capture.packets.length) { toast('No packets buffered yet — start a capture first.','warn'); return; }
   const blob = buildPcap(capture.packets);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1462,12 +1484,10 @@ $('captureDisplayFilter').addEventListener('input', () => {
   window._capFilterTimer = setTimeout(reapplyFilter, 120);
 });
 $('runReport').addEventListener('click', () => runReport().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 
 async function ensurePeerReady() {
@@ -1524,7 +1544,7 @@ async function runBenchmark() {
     setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`, !okFlag);
     if (okFlag) window.open('/reports/benchmark-latest.html', '_blank');
     else {
-      alert(`Benchmark received 0 packets.\n\nChecklist:\n - Wire/link between ${senderIf} and ${receiverIf} is up\n - Peer agent is reachable at ${receiverUrl}\n - Sender MAC ${state.interfaces.find(i=>i.name===senderIf)?.mac} matches what the peer expects\n\nThe benchmark always uses UDP+IPv4 internally regardless of the profile selected on the Sender tab.`);
+      toast(`Benchmark received 0 packets — check link & peer.\n\nChecklist:\n - Wire/link between ${senderIf} and ${receiverIf} is up\n - Peer agent is reachable at ${receiverUrl}\n - Sender MAC ${state.interfaces.find(i=>i.name===senderIf)?.mac} matches what the peer expects\n\nThe benchmark always uses UDP+IPv4 internally regardless of the profile selected on the Sender tab.`);
     }
   } catch (err) {
     setActionStatus('statusBench', 'fail', 'fail');
@@ -1609,16 +1629,13 @@ async function runSweep() {
 }
 
 $('runBenchmark').addEventListener('click', () => runBenchmark().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('runSweep').addEventListener('click', () => runSweep().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('runRfc')?.addEventListener('click', () => runRfc2544().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('caseSelect').addEventListener('change', () => {
   const item = state.testCases.find((entry) => entry.id === $('caseSelect').value);
@@ -1634,12 +1651,10 @@ $('profileSuiteSelect').addEventListener('change', () => {
 });
 $('newCase').addEventListener('click', () => setCurrentCase({ id: '', name: 'Untitled Test Case', description: '', steps: [] }));
 $('saveCase').addEventListener('click', () => saveCurrentCase().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('deleteCase').addEventListener('click', () => deleteCurrentCase().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('addCurrentPacket').addEventListener('click', addCurrentPacketToCase);
 $('addDelay').addEventListener('click', addDelayToCase);
@@ -1648,12 +1663,10 @@ $('removeStep').addEventListener('click', removeSelectedStep);
 $('moveStepUp').addEventListener('click', () => moveSelectedStep(-1));
 $('moveStepDown').addEventListener('click', () => moveSelectedStep(1));
 $('sendSelectedSteps').addEventListener('click', () => runCurrentCase({ selectedOnly: true }).catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('runCase').addEventListener('click', () => runCurrentCase().catch((err) => {
-  setStatus(err.message, true);
-  alert(err.message);
+  toastError(err);
 }));
 $('caseCycleMs').addEventListener('change', updateCaseEstimate);
 $('caseRepeat').addEventListener('change', updateCaseEstimate);
@@ -1863,7 +1876,7 @@ function syncControlFromPeer() {
 
 async function probePeer() {
   const url = $('peerUrlPin').value.trim();
-  if (!url) { alert('peer URL is required'); return; }
+  if (!url) { toast('Peer URL is required.','warn'); return; }
   setStatus('Probing peer...');
   state.peer.url = url;
   localStorage.setItem('peerUrl', url);
@@ -1890,7 +1903,7 @@ async function probePeer() {
 
 function lockToPeer() {
   const peer = state.peer.iface;
-  if (!peer) { alert('probe peer first'); return; }
+  if (!peer) { toast('Probe the peer first.','warn'); return; }
   if (state.localRole === 'sender') {
     $('dstMac').value = peer.mac;
     if (peer.ipv4?.[0]?.local) $('dstIp').value = peer.ipv4[0].local;
@@ -1902,7 +1915,7 @@ function lockToPeer() {
   }
 }
 
-$('peerProbeBtn').addEventListener('click', () => probePeer().catch((err) => { setStatus(err.message, true); alert(err.message); }));
+$('peerProbeBtn').addEventListener('click', () => probePeer().catch((err) => { toastError(err); }));
 $('peerInterfacePin').addEventListener('change', () => {
   state.peer.interface = $('peerInterfacePin').value;
   state.peer.iface = state.peer.interfaces.find((i) => i.name === state.peer.interface) || null;
@@ -1981,6 +1994,46 @@ fetch('/api/version').then((r) => r.json()).then((j) => {
   const el = document.getElementById('versionTag');
   if (el && j?.commit) el.textContent = j.commit;
 }).catch(() => {});
+
+// Help overlay
+function toggleHelp(force) {
+  const ov = document.getElementById('helpOverlay');
+  if (!ov) return;
+  const show = force === undefined ? ov.classList.contains('hidden') : force;
+  ov.classList.toggle('hidden', !show);
+}
+document.getElementById('helpButton')?.addEventListener('click', () => toggleHelp(true));
+document.getElementById('helpClose')?.addEventListener('click', () => toggleHelp(false));
+document.getElementById('helpOverlay')?.addEventListener('click', (e) => { if (e.target.id === 'helpOverlay') toggleHelp(false); });
+
+// Global keyboard shortcuts. Skip when the user is typing into a text input.
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) || '';
+  const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
+  if (e.key === 'Escape') {
+    if (!document.getElementById('helpOverlay')?.classList.contains('hidden')) { toggleHelp(false); e.preventDefault(); return; }
+    if (state.serial?.sessionId) { serialDisconnect(); return; }
+    if (capture.reader) { stopCaptureStream(); return; }
+  }
+  if (isTyping) {
+    if (e.ctrlKey && e.key.toLowerCase() === 's' && document.getElementById('senderView')?.classList.contains('active')) {
+      e.preventDefault(); $('saveCase')?.click(); return;
+    }
+    if (e.ctrlKey && e.key === 'Enter' && document.getElementById('senderView')?.classList.contains('active')) {
+      e.preventDefault(); $('send')?.click(); return;
+    }
+    return;
+  }
+  if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+  const tabMap = { '1': 'senderView', '2': 'captureView', '3': 'controlView', '4': 'serialView' };
+  if (tabMap[e.key]) { e.preventDefault(); document.querySelector(`[data-view="${tabMap[e.key]}"]`)?.click(); return; }
+  if (document.getElementById('captureView')?.classList.contains('active')) {
+    if (e.key.toLowerCase() === 's') { e.preventDefault(); ($('captureStart').disabled ? $('captureStop') : $('captureStart'))?.click(); return; }
+    if (e.key.toLowerCase() === 'c') { e.preventDefault(); $('captureClear')?.click(); return; }
+    if (e.key.toLowerCase() === 'p') { e.preventDefault(); $('captureSavePcap')?.click(); return; }
+    if (e.key === '/')              { e.preventDefault(); $('captureDisplayFilter')?.focus(); return; }
+  }
+});
 
 await loadExamples();
 await loadTestProfiles();
