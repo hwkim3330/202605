@@ -1589,6 +1589,23 @@ pre {
   gap: 10px;
 }
 
+.versionChip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 0.15s;
+}
+.versionChip:hover {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
+}
+
 .status {
   min-width: 180px;
   max-width: 360px;

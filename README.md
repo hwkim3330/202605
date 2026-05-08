@@ -110,7 +110,7 @@ cd 202605
 | Tab | What it does |
 |---|---|
 | **Sender** | Build any frame (Ethernet II / ARP / IPv4·UDP / IPv4·ICMP / Raw EtherType / 802.1Q) and transmit it. Auto-rebuilds the Frame Details + Frame Bytes preview on every edit (no need to click Refresh). The bottom `Packet List` is a sequence builder: click rows to load, edit inline, save as JSON, replay with `Send List` / `Send Selected`. |
-| **Capture** | Wireshark-style live packet list streamed from the agent over NDJSON. Start / Stop / Clear, auto-scroll, `pkts / pps / bytes / capturing-elapsed` chips, protocol-tinted rows. Click any row → decoded JSON + hex panes split below. Display filter accepts `tcp / udp / icmp / icmpv6 / arp / vlan / ipv4 / ipv6 / lldp / ptp / lacp / dns / dhcp / ntp / mdns` plus `mac:<substr> / ip:<substr> / port:<n>` and free-text. |
+| **Capture** | Wireshark-style live packet list streamed from the agent over NDJSON. Start / Stop / Clear, auto-scroll, `pkts / pps / bytes / capturing-elapsed` chips, protocol-tinted rows. Click any row → decoded JSON + hex panes split below. Display filter accepts `tcp / udp / icmp / icmpv6 / arp / vlan / ipv4 / ipv6 / lldp / ptp / lacp / dns / dhcp / ntp / mdns` plus `mac:<substr> / ip:<substr> / port:<n>` and free-text. **`↓ .pcap`** button serialises the buffered capture to a libpcap file readable by Wireshark / tcpdump. |
 | **Control** | Four action cards driven by the pinned peer pair: <br>• **Wire Validation** — run the standard suite (ARP / ICMP / UDP / payload patterns / frame-size 64..1514 / VLAN+PCP) on the wire and prove every step round-trips. <br>• **E2E** — burst the currently selected Sender profile across the link (default 5 packets at 200 ms). <br>• **Benchmark** — timestamped UDP stream → throughput, p50/p95/p99 latency (clock-skew adjusted), jitter, loss. <br>• **Frame-size sweep** — same benchmark across 64..1514 B with a 4-chart Chart.js report (under 10 s for 7 sizes at count=200). |
 | **Serial** | TeraTerm-style USB / TTY console. Lists `/dev/ttyUSB*`, `/dev/ttyACM*`, `/dev/ttyAMA*`, `/dev/ttymxc*`, `/dev/ttyTHS*` with USB vendor / product / serial when available. Pick a port, baud (300..3 000 000), data bits, parity, stop bits, optional RTS/CTS hardware flow control, and Connect. Live RX is streamed back over NDJSON; `Hex view` toggle shows raw byte dump. Type and press Enter (or paste `\xNN` escapes) — line ending selectable (None / LF / CR / CRLF). Local echo, BRK button, RX/TX byte counters. Pure stdlib termios on the agent side, no `pyserial` dependency. |
 
@@ -252,6 +252,17 @@ sudo ethtool -K <iface> rxvlan off txvlan off
 **Browser shows old UI after update** → hard refresh (Ctrl+F5). The static handler serves the latest files; only the browser cache is stale.
 
 ---
+
+## Documentation
+
+- [`docs/API.md`](docs/API.md) — every HTTP API endpoint with request/response shapes.
+- [`docs/samples/README.md`](docs/samples/README.md) — sample HTML reports captured against a live link.
+- [`docs/packet-test-plan.md`](docs/packet-test-plan.md) — recommended end-to-end test order.
+- [`docs/two-node-test.md`](docs/two-node-test.md) — two-PC E2E setup walkthrough.
+
+## License
+
+[MIT](LICENSE).
 
 ## Notes
 

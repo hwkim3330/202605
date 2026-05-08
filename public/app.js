@@ -1882,6 +1882,12 @@ $('receiverNodeInterface').addEventListener('change', () => {
 })();
 // ?autoStart=1 — used for headless verification of the capture pipeline
 const _autoStart = new URLSearchParams(location.search).get('autoStart') === '1';
+// Decorate the topbar version chip
+fetch('/api/version').then((r) => r.json()).then((j) => {
+  const el = document.getElementById('versionTag');
+  if (el && j?.commit) el.textContent = j.commit;
+}).catch(() => {});
+
 await loadExamples();
 await loadTestProfiles();
 await loadTestCases();

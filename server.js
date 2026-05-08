@@ -1312,6 +1312,19 @@ function openTtySession(config) {
 
 async function handleApi(req, res) {
   try {
+    if (req.method === 'GET' && req.url === '/api/version') {
+      let commit = 'dev';
+      try {
+        const head = readFileSync(join(root, '.git', 'HEAD'), 'utf8').trim();
+        if (head.startsWith('ref:')) {
+          commit = readFileSync(join(root, '.git', head.slice(5)), 'utf8').trim().slice(0, 7);
+        } else {
+          commit = head.slice(0, 7);
+        }
+      } catch {}
+      return sendJson(res, 200, { ok: true, commit, node: process.version });
+    }
+
     if (req.method === 'GET' && req.url === '/api/interfaces') {
       const result = await runAgent(['interfaces']);
       return sendJson(res, result.ok ? 200 : 500, result);
