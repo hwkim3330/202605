@@ -1104,17 +1104,22 @@ async function runTestCase(reqBody) {
       // immediately after src/dst MAC. Drop bytes 12..16 (hex 24..32).
       altHex = step.expectedFrameHex.slice(0, 24) + step.expectedFrameHex.slice(32);
     }
+    // Cap matched frames per step at expectedCount so a step with a
+    // deterministic frameHex doesn't greedily claim identical frames belonging
+    // to a later loop iteration of the same profile.
     const matched = [];
-    frames.forEach((frame, frameIndex) => {
-      if (usedFrameIndexes.has(frameIndex)) return;
+    const cap = Math.max(1, Number(step.expectedCount || 1));
+    for (let frameIndex = 0; frameIndex < frames.length && matched.length < cap; frameIndex += 1) {
+      if (usedFrameIndexes.has(frameIndex)) continue;
+      const frame = frames[frameIndex];
       if (step.expectedFrameHex) {
-        if (frame.frameHex !== step.expectedFrameHex && (!altHex || frame.frameHex !== altHex)) return;
+        if (frame.frameHex !== step.expectedFrameHex && (!altHex || frame.frameHex !== altHex)) continue;
       } else if (!isExpectedFrame(frame, step.sentDecoded, senderIface, receiverIface)) {
-        return;
+        continue;
       }
       usedFrameIndexes.add(frameIndex);
       matched.push(frame);
-    });
+    }
     return {
       ...step,
       ok: step.ok && matched.length >= step.expectedCount,
