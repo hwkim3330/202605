@@ -802,10 +802,14 @@ async function runRfc2544Throughput(reqBody) {
   const tolerance = Number(reqBody.tolerancePps || 100); // pps width to stop
   const linkRateMbps = Number(reqBody.linkRateMbps || 1000);
   const results = [];
-  for (const size of sizes) {
-    // Theoretical line-rate frames/sec = linkRate / ((size + 20) * 8)
+  for (const wireSize of sizes) {
+    // RFC 2544 sizes (64 .. 1518) include the 4-byte FCS that AF_PACKET hides
+    // from us. We program the agent with the in-buffer length (wireSize − 4)
+    // and report results against the wire size for comparability.
+    const size = Math.max(60, wireSize - 4);
+    // Theoretical line-rate frames/sec = linkRate / ((wireSize + 20) * 8)
     // (preamble 7 + SFD 1 + IFG 12 = 20 bytes inter-frame on the wire)
-    const wireBits = (size + 20) * 8;
+    const wireBits = (wireSize + 20) * 8;
     const theoreticalFps = Math.floor((linkRateMbps * 1e6) / wireBits);
     // Linux usermode AF_PACKET in Python tops out around ~30k pps depending on
     // CPU; clamp the upper bound so binary search doesn't waste iterations on
@@ -850,7 +854,8 @@ async function runRfc2544Throughput(reqBody) {
       }
     }
     results.push({
-      size,
+      size: wireSize,
+      bufferSize: size,
       theoreticalFps,
       bestFps: best.fps,
       utilizationPct: theoreticalFps ? Number((100 * best.fps / theoreticalFps).toFixed(2)) : 0,

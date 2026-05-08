@@ -525,13 +525,30 @@ def command_send() -> None:
         record_each = bool(profile.get("recordTimestamps")) or (
             isinstance(payload, dict) and payload.get("mode") == "benchmark"
         )
+        # Sub-millisecond sleeps are unreliable on Linux (rounded up to the
+        # scheduler tick, typically 1 ms or more). For interval_ms < 1, we use
+        # a monotonic-based busy/yield wait keyed off the start time so the
+        # actual rate matches the requested rate.
+        sub_ms = 0 < interval_ms < 1.0
+        target_period_ns = int(interval_ms * 1_000_000) if sub_ms else 0
         for index in range(count):
             frame, decoded = build_frame(profile, seq_start + index)
             tx_ns = time.time_ns()
             sent += sock.send(frame)
             if record_each:
                 tx_records.append({"seq": seq_start + index, "txTimestampNs": tx_ns, "length": len(frame)})
-            if interval_ms > 0 and index != count - 1:
+            if interval_ms <= 0 or index == count - 1:
+                continue
+            if sub_ms:
+                # Spin-wait until the next slot. Yields via os.sched_yield to
+                # avoid burning a whole core when other CPUs are free.
+                next_due_ns = tx_ns + target_period_ns
+                while time.time_ns() < next_due_ns:
+                    try:
+                        os.sched_yield()
+                    except AttributeError:
+                        pass
+            else:
                 time.sleep(interval_ms / 1000)
         elapsed = time.monotonic() - start
         end_ns = time.time_ns()
