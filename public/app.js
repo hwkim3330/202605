@@ -1450,16 +1450,21 @@ $('captureStart').addEventListener('click', () => startCaptureStream().catch((er
 }));
 $('captureStop').addEventListener('click', stopCaptureStream);
 $('captureClear').addEventListener('click', clearCapture);
-$('captureSavePcap')?.addEventListener('click', () => {
-  if (!capture.packets.length) { toast('No packets buffered yet — start a capture first.','warn'); return; }
-  const blob = buildPcap(capture.packets);
+function downloadBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  a.download = `keti-capture-${ts}.pcap`;
-  a.click();
+  a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$('captureSavePcap')?.addEventListener('click', () => {
+  if (!capture.packets.length) { toast('No packets buffered yet — start a capture first.','warn'); return; }
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  downloadBlob(buildPcap(capture.packets), `keti-capture-${ts}.pcap`);
+});
+$('captureSavePcapNg')?.addEventListener('click', () => {
+  if (!capture.packets.length) { toast('No packets buffered yet — start a capture first.','warn'); return; }
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  downloadBlob(buildPcapNg(capture.packets), `keti-capture-${ts}.pcapng`);
 });
 
 // Build a libpcap-format file from buffered frames.
@@ -1496,6 +1501,91 @@ function buildPcap(packets) {
     off += len;
   }
   return new Blob([buf], { type: 'application/vnd.tcpdump.pcap' });
+}
+
+// PCAP-NG (next-generation, RFC-draft format that Wireshark prefers).
+// Keeps full nanosecond precision via the if_tsresol option = 9 (10^-9 s).
+// We emit one Section Header Block + one Interface Description Block with
+// link_type Ethernet + snaplen 65535 + tsresol=9 + a friendly if_name option,
+// then one Enhanced Packet Block per captured frame. Packet data is padded to
+// a 4-byte boundary as the spec requires.
+function buildPcapNg(packets) {
+  const enc = new TextEncoder();
+  const ifName = enc.encode('keti-lab-capture');
+  const pad4 = (n) => (4 - (n & 3)) & 3;
+
+  // Section Header Block (Block Type 0x0a0d0d0a) — version 1.0, section length unknown (-1)
+  const shbBody = 28; // BT(4)+TotalLen(4)+ByteOrderMagic(4)+Major(2)+Minor(2)+SectionLen(8)+TotalLen(4)
+  const shb = new ArrayBuffer(shbBody);
+  const shbV = new DataView(shb);
+  shbV.setUint32(0, 0x0a0d0d0a, true);  // Block Type
+  shbV.setUint32(4, shbBody, true);     // Block Total Length
+  shbV.setUint32(8, 0x1a2b3c4d, true);  // Byte-Order Magic
+  shbV.setUint16(12, 1, true);          // Major version
+  shbV.setUint16(14, 0, true);          // Minor version
+  shbV.setBigInt64(16, -1n, true);      // Section length: unknown
+  shbV.setUint32(24, shbBody, true);    // Block Total Length (trailer)
+
+  // Interface Description Block (BT 0x00000001)
+  // Body: link_type(2) reserved(2) snaplen(4) [options...]
+  // Options: if_name (code 2), if_tsresol (code 9, length 1, value 9 (ns))
+  // Each option header: code(2) length(2) value(padded to 4)
+  const ifNameOptLen = 4 + ifName.length + pad4(ifName.length);
+  const ifTsResOptLen = 4 + 1 + 3; // code+len+value(1)+pad(3) = 8
+  const optEnd = 4; // opt_endofopt code 0 length 0
+  const idbBodyLen = 8 + ifNameOptLen + ifTsResOptLen + optEnd; // 8 = link_type+reserved+snaplen
+  const idbTotal = 4 + 4 + idbBodyLen + 4; // BT + Total + body + Total trailer
+  const idb = new ArrayBuffer(idbTotal);
+  const idbV = new DataView(idb);
+  let p = 0;
+  idbV.setUint32(p, 0x00000001, true); p += 4; // BT IDB
+  idbV.setUint32(p, idbTotal, true);   p += 4;
+  idbV.setUint16(p, 1, true);          p += 2; // LinkType: LINKTYPE_ETHERNET
+  idbV.setUint16(p, 0, true);          p += 2; // Reserved
+  idbV.setUint32(p, 65535, true);      p += 4; // SnapLen
+  // if_name option (code 2)
+  idbV.setUint16(p, 2, true);          p += 2;
+  idbV.setUint16(p, ifName.length, true); p += 2;
+  new Uint8Array(idb, p, ifName.length).set(ifName); p += ifName.length;
+  p += pad4(ifName.length);
+  // if_tsresol option (code 9): 1 byte = 9 (powers-of-ten resolution, 10^-9 = ns)
+  idbV.setUint16(p, 9, true);          p += 2;
+  idbV.setUint16(p, 1, true);          p += 2;
+  idbV.setUint8 (p, 9);                p += 1;
+  p += 3; // pad to 4
+  // opt_endofopt (code 0, len 0)
+  idbV.setUint16(p, 0, true);          p += 2;
+  idbV.setUint16(p, 0, true);          p += 2;
+  idbV.setUint32(p, idbTotal, true);            // trailer
+
+  // Enhanced Packet Blocks
+  const epbs = [];
+  for (const pk of packets) {
+    const ns = pk.rxTimestampNs ?? Math.round((pk.timestamp || 0) * 1e9);
+    const len = pk.frameHex.length / 2;
+    const padLen = pad4(len);
+    const total = 4 + 4 + 4 + 4 + 4 + 4 + 4 + len + padLen + 4;
+    // BT(4)+Total(4)+IfaceID(4)+TsHi(4)+TsLo(4)+CapLen(4)+OrigLen(4)+data+pad+TotalTrailer(4)
+    const buf = new ArrayBuffer(total);
+    const v = new DataView(buf);
+    let q = 0;
+    v.setUint32(q, 0x00000006, true); q += 4; // BT EPB
+    v.setUint32(q, total, true);      q += 4;
+    v.setUint32(q, 0, true);          q += 4; // Interface ID 0
+    // 64-bit ns timestamp split into high/low for endian-safe write
+    const big = BigInt(ns);
+    v.setUint32(q,     Number(big >> 32n) >>> 0, true); q += 4; // tsHigh
+    v.setUint32(q,     Number(big & 0xffffffffn) >>> 0, true); q += 4; // tsLow
+    v.setUint32(q, len, true);        q += 4; // captured len
+    v.setUint32(q, len, true);        q += 4; // original len
+    const u8 = new Uint8Array(buf, q, len);
+    for (let i = 0; i < len; i += 1) u8[i] = parseInt(pk.frameHex.substr(i * 2, 2), 16);
+    q += len + padLen;
+    v.setUint32(q, total, true);      // trailer
+    epbs.push(buf);
+  }
+
+  return new Blob([shb, idb, ...epbs], { type: 'application/x-pcapng' });
 }
 $('captureDisplayFilter').addEventListener('input', () => {
   // debounce

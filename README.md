@@ -255,8 +255,9 @@ sudo ethtool -K <iface> rxvlan off txvlan off
 
 ## Documentation
 
+- [`CHANGELOG.md`](CHANGELOG.md) — chronological project journey grouped by capability.
 - [`docs/API.md`](docs/API.md) — every HTTP API endpoint with request/response shapes.
-- [`docs/samples/README.md`](docs/samples/README.md) — sample HTML reports captured against a live link.
+- [`docs/samples/README.md`](docs/samples/README.md) — sample HTML / JSON reports + a sample .pcap captured against a live link.
 - [`docs/packet-test-plan.md`](docs/packet-test-plan.md) — recommended end-to-end test order.
 - [`docs/two-node-test.md`](docs/two-node-test.md) — two-PC E2E setup walkthrough.
 
