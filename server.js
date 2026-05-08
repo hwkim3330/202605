@@ -1,6 +1,10 @@
 import { createServer } from 'node:http';
 import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
-import { createReadStream, existsSync } from 'node:fs';
+import { createReadStream, existsSync, statSync } from 'node:fs';
+
+function fsStatIsFile(p) {
+  try { return statSync(p).isFile(); } catch { return false; }
+}
 import { extname, join, normalize } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -1562,11 +1566,20 @@ async function handleApi(req, res) {
 }
 
 function serveStatic(req, res) {
-  const requestPath = decodeURIComponent(new URL(req.url, `http://${req.headers.host}`).pathname);
+  let requestPath;
+  try {
+    // Use a fixed base; req.headers.host can be empty/malformed and URL() throws on
+    // exotic inputs like '//'. Fall back to a simple path strip.
+    requestPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  } catch {
+    const q = req.url.indexOf('?');
+    requestPath = q >= 0 ? req.url.slice(0, q) : req.url;
+  }
+  if (!requestPath || requestPath[0] !== '/') requestPath = '/' + (requestPath || '');
   const clean = normalize(requestPath).replace(/^(\.\.[/\\])+/, '');
   if (clean.startsWith('/reports/')) {
     const reportPath = join(root, clean);
-    if (reportPath.startsWith(reportsDir) && existsSync(reportPath)) {
+    if (reportPath.startsWith(reportsDir) && existsSync(reportPath) && fsStatIsFile(reportPath)) {
       const type = mimeTypes.get(extname(reportPath)) || 'text/html; charset=utf-8';
       res.writeHead(200, { 'content-type': type });
       createReadStream(reportPath).pipe(res);
@@ -1576,7 +1589,7 @@ function serveStatic(req, res) {
   const relative = clean === '/' ? '/index.html' : clean;
   const filePath = join(publicDir, relative);
 
-  if (!filePath.startsWith(publicDir) || !existsSync(filePath)) {
+  if (!filePath.startsWith(publicDir) || !existsSync(filePath) || !fsStatIsFile(filePath)) {
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('Not found');
     return;
@@ -1588,11 +1601,30 @@ function serveStatic(req, res) {
 }
 
 const server = createServer((req, res) => {
-  if (req.url?.startsWith('/api/')) {
-    handleApi(req, res);
-    return;
+  try {
+    if (req.url?.startsWith('/api/')) {
+      handleApi(req, res);
+      return;
+    }
+    serveStatic(req, res);
+  } catch (err) {
+    try {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+      }
+      res.end(`Server error: ${err.message}\n`);
+    } catch {}
+    console.error(`[handler] ${req.method} ${req.url} →`, err.message);
   }
-  serveStatic(req, res);
+});
+
+// Last-line safety net: an unhandled rejection or async throw must never bring
+// the lab down — log and keep serving.
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err);
 });
 
 server.listen(port, '0.0.0.0', () => {
