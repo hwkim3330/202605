@@ -179,27 +179,17 @@
             </div>
           </aside>
 
-          <section class="workPane">
+          <section class="workPane senderWorkPane">
             <div class="heroStrip senderStrip">
               <div>
                 <strong>Sender</strong>
-                <span>Transmit crafted frames from this PC's selected interface.</span>
+                <span>Transmit crafted frames from this PC's selected interface. Edit any field — the preview rebuilds automatically.</span>
               </div>
               <div class="heroActions">
                 <button id="send" class="primaryAction">Send Packet</button>
                 <button id="build" class="ghostBtn small" title="Preview is auto-updated as you edit; click to force a rebuild">↻ Refresh preview</button>
               </div>
             </div>
-            <section class="detailGrid tall">
-              <div class="detailPane">
-                <div class="sectionTitle">Frame Details</div>
-                <pre id="decoded"></pre>
-              </div>
-              <div class="detailPane">
-                <div class="sectionTitle">Frame Bytes</div>
-                <pre id="hexdump"></pre>
-              </div>
-            </section>
 
             <section class="sequencePanel">
               <div class="sequenceHeader">
@@ -262,6 +252,17 @@
               <textarea id="caseDescription" class="hiddenCaseDescription" rows="1" aria-label="Test case description"></textarea>
               <pre id="caseStepPreview" class="hidden"></pre>
               <pre id="caseRunSummary" class="hidden"></pre>
+            </section>
+
+            <section class="detailGrid senderDetail">
+              <div class="detailPane">
+                <div class="sectionTitle">Frame Details (auto-updated)</div>
+                <pre id="decoded"></pre>
+              </div>
+              <div class="detailPane">
+                <div class="sectionTitle">Frame Bytes</div>
+                <pre id="hexdump"></pre>
+              </div>
             </section>
           </section>
         </section>
