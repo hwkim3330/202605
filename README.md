@@ -256,6 +256,7 @@ sudo ethtool -K <iface> rxvlan off txvlan off
 ## Documentation
 
 - [`CHANGELOG.md`](CHANGELOG.md) — chronological project journey grouped by capability.
+- [`docs/methodology.md`](docs/methodology.md) — what every measurement actually measures, the math behind it, and the limitations. Read this before putting numbers in a paper or a customer report.
 - [`docs/API.md`](docs/API.md) — every HTTP API endpoint with request/response shapes.
 - [`docs/samples/README.md`](docs/samples/README.md) — sample HTML / JSON reports + a sample .pcap captured against a live link.
 - [`docs/packet-test-plan.md`](docs/packet-test-plan.md) — recommended end-to-end test order.

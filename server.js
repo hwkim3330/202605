@@ -1499,6 +1499,12 @@ async function handleApi(req, res) {
       return sendJson(res, result.ok ? 200 : 400, result);
     }
 
+    if (req.method === 'POST' && req.url === '/api/verify-prbs') {
+      const body = await readRequestJson(req);
+      const result = await runAgent(['verify-prbs'], body, Number(body.timeoutSec || 5) * 1000 + 5000);
+      return sendJson(res, result.ok ? 200 : 400, result);
+    }
+
     if (req.method === 'POST' && req.url === '/api/capture-stream') {
       const body = await readRequestJson(req);
       res.writeHead(200, {

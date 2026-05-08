@@ -178,5 +178,130 @@ class PayloadTests(unittest.TestCase):
         self.assertGreater(ts_ns, 1_700_000_000_000_000_000)
 
 
+class RoundTripTests(unittest.TestCase):
+    """Property tests: build_frame should produce bytes that, when fed through
+    decode_frame, reconstruct the original logical fields. If this ever breaks
+    one of build/decode is wrong by definition."""
+
+    def _expect(self, profile, predicates):
+        frame, _ = pa.build_frame(profile)
+        decoded = pa.decode_frame(frame)
+        for path, expected in predicates.items():
+            value = decoded
+            for key in path.split("."):
+                value = value.get(key) if isinstance(value, dict) else None
+            self.assertEqual(value, expected, msg=f"{path} expected={expected!r} got={value!r} (frame={frame.hex()})")
+
+    def test_udp_ipv4_round_trip(self):
+        self._expect(
+            {
+                "protocol": "udp",
+                "srcMac": "aa:bb:cc:dd:ee:01",
+                "dstMac": "aa:bb:cc:dd:ee:02",
+                "ipv4": {"src": "10.1.2.3", "dst": "10.4.5.6", "ttl": 32},
+                "udp": {"srcPort": 1111, "dstPort": 2222},
+                "payload": {"mode": "text", "data": "hello"},
+            },
+            {
+                "ethernet.dstMac": "aa:bb:cc:dd:ee:02",
+                "ethernet.srcMac": "aa:bb:cc:dd:ee:01",
+                "ipv4.src": "10.1.2.3", "ipv4.dst": "10.4.5.6", "ipv4.ttl": 32,
+                "udp.srcPort": 1111, "udp.dstPort": 2222,
+            },
+        )
+
+    def test_udp_ipv6_round_trip(self):
+        self._expect(
+            {
+                "protocol": "udp",
+                "srcMac": "aa:bb:cc:dd:ee:01",
+                "dstMac": "aa:bb:cc:dd:ee:02",
+                "ipv6": {"src": "2001:db8::1", "dst": "2001:db8::2", "hopLimit": 42},
+                "udp": {"srcPort": 5060, "dstPort": 5061},
+                "payload": {"mode": "text", "data": "x"},
+            },
+            {
+                "ipv6.src": "2001:db8::1", "ipv6.dst": "2001:db8::2", "ipv6.hopLimit": 42,
+                "udp.srcPort": 5060, "udp.dstPort": 5061,
+            },
+        )
+
+    def test_tcp_flags_round_trip(self):
+        frame, _ = pa.build_frame({
+            "protocol": "tcp",
+            "srcMac": "aa:bb:cc:dd:ee:01", "dstMac": "aa:bb:cc:dd:ee:02",
+            "ipv4": {"src": "10.0.0.1", "dst": "10.0.0.2", "ttl": 64},
+            "tcp": {"srcPort": 12345, "dstPort": 80, "flags": ["SYN", "ACK", "PSH"], "window": 4096, "seq": 7, "ack": 9},
+            "payload": {"mode": "text", "data": ""},
+        })
+        d = pa.decode_frame(frame)
+        self.assertEqual(d["tcp"]["srcPort"], 12345)
+        self.assertEqual(d["tcp"]["dstPort"], 80)
+        self.assertEqual(d["tcp"]["seq"], 7)
+        self.assertEqual(d["tcp"]["ack"], 9)
+        self.assertEqual(d["tcp"]["window"], 4096)
+        self.assertEqual(set(d["tcp"]["flags"]), {"SYN", "ACK", "PSH"})
+
+    def test_arp_round_trip(self):
+        frame, _ = pa.build_frame({
+            "protocol": "arp",
+            "srcMac": "aa:bb:cc:dd:ee:01", "dstMac": "ff:ff:ff:ff:ff:ff",
+            "arp": {"operation": 1, "senderIp": "10.0.0.1", "targetIp": "10.0.0.99"},
+        })
+        d = pa.decode_frame(frame)
+        self.assertEqual(d["arp"]["operation"], 1)
+        self.assertEqual(d["arp"]["senderIp"], "10.0.0.1")
+        self.assertEqual(d["arp"]["targetIp"], "10.0.0.99")
+
+    def test_vlan_round_trip(self):
+        frame, _ = pa.build_frame({
+            "protocol": "udp",
+            "srcMac": "aa:bb:cc:dd:ee:01", "dstMac": "aa:bb:cc:dd:ee:02",
+            "ipv4": {"src": "10.0.0.1", "dst": "10.0.0.2", "ttl": 64},
+            "udp": {"srcPort": 1, "dstPort": 2},
+            "vlan": {"enabled": True, "id": 4093, "priority": 6},
+            "payload": {"mode": "text", "data": "v"},
+        })
+        d = pa.decode_frame(frame)
+        self.assertEqual(d["vlan"]["id"], 4093)
+        self.assertEqual(d["vlan"]["priority"], 6)
+
+
+class PrbsTests(unittest.TestCase):
+    def test_prbs_regeneration_matches(self):
+        """Receiver-side BER measurement only works if the same (order, seed)
+        re-yields the exact same byte sequence on a different machine. Property:
+        prbs_bytes is deterministic and order-independent across calls."""
+        for order in (7, 15, 23, 31):
+            a = pa.prbs_bytes(order, 0x12345, 1024)
+            b = pa.prbs_bytes(order, 0x12345, 1024)
+            self.assertEqual(a, b, msg=f"PRBS-{order} not deterministic")
+            self.assertEqual(len(a), 1024)
+            # Different seed → different output
+            c = pa.prbs_bytes(order, 0x67890, 1024)
+            self.assertNotEqual(a, c, msg=f"PRBS-{order} same output for different seeds")
+
+    def test_prbs_no_all_zero_state(self):
+        """LFSR seeded with 0 has the property that the next state is 0 forever
+        (degenerate). We map seed=0 to seed=1 silently. Verify the output is
+        non-zero in that case."""
+        out = pa.prbs_bytes(23, 0, 64)
+        self.assertNotEqual(out, b"\x00" * 64)
+
+    def test_ber_zero_against_self(self):
+        """If we XOR a sequence against itself, popcount is 0 — sanity check
+        for the BER integer-XOR fast path used in command_verify_prbs."""
+        a = pa.prbs_bytes(23, 0x7fffff, 1024)
+        diff = int.from_bytes(a, "big") ^ int.from_bytes(a, "big")
+        self.assertEqual(pa.popcount(diff), 0)
+
+    def test_ber_one_bit(self):
+        a = bytearray(pa.prbs_bytes(23, 0x7fffff, 64))
+        b = bytearray(a)
+        b[10] ^= 0x40   # flip a single bit
+        diff = int.from_bytes(a, "big") ^ int.from_bytes(b, "big")
+        self.assertEqual(pa.popcount(diff), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

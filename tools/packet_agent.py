@@ -117,28 +117,42 @@ def payload_bytes(profile: dict[str, Any], sequence: int | None = None) -> bytes
             return header[:size]
         return header + bytes(size - len(header))
     if mode == "prbs":
-        # Pseudo-random bit sequences per RFC 4814 / O.150 — useful for line BER
-        # checks. Polynomial-deterministic so receiver can re-generate and verify.
-        size = int(payload.get("size", 256))
-        order = int(payload.get("order", 23))  # 7 / 15 / 23 typical
-        taps = {7: (7, 6), 15: (15, 14), 23: (23, 18), 31: (31, 28)}.get(order, (23, 18))
-        state = int(payload.get("seed", 0x7FFFFF)) & ((1 << taps[0]) - 1)
-        if state == 0:
-            state = 0x1
-        out = bytearray(size)
-        bit = 0
-        byte = 0
-        for i in range(size * 8):
-            new = ((state >> (taps[0] - 1)) ^ (state >> (taps[1] - 1))) & 1
-            state = ((state << 1) | new) & ((1 << taps[0]) - 1)
-            byte = (byte << 1) | new
-            bit += 1
-            if bit == 8:
-                out[i // 8] = byte
-                byte = 0
-                bit = 0
-        return bytes(out)
+        return prbs_bytes(int(payload.get("order", 23)), int(payload.get("seed", 0x7FFFFF)), int(payload.get("size", 256)))
     return str(payload.get("data", "ethernet-packet-lab")).encode()
+
+
+# Pseudo-random bit sequences per RFC 4814 / O.150 / O.151. Polynomial-deterministic
+# Galois-style LFSR shift left + xor-feedback. Same (order, seed) on both sides
+# means the receiver can regenerate the *exact* expected payload and count actual
+# bit errors — turning the lab into a real BER measurement instead of just loss
+# percentage. We expose this as a top-level function so the analyser can call it
+# without going through payload_bytes().
+PRBS_TAPS = {7: (7, 6), 15: (15, 14), 23: (23, 18), 31: (31, 28)}
+
+
+def prbs_bytes(order: int, seed: int, size: int) -> bytes:
+    taps = PRBS_TAPS.get(order, PRBS_TAPS[23])
+    mask = (1 << taps[0]) - 1
+    state = seed & mask
+    if state == 0:
+        state = 1
+    out = bytearray(size)
+    byte = 0
+    bit = 0
+    for i in range(size * 8):
+        new = ((state >> (taps[0] - 1)) ^ (state >> (taps[1] - 1))) & 1
+        state = ((state << 1) | new) & mask
+        byte = (byte << 1) | new
+        bit += 1
+        if bit == 8:
+            out[i // 8] = byte
+            byte = 0
+            bit = 0
+    return bytes(out)
+
+
+def popcount(x: int) -> int:
+    return bin(x).count("1")
 
 
 def ethernet_header(profile: dict[str, Any], ether_type: int) -> bytes:
@@ -836,9 +850,95 @@ def command_capture_stream() -> None:
             pass
 
 
+def command_verify_prbs() -> None:
+    """Capture for `timeoutSec` seconds and compare every UDP payload against
+    the expected PRBS sequence regenerated locally with the same (order, seed).
+    Reports total bit errors, total bits compared, and the raw BER. Same job a
+    real T-BERD or Anritsu line-rate BERT does, just at usermode AF_PACKET
+    speeds."""
+    req = read_json()
+    interface = req.get("interface")
+    if not interface:
+        fail("interface is required")
+    timeout_sec = float(req.get("timeoutSec", 5))
+    max_frames = int(req.get("maxFrames", 0)) or 0
+    src_mac_filter = (req.get("srcMac") or "").lower()
+    order = int(req.get("order", 23))
+    seed = int(req.get("seed", 0x7FFFFF))
+    expected_size = int(req.get("payloadSize", 256))
+    expected = prbs_bytes(order, seed, expected_size)
+    expected_int = int.from_bytes(expected, "big")
+    bits_total = 0
+    bit_errors = 0
+    matched = 0
+    skipped_short = 0
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
+        sock.bind((interface, 0))
+        sock.settimeout(0.25)
+    except PermissionError:
+        fail("raw socket permission denied. Run agent with sudo or CAP_NET_RAW.")
+        return
+    deadline = time.monotonic() + timeout_sec if timeout_sec > 0 else None
+    try:
+        while True:
+            if deadline and time.monotonic() >= deadline:
+                break
+            if max_frames and matched >= max_frames:
+                break
+            try:
+                frame, _addr = sock.recvfrom(65535)
+            except socket.timeout:
+                continue
+            decoded = decode_frame(frame)
+            eth = decoded.get("ethernet", {})
+            if src_mac_filter and eth.get("srcMac", "").lower() != src_mac_filter:
+                continue
+            udp = decoded.get("udp")
+            if not udp:
+                continue
+            # Locate UDP payload
+            offset = 14 + (4 if decoded.get("vlan") else 0) + (4 if decoded.get("vlanInner") else 0)
+            if decoded.get("ipv6"):
+                l4 = offset + 40
+            elif decoded.get("ipv4"):
+                ihl = (frame[offset] & 0x0F) * 4
+                l4 = offset + ihl
+            else:
+                continue
+            udp_payload = frame[l4 + 8 : l4 + udp["length"]]
+            if len(udp_payload) < expected_size:
+                skipped_short += 1
+                continue
+            actual = udp_payload[:expected_size]
+            diff = int.from_bytes(actual, "big") ^ expected_int
+            bit_errors += popcount(diff)
+            bits_total += expected_size * 8
+            matched += 1
+    except Exception as exc:
+        fail(str(exc))
+        return
+    finally:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+    ber = (bit_errors / bits_total) if bits_total else 0.0
+    print(json.dumps({
+        "ok": True,
+        "matched": matched,
+        "skippedShort": skipped_short,
+        "bitsCompared": bits_total,
+        "bitErrors": bit_errors,
+        "ber": ber,
+        "berScientific": f"{ber:.3e}",
+        "config": {"order": order, "seed": seed, "payloadSize": expected_size},
+    }))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ethernet Packet Lab raw-socket agent")
-    parser.add_argument("command", choices=["interfaces", "build", "send", "capture", "capture-stream"])
+    parser.add_argument("command", choices=["interfaces", "build", "send", "capture", "capture-stream", "verify-prbs"])
     args = parser.parse_args()
     if args.command == "interfaces":
         list_interfaces()
@@ -850,6 +950,8 @@ def main() -> None:
         command_capture()
     elif args.command == "capture-stream":
         command_capture_stream()
+    elif args.command == "verify-prbs":
+        command_verify_prbs()
 
 
 if __name__ == "__main__":
