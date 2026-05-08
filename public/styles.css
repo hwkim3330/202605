@@ -618,6 +618,22 @@ body.captureMode .toolbar { padding: 6px 16px; }
 
 .wsEmpty.hidden { display: none; }
 
+.layerLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-family: ui-sans-serif, system-ui;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 6px;
+}
+.layerLegend span { display: inline-flex; align-items: center; gap: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.layerLegend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }
+.hexOff { color: #64748b; }
+.hexAscii { color: #cbd5e1; }
+
 /* ----- Serial / TTY tab ----- */
 body.serialMode .linkStrip { display: none; }
 .serialViewTT {

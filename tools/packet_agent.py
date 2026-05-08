@@ -19,6 +19,14 @@ ETH_P_LLDP = 0x88cc
 ETH_P_PTP  = 0x88f7
 ETH_P_LACP = 0x8809
 ETH_P_QINQ = 0x88a8
+
+# AF_PACKET / cmsg constants (not all in socket module across Python versions)
+SOL_PACKET = 263
+PACKET_AUXDATA = 8
+PACKET_STATISTICS = 6
+PACKET_VERSION = 10
+TP_STATUS_VLAN_VALID = 0x10
+TP_STATUS_VLAN_TPID_VALID = 0x40
 IP_PROTO_ICMP = 1
 IP_PROTO_TCP = 6
 IP_PROTO_UDP = 17
@@ -349,6 +357,45 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
             if len(udp_payload) >= 16 and udp_payload[:4] == b"KETI":
                 seq, ts_ns = struct.unpack("!IQ", udp_payload[4:16])
                 decoded["benchmark"] = {"seq": seq, "txTimestampNs": ts_ns}
+            # Application layer hints
+            if (src_port == 53 or dst_port == 53) and len(udp_payload) >= 12:
+                tx, flags, qd, an, ns_, ar = struct.unpack("!HHHHHH", udp_payload[:12])
+                qr = (flags >> 15) & 1
+                opcode = (flags >> 11) & 0xF
+                rcode = flags & 0xF
+                decoded["dns"] = {"id": tx, "qr": "response" if qr else "query", "opcode": opcode, "rcode": rcode, "qdCount": qd, "anCount": an, "nsCount": ns_, "arCount": ar}
+            elif (src_port in (67, 68) or dst_port in (67, 68)) and len(udp_payload) >= 240:
+                op, htype, hlen, hops = struct.unpack("!BBBB", udp_payload[:4])
+                xid = struct.unpack("!I", udp_payload[4:8])[0]
+                yiaddr = socket.inet_ntoa(udp_payload[16:20])
+                ciaddr = socket.inet_ntoa(udp_payload[12:16])
+                magic = udp_payload[236:240]
+                msg_type = None
+                if magic == b"\x63\x82\x53\x63":
+                    p = 240
+                    while p < len(udp_payload):
+                        opt = udp_payload[p]; p += 1
+                        if opt == 0xff: break
+                        if opt == 0: continue
+                        if p >= len(udp_payload): break
+                        olen = udp_payload[p]; p += 1
+                        if opt == 53 and olen == 1:
+                            msg_type = udp_payload[p]
+                            break
+                        p += olen
+                names = {1:"DISCOVER",2:"OFFER",3:"REQUEST",4:"DECLINE",5:"ACK",6:"NAK",7:"RELEASE",8:"INFORM"}
+                decoded["dhcp"] = {"op": "request" if op == 1 else "reply", "htype": htype, "hlen": hlen, "xid": f"0x{xid:08x}", "ciaddr": ciaddr, "yiaddr": yiaddr, "messageType": names.get(msg_type, msg_type) if msg_type else None}
+            elif (src_port == 123 or dst_port == 123) and len(udp_payload) >= 48:
+                li_vn_mode = udp_payload[0]
+                li = (li_vn_mode >> 6) & 0x3
+                vn = (li_vn_mode >> 3) & 0x7
+                mode = li_vn_mode & 0x7
+                stratum = udp_payload[1]
+                decoded["ntp"] = {"version": vn, "mode": mode, "stratum": stratum, "leapIndicator": li}
+            elif (src_port == 4789 or dst_port == 4789) and len(udp_payload) >= 8:
+                vflags = udp_payload[0]
+                vni = (udp_payload[4] << 16) | (udp_payload[5] << 8) | udp_payload[6]
+                decoded["vxlan"] = {"flags": f"0x{vflags:02x}", "vni": vni}
         elif proto == IP_PROTO_ICMP and len(frame) >= l4 + 8:
             typ, code, csum, ident, seq = struct.unpack("!BBHHH", frame[l4 : l4 + 8])
             decoded["icmp"] = {"type": typ, "code": code, "checksum": f"0x{csum:04x}", "id": ident, "seq": seq}
@@ -362,6 +409,49 @@ def decode_frame(frame: bytes) -> dict[str, Any]:
                 "dataOffset": data_off, "flags": flag_names, "flagsRaw": f"0x{flags:03x}",
                 "window": win, "checksum": f"0x{csum:04x}", "urgent": urg,
             }
+            # TLS ClientHello sniff: TLS record (0x16=Handshake) + 0x01 = ClientHello
+            tls_off = l4 + data_off
+            if len(frame) >= tls_off + 6 and frame[tls_off] == 0x16 and frame[tls_off + 5] == 0x01:
+                tls_ver_major = frame[tls_off + 1]
+                tls_ver_minor = frame[tls_off + 2]
+                # SNI extraction
+                sni = None
+                try:
+                    p = tls_off + 5 + 4 + 2 + 32  # type(1)+len(3)+ver(2)+random(32)
+                    sid_len = frame[p]; p += 1 + sid_len
+                    cs_len = struct.unpack("!H", frame[p:p+2])[0]; p += 2 + cs_len
+                    cm_len = frame[p]; p += 1 + cm_len
+                    if p + 2 <= len(frame):
+                        ext_len = struct.unpack("!H", frame[p:p+2])[0]; p += 2
+                        end = p + ext_len
+                        while p + 4 <= min(end, len(frame)):
+                            ext_type, ext_size = struct.unpack("!HH", frame[p:p+4])
+                            p += 4
+                            if ext_type == 0 and ext_size >= 5:  # server_name
+                                # list_len(2) name_type(1) name_len(2) name(name_len)
+                                ne = p + ext_size
+                                p2 = p + 2 + 1
+                                name_len = struct.unpack("!H", frame[p2:p2+2])[0]
+                                sni = frame[p2+2:p2+2+name_len].decode("ascii", errors="replace")
+                                break
+                            p += ext_size
+                except Exception:
+                    pass
+                decoded["tls"] = {"version": f"TLS {tls_ver_major}.{tls_ver_minor}", "type": "ClientHello", "sni": sni}
+        # ICMP error messages (Type 3/4/5/11/12) carry the offending IPv4 header + 8 bytes after the ICMP header
+        if proto == IP_PROTO_ICMP and "icmp" in decoded and decoded["icmp"]["type"] in (3, 4, 5, 11, 12):
+            inner = frame[l4 + 8 : l4 + 8 + 28]
+            if len(inner) >= 20 and (inner[0] >> 4) == 4:
+                ihl_in = (inner[0] & 0x0F) * 4
+                proto_in = inner[9]
+                src_in = socket.inet_ntoa(inner[12:16])
+                dst_in = socket.inet_ntoa(inner[16:20])
+                inner_info = {"src": src_in, "dst": dst_in, "protocol": proto_in}
+                if proto_in in (IP_PROTO_UDP, IP_PROTO_TCP) and len(inner) >= ihl_in + 4:
+                    sp_in, dp_in = struct.unpack("!HH", inner[ihl_in:ihl_in + 4])
+                    inner_info["srcPort"] = sp_in
+                    inner_info["dstPort"] = dp_in
+                decoded["icmp"]["inner"] = inner_info
     elif ether_type == ETH_P_IPV6 and len(frame) >= offset + 40:
         word = struct.unpack("!I", frame[offset:offset+4])[0]
         version = (word >> 28) & 0xF
@@ -636,6 +726,11 @@ def command_capture_stream() -> None:
     src_mac_filter = (req.get("srcMac") or "").lower()
     try:
         sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
+        # Ask kernel to attach auxiliary cmsg data: hardware-stripped VLAN tag + status bits
+        try:
+            sock.setsockopt(SOL_PACKET, PACKET_AUXDATA, 1)
+        except OSError:
+            pass
         sock.bind((interface, 0))
         sock.settimeout(0.25)
     except PermissionError:
@@ -647,6 +742,7 @@ def command_capture_stream() -> None:
     print(json.dumps({"type": "start", "interface": interface, "timestampNs": time.time_ns()}), flush=True)
     deadline = time.monotonic() + timeout_sec if timeout_sec > 0 else None
     count = 0
+    last_stats_emit = time.monotonic()
     try:
         while True:
             if deadline and time.monotonic() >= deadline:
@@ -654,11 +750,39 @@ def command_capture_stream() -> None:
             if max_frames and count >= max_frames:
                 break
             try:
-                frame, addr = sock.recvfrom(65535)
+                # recvmsg pulls AUX cmsg with stripped 802.1Q tag for offloaded NICs
+                buf, ancdata, _flags, _addr = sock.recvmsg(65535, socket.CMSG_LEN(20))
             except socket.timeout:
+                # periodic kernel drop-stats sample so the UI sees them even at low rates
+                now = time.monotonic()
+                if now - last_stats_emit > 2.0:
+                    last_stats_emit = now
+                    try:
+                        s = sock.getsockopt(SOL_PACKET, PACKET_STATISTICS, 8)
+                        pkts, drops = struct.unpack("II", s)
+                        print(json.dumps({"type": "stats", "kernelPackets": pkts, "kernelDrops": drops}), flush=True)
+                    except OSError:
+                        pass
+                continue
+            except OSError:
                 continue
             rx_ns = time.time_ns()
-            decoded = decode_frame(frame)
+            stripped_vlan = None
+            for level, type_, data in ancdata:
+                if level == SOL_PACKET and type_ == PACKET_AUXDATA and len(data) >= 20:
+                    aux_status, _aux_len, _aux_snaplen, _aux_mac, aux_net, aux_vlan_tci, aux_vlan_tpid = struct.unpack("=IIIHHHH", data[:20])
+                    if aux_status & TP_STATUS_VLAN_VALID:
+                        tpid = aux_vlan_tpid if (aux_status & TP_STATUS_VLAN_TPID_VALID) else 0x8100
+                        stripped_vlan = {"tpid": f"0x{tpid:04x}", "tci": aux_vlan_tci}
+            # If the NIC stripped the tag, splice it back into the buffer so the
+            # decoder + matchers see the original frame as it left the wire.
+            if stripped_vlan is not None and len(buf) >= 14:
+                tci = stripped_vlan["tci"] & 0xFFFF
+                tpid = int(stripped_vlan["tpid"], 16)
+                buf = buf[:12] + struct.pack("!HH", tpid, tci) + buf[12:]
+            decoded = decode_frame(buf)
+            if stripped_vlan and "vlan" in decoded:
+                decoded["vlan"]["stripped"] = True
             eth = decoded.get("ethernet", {})
             if ether_type_filter and eth.get("etherType") != ether_type_filter:
                 continue
@@ -672,14 +796,20 @@ def command_capture_stream() -> None:
                 "n": count,
                 "timestamp": rx_ns / 1e9,
                 "rxTimestampNs": rx_ns,
-                "length": len(frame),
-                "frameHex": frame.hex(),
-                "hexdump": hexdump(frame[:256]),
+                "length": len(buf),
+                "frameHex": buf.hex(),
+                "hexdump": hexdump(buf[:256]),
                 "decoded": decoded,
             }), flush=True)
     except (BrokenPipeError, KeyboardInterrupt):
         pass
     finally:
+        try:
+            s = sock.getsockopt(SOL_PACKET, PACKET_STATISTICS, 8)
+            pkts, drops = struct.unpack("II", s)
+            print(json.dumps({"type": "stats", "kernelPackets": pkts, "kernelDrops": drops}), flush=True)
+        except Exception:
+            pass
         try:
             sock.close()
         except Exception:

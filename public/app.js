@@ -171,12 +171,14 @@ function protocolName(decoded) {
   if (decoded.arp) return 'ARP';
   if (decoded.icmpv6) return 'ICMPv6';
   if (decoded.icmp) return 'ICMP';
+  if (decoded.tls) return 'TLS';
   if (decoded.tcp) return decoded.ipv6 ? 'TCP/IPv6' : 'TCP';
+  if (decoded.dns) return 'DNS';
+  if (decoded.dhcp) return 'DHCP';
+  if (decoded.ntp) return 'NTP';
+  if (decoded.vxlan) return 'VXLAN';
   if (decoded.udp) {
     const sp = decoded.udp.srcPort, dp = decoded.udp.dstPort;
-    if (sp === 53 || dp === 53) return 'DNS';
-    if (sp === 67 || dp === 67 || sp === 68 || dp === 68) return 'DHCP';
-    if (sp === 123 || dp === 123) return 'NTP';
     if (sp === 5353 || dp === 5353) return 'mDNS';
     if (sp === 319 || dp === 319 || sp === 320 || dp === 320) return 'PTP/UDP';
     return decoded.ipv6 ? 'UDP/IPv6' : 'UDP';
@@ -184,6 +186,15 @@ function protocolName(decoded) {
   if (decoded.ipv6) return `IPv6/${decoded.ipv6.nextHeader}`;
   if (decoded.ipv4) return `IPv4/${decoded.ipv4.protocol}`;
   return decoded.ethernet?.etherType || 'Ethernet';
+}
+
+function packetInfoExtra(decoded) {
+  if (decoded.tls?.sni) return ` SNI=${decoded.tls.sni}`;
+  if (decoded.dns) return ` ${decoded.dns.qr} ${decoded.dns.rcode ? 'rcode=' + decoded.dns.rcode : ''}`;
+  if (decoded.dhcp?.messageType) return ` ${decoded.dhcp.messageType} xid=${decoded.dhcp.xid}`;
+  if (decoded.ntp) return ` v${decoded.ntp.version} stratum=${decoded.ntp.stratum}`;
+  if (decoded.vxlan) return ` VNI=${decoded.vxlan.vni}`;
+  return '';
 }
 
 function packetInfo(decoded) {
@@ -194,8 +205,8 @@ function packetInfo(decoded) {
   }
   if (decoded.ptp) return `${decoded.ptp.messageName} seq=${decoded.ptp.sequenceId} dom=${decoded.ptp.domain}`;
   if (decoded.arp) return decoded.arp.operation === 1 ? `Who has ${decoded.arp.targetIp}? Tell ${decoded.arp.senderIp}` : `${decoded.arp.senderIp} is at ${decoded.arp.senderMac}`;
-  if (decoded.tcp) return `${decoded.tcp.srcPort} → ${decoded.tcp.dstPort} [${(decoded.tcp.flags || []).join(',') || '-'}] seq=${decoded.tcp.seq} ack=${decoded.tcp.ack} win=${decoded.tcp.window}`;
-  if (decoded.udp) return `${decoded.udp.srcPort} → ${decoded.udp.dstPort}  Len=${decoded.udp.length}`;
+  if (decoded.tcp) return `${decoded.tcp.srcPort} → ${decoded.tcp.dstPort} [${(decoded.tcp.flags || []).join(',') || '-'}] seq=${decoded.tcp.seq} ack=${decoded.tcp.ack} win=${decoded.tcp.window}` + packetInfoExtra(decoded);
+  if (decoded.udp) return `${decoded.udp.srcPort} → ${decoded.udp.dstPort}  Len=${decoded.udp.length}` + packetInfoExtra(decoded);
   if (decoded.icmpv6) return `${decoded.icmpv6.typeName} (type ${decoded.icmpv6.type})`;
   if (decoded.icmp) return `type ${decoded.icmp.type}, seq ${decoded.icmp.seq}`;
   if (decoded.ipv6) return `IPv6 next=${decoded.ipv6.nextHeader}`;
@@ -246,6 +257,8 @@ function frameMatchesFilter(packet, filter) {
   if (f === 'dhcp') return d.udp && [67,68].some((p) => d.udp.srcPort === p || d.udp.dstPort === p);
   if (f === 'ntp') return d.udp && (d.udp.srcPort === 123 || d.udp.dstPort === 123);
   if (f === 'mdns') return d.udp && (d.udp.srcPort === 5353 || d.udp.dstPort === 5353);
+  if (f === 'tls') return Boolean(d.tls);
+  if (f === 'vxlan') return Boolean(d.vxlan);
   if (f.startsWith('mac:')) {
     const m = f.slice(4).trim();
     return (d.ethernet?.srcMac || '').toLowerCase().includes(m)
@@ -290,12 +303,87 @@ function appendPacketRow(packet) {
   }
 }
 
+function computeFrameLayers(decoded, hexLen) {
+  // Walk the decoded structure and return [{name, color, start, end}] byte ranges.
+  const layers = [];
+  layers.push({ name: 'Ethernet', color: '#0ea5e9', start: 0, end: 14 });
+  let off = 14;
+  if (decoded.vlan) { layers.push({ name: 'VLAN', color: '#f59e0b', start: 12, end: 16 }); off = 18; }
+  if (decoded.vlanInner) { layers.push({ name: 'VLAN inner', color: '#fbbf24', start: off - 4, end: off + 4 }); off += 4; }
+  if (decoded.ipv4) {
+    const ihl = 20; // simplification; works for default-no-options frames
+    layers.push({ name: 'IPv4', color: '#16a34a', start: off, end: off + ihl });
+    if (decoded.udp) {
+      layers.push({ name: 'UDP', color: '#7c3aed', start: off + ihl, end: off + ihl + 8 });
+      layers.push({ name: 'Payload', color: '#94a3b8', start: off + ihl + 8, end: hexLen });
+    } else if (decoded.tcp) {
+      const tcpLen = decoded.tcp.dataOffset || 20;
+      layers.push({ name: 'TCP', color: '#7c3aed', start: off + ihl, end: off + ihl + tcpLen });
+      layers.push({ name: 'Payload', color: '#94a3b8', start: off + ihl + tcpLen, end: hexLen });
+    } else if (decoded.icmp) {
+      layers.push({ name: 'ICMP', color: '#a855f7', start: off + ihl, end: off + ihl + 8 });
+      layers.push({ name: 'Payload', color: '#94a3b8', start: off + ihl + 8, end: hexLen });
+    }
+  } else if (decoded.ipv6) {
+    layers.push({ name: 'IPv6', color: '#6366f1', start: off, end: off + 40 });
+    if (decoded.udp) {
+      layers.push({ name: 'UDP', color: '#7c3aed', start: off + 40, end: off + 48 });
+      layers.push({ name: 'Payload', color: '#94a3b8', start: off + 48, end: hexLen });
+    } else if (decoded.tcp) {
+      const tcpLen = decoded.tcp.dataOffset || 20;
+      layers.push({ name: 'TCP', color: '#7c3aed', start: off + 40, end: off + 40 + tcpLen });
+      layers.push({ name: 'Payload', color: '#94a3b8', start: off + 40 + tcpLen, end: hexLen });
+    } else if (decoded.icmpv6) {
+      layers.push({ name: 'ICMPv6', color: '#a855f7', start: off + 40, end: off + 44 });
+      layers.push({ name: 'Payload', color: '#94a3b8', start: off + 44, end: hexLen });
+    }
+  } else if (decoded.arp) {
+    layers.push({ name: 'ARP', color: '#f97316', start: off, end: off + 28 });
+  } else if (decoded.lldp) {
+    layers.push({ name: 'LLDP', color: '#ec4899', start: off, end: hexLen });
+  } else if (decoded.ptp) {
+    layers.push({ name: 'PTP', color: '#d946ef', start: off, end: hexLen });
+  }
+  return layers;
+}
+
+function renderColoredHex(frameHex, layers) {
+  // Build a hexdump where each byte is wrapped in a span coloured by the layer it belongs to.
+  const bytes = [];
+  for (let i = 0; i < frameHex.length / 2; i += 1) bytes.push(frameHex.substr(i * 2, 2));
+  const colorAt = new Array(bytes.length).fill('#94a3b8');
+  for (const L of layers) {
+    for (let i = L.start; i < Math.min(L.end, bytes.length); i += 1) colorAt[i] = L.color;
+  }
+  let out = '';
+  for (let row = 0; row < bytes.length; row += 16) {
+    let hex = ''; let ascii = '';
+    for (let i = 0; i < 16 && row + i < bytes.length; i += 1) {
+      const b = bytes[row + i];
+      hex += `<span style="color:${colorAt[row + i]}">${b}</span> `;
+      const v = parseInt(b, 16);
+      ascii += (v >= 32 && v < 127) ? String.fromCharCode(v).replace('<', '&lt;').replace('>', '&gt;').replace('&', '&amp;') : '·';
+    }
+    out += `<span class="hexOff">${row.toString(16).padStart(4, '0')}</span>  ${hex.padEnd(16 * 4 - 1, ' ')}  <span class="hexAscii">${ascii}</span>\n`;
+  }
+  return out;
+}
+
+function renderLegend(layers) {
+  const seen = new Set();
+  const unique = layers.filter((L) => !seen.has(L.name) && seen.add(L.name));
+  return '<div class="layerLegend">' + unique.map((L) => `<span><i style="background:${L.color}"></i>${L.name}</span>`).join('') + '</div>';
+}
+
 function selectPacket(idx) {
   capture.selectedIdx = idx;
   const pkt = capture.packets[idx];
   if (!pkt) return;
   $('captureDecoded').textContent = JSON.stringify(pkt.decoded, null, 2);
-  $('captureHexdump').textContent = pkt.hexdump || '';
+  const hex = pkt.frameHex || '';
+  const layers = computeFrameLayers(pkt.decoded || {}, hex.length / 2);
+  const bytesEl = $('captureHexdump');
+  bytesEl.innerHTML = renderLegend(layers) + renderColoredHex(hex, layers);
   document.querySelectorAll('#packetRows tr').forEach((r) => r.classList.toggle('selected', r.dataset.idx === String(idx)));
 }
 
@@ -393,6 +481,12 @@ async function startCaptureStream() {
           capture.totalBytes += ev.length;
           capture.lastWindow.count += 1;
           if (frameMatchesFilter(ev, capture.filter)) appendPacketRow(ev);
+        } else if (ev.type === 'stats') {
+          $('capStatDrops').textContent = String(ev.kernelDrops || 0);
+          if ((ev.kernelDrops || 0) > 0) {
+            $('capStatDrops').parentElement.style.background = 'rgba(155, 28, 28, 0.12)';
+            $('capStatDrops').parentElement.style.color = '#9b1c1c';
+          }
         } else if (ev.type === 'log') {
           setStatus(`agent: ${ev.stderr}`, true);
         }
