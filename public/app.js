@@ -1315,6 +1315,53 @@ $('captureStart').addEventListener('click', () => startCaptureStream().catch((er
 }));
 $('captureStop').addEventListener('click', stopCaptureStream);
 $('captureClear').addEventListener('click', clearCapture);
+$('captureSavePcap')?.addEventListener('click', () => {
+  if (!capture.packets.length) { alert('No packets buffered yet — start a capture first.'); return; }
+  const blob = buildPcap(capture.packets);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  a.download = `keti-capture-${ts}.pcap`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// Build a libpcap-format file from buffered frames.
+// Global header (24 B) + per-packet record (16 B + frame bytes).
+// Magic 0xa1b2c3d4 (microsecond timestamps, big-endian write but we use little-endian magic).
+function buildPcap(packets) {
+  // Compute total size
+  let total = 24;
+  for (const p of packets) total += 16 + (p.frameHex.length / 2);
+  const buf = new ArrayBuffer(total);
+  const view = new DataView(buf);
+  // Global header — little-endian magic 0xa1b2c3d4 means LE byte order, microsecond resolution
+  view.setUint32(0, 0xa1b2c3d4, true);
+  view.setUint16(4, 2, true);          // version major
+  view.setUint16(6, 4, true);          // version minor
+  view.setInt32(8, 0, true);           // thiszone (GMT)
+  view.setUint32(12, 0, true);         // sigfigs
+  view.setUint32(16, 65535, true);     // snaplen
+  view.setUint32(20, 1, true);         // LINKTYPE_ETHERNET
+  let off = 24;
+  for (const p of packets) {
+    const ns = p.rxTimestampNs ?? Math.round((p.timestamp || 0) * 1e9);
+    const sec = Math.floor(ns / 1_000_000_000);
+    const usec = Math.floor((ns % 1_000_000_000) / 1000);
+    const len = p.frameHex.length / 2;
+    view.setUint32(off, sec, true);
+    view.setUint32(off + 4, usec, true);
+    view.setUint32(off + 8, len, true);   // captured length
+    view.setUint32(off + 12, len, true);  // original length
+    off += 16;
+    for (let i = 0; i < len; i += 1) {
+      view.setUint8(off + i, parseInt(p.frameHex.substr(i * 2, 2), 16));
+    }
+    off += len;
+  }
+  return new Blob([buf], { type: 'application/vnd.tcpdump.pcap' });
+}
 $('captureDisplayFilter').addEventListener('input', () => {
   // debounce
   clearTimeout(window._capFilterTimer);
