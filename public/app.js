@@ -302,8 +302,11 @@ function frameMatchesFilter(packet, filter) {
     const m = Number(f.slice(5).trim());
     return d.udp?.srcPort === m || d.udp?.dstPort === m;
   }
-  // default: substring match against the JSON
-  return JSON.stringify(d).toLowerCase().includes(f);
+  // Free-text substring against a precomputed haystack — *one* JSON.stringify
+  // per frame at ingest, not one per filter-keystroke. Drops filter-input CPU
+  // from O(N × payload-size) to O(N × search-len).
+  if (!packet._hay) packet._hay = JSON.stringify(d).toLowerCase();
+  return packet._hay.includes(f);
 }
 
 function buildPacketRow(packet) {
@@ -319,8 +322,8 @@ function buildPacketRow(packet) {
   const tr = document.createElement('tr');
   tr.dataset.idx = String(idx);
   tr.className = rowProtoClass(decoded);
+  // No per-row listener — tbody-level delegation handles clicks.
   tr.innerHTML = `<td class="colNum">${idx + 1}</td><td class="colTime">${tStr}</td><td>${src}</td><td>${dst}</td><td class="colProto">${proto}</td><td class="colLen">${packet.length}</td><td>${packetInfo(decoded)}</td>`;
-  tr.addEventListener('click', () => selectPacket(idx));
   return tr;
 }
 
@@ -1475,6 +1478,12 @@ $('send').addEventListener('click', () => send().catch((err) => {
 $('captureStart').addEventListener('click', () => startCaptureStream().catch((err) => {
   toastError(err);
 }));
+// Event delegation: one listener for the whole packet table replaces
+// per-row listeners (which scaled O(N) and held memory for evicted rows).
+$('packetRows')?.addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-idx]');
+  if (tr) selectPacket(Number(tr.dataset.idx));
+});
 $('captureStop').addEventListener('click', stopCaptureStream);
 $('captureClear').addEventListener('click', clearCapture);
 function downloadBlob(blob, name) {
@@ -1493,6 +1502,202 @@ $('captureSavePcapNg')?.addEventListener('click', () => {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   downloadBlob(buildPcapNg(capture.packets), `keti-capture-${ts}.pcapng`);
 });
+
+// --- Open .pcap / .pcapng client-side ---------------------------------
+$('captureOpenPcap')?.addEventListener('click', () => $('pcapFileInput')?.click());
+$('pcapFileInput')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (file) await loadPcapFile(file);
+  e.target.value = '';
+});
+
+async function loadPcapFile(file) {
+  if (capture.reader) {
+    toast('Stop the live capture first before opening a file.', 'warn');
+    return;
+  }
+  try {
+    const buf = await file.arrayBuffer();
+    const frames = parsePcapOrPcapNg(new DataView(buf));
+    if (!frames.length) { toast(`${file.name}: no frames parsed.`, 'warn'); return; }
+    clearCapture();
+    let i = 0;
+    for (const f of frames) {
+      f._idx = i++;
+      f.frameHex = f.frameHex || bytesToHex(new Uint8Array(buf, f._dataOffset, f._dataLength));
+      f.length = f.frameHex.length / 2;
+      // decode in-browser using a slim decoder for at least Ethernet headers;
+      // we keep the bytes raw and let the existing UI decode through the
+      // existing path (decoded already attached if we have it).
+      f.decoded = clientDecode(hexToBytes(f.frameHex));
+      capture.packets.push(f);
+      capture.totalBytes += f.length;
+      if (capture.packets.length > capture.maxBuffer) capture.packets.shift();
+    }
+    reapplyFilter();
+    $('capStatState').textContent = `file · ${frames.length} frames`;
+    $('capStatState').className = 'statChip ok';
+    toast(`Loaded ${frames.length} frames from ${file.name}`, 'ok');
+  } catch (err) {
+    toast(`Failed to parse ${file.name}: ${err.message}`, 'fail');
+  }
+}
+
+// Minimal browser-side decoder (subset of agent decoder, enough for the
+// list view + hex highlighting). Covers Ethernet / VLAN / IPv4 / IPv6 /
+// UDP / TCP / ICMP / ARP / LLDP / PTP at top level. Server-side decoder
+// is still richer; this is "good enough for an offline pcap viewer".
+function clientDecode(b) {
+  if (b.length < 14) return { length: b.length };
+  const macStr = (off) => Array.from(b.slice(off, off + 6)).map((x) => x.toString(16).padStart(2, '0')).join(':');
+  const decoded = {
+    length: b.length,
+    ethernet: { dstMac: macStr(0), srcMac: macStr(6), etherType: '0x' + ((b[12] << 8) | b[13]).toString(16).padStart(4, '0') },
+  };
+  let off = 14;
+  let etype = (b[12] << 8) | b[13];
+  if (etype === 0x8100 || etype === 0x88a8) {
+    const tci = (b[14] << 8) | b[15];
+    decoded.vlan = { tpid: '0x' + etype.toString(16), priority: (tci >> 13) & 0x7, dei: !!(tci & 0x1000), id: tci & 0xfff, etherType: '0x' + ((b[16] << 8) | b[17]).toString(16).padStart(4, '0') };
+    etype = (b[16] << 8) | b[17];
+    off = 18;
+  }
+  if (etype === 0x0800 && b.length >= off + 20) {
+    const ihl = (b[off] & 0x0f) * 4;
+    decoded.ipv4 = {
+      src: `${b[off + 12]}.${b[off + 13]}.${b[off + 14]}.${b[off + 15]}`,
+      dst: `${b[off + 16]}.${b[off + 17]}.${b[off + 18]}.${b[off + 19]}`,
+      ttl: b[off + 8], protocol: b[off + 9],
+    };
+    const l4 = off + ihl;
+    const proto = b[off + 9];
+    if (proto === 17 && b.length >= l4 + 8) {
+      decoded.udp = { srcPort: (b[l4] << 8) | b[l4 + 1], dstPort: (b[l4 + 2] << 8) | b[l4 + 3], length: (b[l4 + 4] << 8) | b[l4 + 5] };
+    } else if (proto === 6 && b.length >= l4 + 20) {
+      const offflags = (b[l4 + 12] << 8) | b[l4 + 13];
+      const flagBits = [[0x100, 'NS'], [0x80, 'CWR'], [0x40, 'ECE'], [0x20, 'URG'], [0x10, 'ACK'], [0x8, 'PSH'], [0x4, 'RST'], [0x2, 'SYN'], [0x1, 'FIN']];
+      decoded.tcp = {
+        srcPort: (b[l4] << 8) | b[l4 + 1], dstPort: (b[l4 + 2] << 8) | b[l4 + 3],
+        seq: ((b[l4 + 4] << 24) >>> 0) + (b[l4 + 5] << 16) + (b[l4 + 6] << 8) + b[l4 + 7],
+        ack: ((b[l4 + 8] << 24) >>> 0) + (b[l4 + 9] << 16) + (b[l4 + 10] << 8) + b[l4 + 11],
+        flags: flagBits.filter(([m]) => offflags & m).map(([, n]) => n),
+        window: (b[l4 + 14] << 8) | b[l4 + 15], dataOffset: ((offflags >> 12) & 0xf) * 4,
+      };
+    } else if (proto === 1 && b.length >= l4 + 8) {
+      decoded.icmp = { type: b[l4], code: b[l4 + 1], id: (b[l4 + 4] << 8) | b[l4 + 5], seq: (b[l4 + 6] << 8) | b[l4 + 7] };
+    }
+  } else if (etype === 0x86dd && b.length >= off + 40) {
+    const v6 = (start) => {
+      const parts = [];
+      for (let i = 0; i < 8; i += 1) parts.push(((b[start + i * 2] << 8) | b[start + i * 2 + 1]).toString(16));
+      // simple :: collapse for one longest zero run
+      const s = parts.join(':');
+      return s.replace(/(^|:)(?:0:){2,}/, '::').replace(/^0::/, '::').replace(/::0$/, '::');
+    };
+    decoded.ipv6 = { src: v6(off + 8), dst: v6(off + 24), hopLimit: b[off + 7], nextHeader: b[off + 6] };
+  } else if (etype === 0x0806 && b.length >= off + 28) {
+    decoded.arp = {
+      operation: (b[off + 6] << 8) | b[off + 7],
+      senderMac: macStr(off + 8), senderIp: `${b[off + 14]}.${b[off + 15]}.${b[off + 16]}.${b[off + 17]}`,
+      targetMac: macStr(off + 18), targetIp: `${b[off + 24]}.${b[off + 25]}.${b[off + 26]}.${b[off + 27]}`,
+    };
+  } else if (etype === 0x88cc) decoded.lldp = { tlvs: [] };
+  else if (etype === 0x88f7) decoded.ptp = { messageType: b[off] & 0xf };
+  return decoded;
+}
+
+// libpcap / pcap-ng parser. Returns array of { timestamp, rxTimestampNs, frameHex, length }.
+function parsePcapOrPcapNg(view) {
+  const magic = view.getUint32(0, true);
+  if (magic === 0xa1b2c3d4 || magic === 0xa1b23c4d || magic === 0xd4c3b2a1 || magic === 0x4d3cb2a1) {
+    return parsePcap(view, magic);
+  }
+  if (magic === 0x0a0d0d0a) return parsePcapNg(view);
+  throw new Error(`unknown magic 0x${magic.toString(16)}`);
+}
+
+function parsePcap(view, magic) {
+  const LE = magic === 0xa1b2c3d4 || magic === 0xa1b23c4d;
+  const nanoTs = magic === 0xa1b23c4d || magic === 0x4d3cb2a1;
+  // skip 24-byte global header
+  let off = 24;
+  const out = [];
+  while (off + 16 <= view.byteLength) {
+    const sec = view.getUint32(off, LE);
+    const subsec = view.getUint32(off + 4, LE);
+    const captured = view.getUint32(off + 8, LE);
+    off += 16;
+    if (off + captured > view.byteLength) break;
+    const ns = BigInt(sec) * 1_000_000_000n + BigInt(subsec) * (nanoTs ? 1n : 1000n);
+    out.push({ rxTimestampNs: Number(ns), timestamp: Number(ns) / 1e9, _dataOffset: view.byteOffset + off, _dataLength: captured });
+    off += captured;
+  }
+  return out;
+}
+
+function parsePcapNg(view) {
+  // Section Header Block + Interface Description Blocks + Enhanced/Simple Packet Blocks.
+  const out = [];
+  let off = 0;
+  let tsResol = 6; // default: microseconds (10^-6) per pcapng spec
+  while (off + 12 <= view.byteLength) {
+    const blockType = view.getUint32(off, true);
+    const blockLen = view.getUint32(off + 4, true);
+    if (blockLen < 12 || off + blockLen > view.byteLength) break;
+    if (blockType === 0x00000001) {
+      // IDB — parse options to find if_tsresol
+      let p = off + 16; // 8 hdr + 8 (linktype+reserved+snaplen)
+      const end = off + blockLen - 4;
+      while (p + 4 <= end) {
+        const code = view.getUint16(p, true);
+        const len = view.getUint16(p + 2, true);
+        if (code === 0) break;
+        if (code === 9 && len >= 1) {
+          const raw = view.getUint8(p + 4);
+          tsResol = raw & 0x80 ? (raw & 0x7f) : raw; // bit7 set means base-2; we treat as exponent
+        }
+        p += 4 + Math.ceil(len / 4) * 4;
+      }
+    } else if (blockType === 0x00000006 || blockType === 0x00000003) {
+      // EPB or SPB
+      let dataOff, dataLen, tsNs;
+      if (blockType === 0x00000006) {
+        const tsHi = view.getUint32(off + 12, true);
+        const tsLo = view.getUint32(off + 16, true);
+        dataLen = view.getUint32(off + 20, true);
+        dataOff = off + 28;
+        const tick = BigInt((tsHi >>> 0)) * 0x100000000n + BigInt(tsLo >>> 0);
+        // tick × 10^-tsResol seconds → nanoseconds:  ns = tick × 10^(9 - tsResol)
+        const expo = 9 - tsResol;
+        tsNs = expo >= 0 ? Number(tick * BigInt(10 ** expo)) : Number(tick / BigInt(10 ** -expo));
+      } else {
+        dataLen = view.getUint32(off + 8, true);
+        dataOff = off + 12;
+        tsNs = 0;
+      }
+      if (dataOff + dataLen <= off + blockLen - 4) {
+        out.push({ rxTimestampNs: tsNs, timestamp: tsNs / 1e9, _dataOffset: view.byteOffset + dataOff, _dataLength: dataLen });
+      }
+    }
+    off += blockLen;
+  }
+  return out;
+}
+
+// Drag & drop support: drop a .pcap or .pcapng onto the capture pane.
+(function attachPcapDnd() {
+  const tgt = document.getElementById('captureView');
+  if (!tgt) return;
+  let depth = 0;
+  tgt.addEventListener('dragenter', (e) => { e.preventDefault(); depth += 1; tgt.classList.add('dropping'); });
+  tgt.addEventListener('dragover',  (e) => { e.preventDefault(); });
+  tgt.addEventListener('dragleave', (e) => { e.preventDefault(); depth -= 1; if (depth <= 0) tgt.classList.remove('dropping'); });
+  tgt.addEventListener('drop',      (e) => {
+    e.preventDefault(); depth = 0; tgt.classList.remove('dropping');
+    const f = e.dataTransfer?.files?.[0];
+    if (f) loadPcapFile(f);
+  });
+})();
 
 // Build a libpcap-format file from buffered frames.
 // Global header (24 B) + per-packet record (16 B + frame bytes).
@@ -2064,6 +2269,17 @@ function lockToPeer() {
 }
 
 $('peerProbeBtn').addEventListener('click', () => probePeer().catch((err) => { toastError(err); }));
+
+// First-run welcome banner — show until user dismisses or sets a peer URL.
+(function maybeShowFirstRun() {
+  if (localStorage.getItem('firstRunDismissed') === '1') return;
+  if (state.peer.url) return;
+  document.getElementById('firstRunHint')?.classList.remove('hidden');
+})();
+document.getElementById('firstRunDismiss')?.addEventListener('click', () => {
+  localStorage.setItem('firstRunDismissed', '1');
+  document.getElementById('firstRunHint')?.classList.add('hidden');
+});
 $('peerInterfacePin').addEventListener('change', () => {
   state.peer.interface = $('peerInterfacePin').value;
   state.peer.iface = state.peer.interfaces.find((i) => i.name === state.peer.interface) || null;

@@ -89,6 +89,14 @@
         <div id="interfaceInfo" class="muted"></div>
       </section>
 
+      <div id="firstRunHint" class="firstRunHint hidden">
+        <span class="welcomeIcon">👋</span>
+        <div class="firstRunBody">
+          <strong>Welcome to the Ethernet Packet Lab.</strong>
+          To run two-PC tests, fill in the <b>Peer PC URL</b> on the right (e.g. <code>http://169.254.x.x:8080</code>) and press <b>Probe</b>. Single-PC frame crafting, live capture, and offline .pcap analysis work straight away. Press <kbd>?</kbd> any time for keyboard shortcuts.
+        </div>
+        <button id="firstRunDismiss" class="ghostBtn small" aria-label="Dismiss welcome">Got it</button>
+      </div>
       <section class="linkStrip">
         <div class="linkSide localSide">
           <div class="linkLabel">This PC <span class="roleTag" id="localRoleTag">SENDER</span></div>
@@ -326,6 +334,8 @@
               <button id="captureClear" class="ghostBtn">Clear</button>
               <button id="captureSavePcap" class="ghostBtn" title="libpcap (microsecond timestamps). Universally readable.">↓ .pcap</button>
               <button id="captureSavePcapNg" class="ghostBtn" title="PCAP-NG (nanosecond timestamps + interface metadata). Preferred by modern Wireshark.">↓ .pcapng</button>
+              <button id="captureOpenPcap" class="ghostBtn" title="Open a .pcap or .pcapng file (or drag-drop onto this pane). Parses client-side, no upload.">↑ Open</button>
+              <input id="pcapFileInput" type="file" accept=".pcap,.pcapng,application/vnd.tcpdump.pcap,application/x-pcapng" hidden>
               <label class="check">
                 <input id="captureFollow" type="checkbox" checked>
                 <span>Auto-scroll</span>

@@ -1646,6 +1646,47 @@ pre {
   gap: 10px;
 }
 
+/* First-run welcome banner -------------------------------------------- */
+.firstRunHint {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(15, 111, 120, 0.08));
+  border-bottom: 1px solid rgba(14, 165, 233, 0.18);
+  font-size: 13px;
+  color: var(--text);
+  animation: fadeIn 0.25s ease;
+}
+.firstRunHint.hidden { display: none; }
+.firstRunHint .welcomeIcon { font-size: 22px; }
+.firstRunHint .firstRunBody { flex: 1; line-height: 1.5; }
+.firstRunHint kbd {
+  display: inline-block; padding: 1px 6px; background: rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.16); border-bottom-width: 2px;
+  border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+}
+.firstRunHint code { background: rgba(15, 23, 42, 0.05); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* PCAP drag-drop visual ------------------------------------------------ */
+#captureView.dropping::after {
+  content: '↓  Drop .pcap or .pcapng to open  ↓';
+  position: fixed;
+  inset: 158px 0 0 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 165, 233, 0.18);
+  border: 3px dashed rgba(14, 165, 233, 0.65);
+  border-radius: 0;
+  color: #0369a1;
+  font-size: 22px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: fadeIn 0.15s ease;
+}
+
 /* Toast tray ------------------------------------------------------------ */
 .toastTray {
   position: fixed;
