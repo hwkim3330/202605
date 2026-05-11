@@ -155,6 +155,31 @@ function firstIpv4(iface) {
   return iface?.ipv4?.[0]?.local || '';
 }
 
+/**
+ * On-wire Ethernet timing. Matches the WPF companion's
+ * Services/EthernetTiming.cs so the two products report the same numbers.
+ *
+ * Wire frame structure (IEEE 802.3):
+ *   Preamble          7 bytes  (0x55 × 7)
+ *   SFD               1 byte   (0xD5)
+ *   Frame body        max(payloadBytes, 60) + FCS(4) bytes
+ *   IFG               12 bytes
+ *
+ * @param {number} payloadBytes  frame bytes excluding FCS (i.e., what AF_PACKET sees)
+ * @returns {{ wireBytes: number, wireBits: number }}
+ */
+function ethernetWireBytes(payloadBytes) {
+  const PREAMBLE_SFD = 8, FCS = 4, IFG = 12, MIN_FRAME = 64;
+  const frameBody = Math.max(payloadBytes + FCS, MIN_FRAME);
+  const wireBytes = PREAMBLE_SFD + frameBody + IFG;
+  return { wireBytes, wireBits: wireBytes * 8 };
+}
+function theoreticalFps(wireSize, linkRateMbps) {
+  // wireSize is the RFC 2544 wire size (includes FCS). We need preamble+SFD+IFG on top.
+  const { wireBits } = ethernetWireBytes(wireSize - 4);
+  return Math.floor((linkRateMbps * 1e6) / wireBits);
+}
+
 function slugifyId(value) {
   const base = String(value || 'test-case')
     .trim()
@@ -820,16 +845,15 @@ async function runRfc2544Throughput(reqBody) {
     // from us. We program the agent with the in-buffer length (wireSize − 4)
     // and report results against the wire size for comparability.
     const size = Math.max(60, wireSize - 4);
-    // Theoretical line-rate frames/sec = linkRate / ((wireSize + 20) * 8)
-    // (preamble 7 + SFD 1 + IFG 12 = 20 bytes inter-frame on the wire)
-    const wireBits = (wireSize + 20) * 8;
-    const theoreticalFps = Math.floor((linkRateMbps * 1e6) / wireBits);
+    // Theoretical line-rate frames/sec — uses ethernetWireBytes() so the
+    // companion WPF app and this server agree to the bit on the formula.
+    const theoFps = theoreticalFps(wireSize, linkRateMbps);
     // Linux usermode AF_PACKET in Python tops out around ~30k pps depending on
     // CPU; clamp the upper bound so binary search doesn't waste iterations on
     // unreachable rates.
     const userlandCap = Number(reqBody.userlandCapPps || 30000);
     let lo = 500;
-    let hi = Math.min(theoreticalFps, userlandCap);
+    let hi = Math.min(theoFps, userlandCap);
     let best = { fps: 0, throughputMbps: 0, lossPct: 100, txCount: 0, rxCount: 0 };
     const iterations = [];
     for (let iter = 0; iter < 8 && (hi - lo) > tolerance; iter += 1) {
@@ -869,9 +893,9 @@ async function runRfc2544Throughput(reqBody) {
     results.push({
       size: wireSize,
       bufferSize: size,
-      theoreticalFps,
+      theoreticalFps: theoFps,
       bestFps: best.fps,
-      utilizationPct: theoreticalFps ? Number((100 * best.fps / theoreticalFps).toFixed(2)) : 0,
+      utilizationPct: theoFps ? Number((100 * best.fps / theoFps).toFixed(2)) : 0,
       best,
       iterations
     });

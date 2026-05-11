@@ -1,0 +1,139 @@
+<UserControl x:Class="EthernetPacketGenerator.Views.CaptureView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:svc="clr-namespace:EthernetPacketGenerator.Services">
+    <UserControl.Resources>
+        <!-- Protocol row colour map (Wireshark-like) -->
+        <Style x:Key="CaptureRowStyle" TargetType="ListViewItem">
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="Padding"    Value="2,1"/>
+            <Style.Triggers>
+                <!-- TCP -->
+                <DataTrigger Binding="{Binding Protocol}" Value="TCP">
+                    <Setter Property="Background" Value="#1A3A5C"/>
+                </DataTrigger>
+                <!-- UDP -->
+                <DataTrigger Binding="{Binding Protocol}" Value="UDP">
+                    <Setter Property="Background" Value="#1A4A2E"/>
+                </DataTrigger>
+                <!-- ICMP -->
+                <DataTrigger Binding="{Binding Protocol}" Value="ICMP">
+                    <Setter Property="Background" Value="#3A2A1A"/>
+                </DataTrigger>
+                <!-- ARP -->
+                <DataTrigger Binding="{Binding Protocol}" Value="ARP">
+                    <Setter Property="Background" Value="#2A1A3A"/>
+                </DataTrigger>
+                <!-- Selected -->
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel Background="{StaticResource SurfaceBrush}">
+
+        <!-- Header -->
+        <TextBlock DockPanel.Dock="Top" Text="PACKET CAPTURE" Style="{StaticResource PanelHeader}"/>
+
+        <!-- Toolbar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6,3">
+            <Button Content="▶ Start"      Padding="8,3" Margin="0,0,4,0"
+                    Command="{Binding StartCaptureCommand}"/>
+            <Button Content="■ Stop"       Padding="8,3" Margin="0,0,4,0"
+                    Command="{Binding StopCaptureCommand}"/>
+            <Button Content="Clear"        Padding="8,3" Margin="0,0,8,0"
+                    Command="{Binding ClearCommand}"/>
+            <TextBlock Text="Filter:" VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedForeground}" Margin="0,0,4,0"/>
+            <TextBox Width="160" VerticalAlignment="Center"
+                     Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="BPF filter  예) tcp  arp  host 172.31.51.1"/>
+            <Button Content="Save .pcapng" Padding="8,3" Margin="8,0,0,0"
+                    Command="{Binding SavePcapngCommand}"/>
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="{StaticResource MutedForeground}"
+                       FontSize="10" Margin="10,0,0,0" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- Wireshark 3-pane: list (top) / decode tree (bottom-left) / hex (bottom-right) -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"   MinHeight="200"/>
+                <RowDefinition Height="5"/>
+                <RowDefinition Height="240" MinHeight="120"/>
+            </Grid.RowDefinitions>
+
+            <!-- Packet list -->
+            <ListView Grid.Row="0"
+                      ItemsSource="{Binding CapturedPackets}"
+                      SelectedItem="{Binding SelectedPacket, Mode=TwoWay}"
+                      BorderThickness="0"
+                      FontFamily="Consolas" FontSize="11"
+                      Background="{StaticResource SurfaceBrush}"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                      ItemContainerStyle="{StaticResource CaptureRowStyle}">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="No."         Width="46"  DisplayMemberBinding="{Binding No}"/>
+                        <GridViewColumn Header="Time"        Width="120" DisplayMemberBinding="{Binding Time}"/>
+                        <GridViewColumn Header="Source"      Width="160" DisplayMemberBinding="{Binding Source}"/>
+                        <GridViewColumn Header="Destination" Width="160" DisplayMemberBinding="{Binding Destination}"/>
+                        <GridViewColumn Header="Protocol"    Width="70"  DisplayMemberBinding="{Binding Protocol}"/>
+                        <GridViewColumn Header="Len"         Width="46"  DisplayMemberBinding="{Binding Length}"/>
+                        <GridViewColumn Header="Info"        Width="500" DisplayMemberBinding="{Binding Info}"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
+                          Background="{StaticResource BorderBrush}"/>
+
+            <!-- Bottom: decoded tree + raw hex -->
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="200"/>
+                    <ColumnDefinition Width="5"/>
+                    <ColumnDefinition Width="*" MinWidth="240"/>
+                </Grid.ColumnDefinitions>
+
+                <DockPanel Grid.Column="0" Background="{StaticResource SurfaceBrush}">
+                    <TextBlock DockPanel.Dock="Top" Text="DECODE TREE" Style="{StaticResource PanelHeader}"/>
+                    <TreeView ItemsSource="{Binding DecodeRoots}"
+                              BorderThickness="0"
+                              FontFamily="Consolas" FontSize="11"
+                              Background="{StaticResource SurfaceBrush}">
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <TextBlock>
+                                    <Run Text="{Binding Label, Mode=OneWay}" Foreground="{StaticResource MutedForeground}"/>
+                                    <Run Text=": "/>
+                                    <Run Text="{Binding Value, Mode=OneWay}"/>
+                                </TextBlock>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </DockPanel>
+
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                              Background="{StaticResource BorderBrush}"/>
+
+                <DockPanel Grid.Column="2" Background="{StaticResource SurfaceBrush}">
+                    <TextBlock DockPanel.Dock="Top" Text="HEX DUMP" Style="{StaticResource PanelHeader}"/>
+                    <TextBox Text="{Binding SelectedHex, Mode=OneWay}"
+                             IsReadOnly="True"
+                             FontFamily="Consolas" FontSize="11"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"
+                             Background="{StaticResource SurfaceBrush}"
+                             Foreground="{StaticResource ForegroundBrush}"
+                             BorderThickness="0"/>
+                </DockPanel>
+            </Grid>
+        </Grid>
+
+    </DockPanel>
+</UserControl>

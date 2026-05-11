@@ -1,0 +1,44 @@
+<UserControl x:Class="EthernetPacketGenerator.Views.EventPaletteView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel Background="{StaticResource SurfaceAltBrush}">
+        <TextBlock DockPanel.Dock="Top" Text="EVENTS" Style="{StaticResource PanelHeader}"/>
+
+        <Grid Margin="6,6,6,6">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="8"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="8"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Event tile -->
+            <TextBlock Grid.Row="0" Text="클릭하여 선택 패킷 다음에 삽입:"
+                       Foreground="{StaticResource MutedForeground}" FontSize="10" Margin="0,0,0,4"/>
+
+            <Border Grid.Row="2"
+                    Background="#AA2222" BorderBrush="#CC3333" BorderThickness="1"
+                    CornerRadius="4" Padding="10,8" Cursor="Hand"
+                    MouseLeftButtonUp="DelayTile_Click">
+                <StackPanel>
+                    <TextBlock Text="⏱  Delay" Foreground="White"
+                               FontWeight="SemiBold" FontSize="13"/>
+                    <TextBlock Text="패킷 사이에 딜레이 삽입" Foreground="#FFCCCC"
+                               FontSize="10" Margin="0,3,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Selected event editor -->
+            <StackPanel Grid.Row="4" x:Name="EventEditor" Visibility="Collapsed">
+                <Rectangle Height="1" Fill="{StaticResource BorderBrush}" Margin="0,0,0,8"/>
+                <TextBlock Text="선택된 이벤트 편집" Foreground="{StaticResource MutedForeground}"
+                           FontSize="10" Margin="0,0,0,4"/>
+                <TextBlock Text="Delay (ms):" Foreground="{StaticResource ForegroundBrush}" FontSize="11"/>
+                <TextBox x:Name="DelayMsBox"
+                         Margin="0,3,0,0"
+                         TextChanged="DelayMsBox_TextChanged"/>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>
