@@ -1,5 +1,12 @@
 # Ethernet Packet Lab
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js >= 18](https://img.shields.io/badge/node-%E2%89%A518-43853d.svg)](https://nodejs.org/)
+[![Python >= 3.10](https://img.shields.io/badge/python-%E2%89%A53.10-3776ab.svg)](https://www.python.org/)
+[![Linux only](https://img.shields.io/badge/platform-linux-orange.svg)](https://www.kernel.org/)
+[![Tests: 22 passing](https://img.shields.io/badge/tests-22%20passing-2ea44f.svg)](tools/test_packet_agent.py)
+[![Standards: RFC 2544 · 4814 · 5180 · 793 · IEEE 802.1Q · 1588 · 802.1AB](https://img.shields.io/badge/standards-RFC%202544%20%C2%B7%204814%20%C2%B7%205180%20%C2%B7%20793%20%C2%B7%20IEEE%20802.1Q%20%C2%B7%201588%20%C2%B7%20802.1AB-555.svg)](docs/methodology.md)
+
 KETI two-node Ethernet packet lab for direct cable, FPGA, PHY, or isolated switch tests.
 
 A functional packet generator + receiver + analyser. Use it to prove packet fields, forwarding, filtering, VLAN/PCP handling, payload integrity, and basic periodic / TSN traffic before moving to dedicated line-rate equipment.
@@ -261,6 +268,10 @@ sudo ethtool -K <iface> rxvlan off txvlan off
 - [`docs/samples/README.md`](docs/samples/README.md) — sample HTML / JSON reports + a sample .pcap captured against a live link.
 - [`docs/packet-test-plan.md`](docs/packet-test-plan.md) — recommended end-to-end test order.
 - [`docs/two-node-test.md`](docs/two-node-test.md) — two-PC E2E setup walkthrough.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the code map, style rules, scope boundaries, and PR checklist. Issue + PR templates live under `.github/`.
 
 ## License
 
