@@ -1831,7 +1831,209 @@ $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
   toastError(err);
 }));
 
-// Simple Bidirectional Forwarding Test moved to dedicated page /simple-bidir.html.
+// ----------- Simple Bidirectional Forwarding Test (Control tab) -----------
+const sbf = {
+  a: { interfaces: [], roles: {} },
+  b: { interfaces: [], roles: {} }
+};
+
+function sbfSetRole(side, ifaceName, role) {
+  const s = sbf[side];
+  if (role === 'primary') {
+    for (const k of Object.keys(s.roles)) if (s.roles[k] === 'primary') s.roles[k] = 'unused';
+  }
+  s.roles[ifaceName] = role;
+  sbfRenderIfaceTable(side);
+  sbfSyncTopology();
+}
+
+function sbfRenderIfaceTable(side) {
+  const id = side === 'a' ? 'sbfNodeAIfaceTable' : 'sbfNodeBIfaceTable';
+  const s = sbf[side];
+  const tbody = $(id).querySelector('tbody');
+  if (!s.interfaces.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:10px 0">Probe Nodes 후 표시됩니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = s.interfaces.map((iface) => {
+    const role = s.roles[iface.name] || 'unused';
+    const radios = ['unused','primary','monitor'].map((r) => {
+      const cls = role === r ? `sbf-sel-${r}` : '';
+      const label = r[0].toUpperCase() + r.slice(1);
+      return `<label class="${cls}" data-side="${side}" data-iface="${iface.name}" data-role="${r}">${label}</label>`;
+    }).join('');
+    return `<tr>
+      <td class="name">${iface.name}</td>
+      <td class="mac">${iface.mac || '—'}</td>
+      <td class="state">${iface.state || ''}</td>
+      <td><div class="sbfRoleRadios">${radios}</div></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.sbfRoleRadios label').forEach((el) => {
+    el.addEventListener('click', () => sbfSetRole(el.dataset.side, el.dataset.iface, el.dataset.role));
+  });
+}
+
+function sbfDefaultRoles(side) {
+  const s = sbf[side];
+  s.roles = {};
+  const ifs = s.interfaces.filter((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
+  if (ifs[0]) s.roles[ifs[0].name] = 'primary';
+  for (let i = 1; i < ifs.length; i++) s.roles[ifs[i].name] = 'monitor';
+}
+
+function sbfPrimary(side) {
+  const s = sbf[side];
+  const name = Object.keys(s.roles).find((k) => s.roles[k] === 'primary');
+  return s.interfaces.find((i) => i.name === name) || null;
+}
+function sbfMonitors(side) {
+  const s = sbf[side];
+  return Object.keys(s.roles)
+    .filter((k) => s.roles[k] === 'monitor')
+    .map((name) => s.interfaces.find((i) => i.name === name))
+    .filter(Boolean);
+}
+
+function sbfSyncTopology() {
+  $('sbfTopoAUrl').textContent = $('sbfNodeAUrl').value || '-';
+  $('sbfTopoBUrl').textContent = $('sbfNodeBUrl').value || '-';
+  $('sbfNodeAEcho').textContent = $('sbfNodeAUrl').value || '';
+  $('sbfNodeBEcho').textContent = $('sbfNodeBUrl').value || '';
+  const ap = sbfPrimary('a'), bp = sbfPrimary('b');
+  const am = sbfMonitors('a'), bm = sbfMonitors('b');
+  $('sbfTopoAPrimary').innerHTML = `<span class="sbfBadge sbf-primary">Primary</span> ${ap ? `${ap.name} <small style="color:var(--muted)">${ap.mac}</small>` : '—'}`;
+  $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${am.length ? am.map((m) => m.name).join(', ') : '—'}`;
+  $('sbfTopoBPrimary').innerHTML = `<span class="sbfBadge sbf-primary">Primary</span> ${bp ? `${bp.name} <small style="color:var(--muted)">${bp.mac}</small>` : '—'}`;
+  $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${bm.length ? bm.map((m) => m.name).join(', ') : '—'}`;
+}
+
+async function sbfProbe() {
+  const aUrl = $('sbfNodeAUrl').value.trim();
+  const bUrl = $('sbfNodeBUrl').value.trim();
+  if (!aUrl || !bUrl) throw new Error('Node A URL과 Node B URL을 모두 입력하세요.');
+  setActionStatus('sbfProbeStatus', 'running', 'probing...');
+  $('sbfProbe').disabled = true;
+  try {
+    const [a, b] = await Promise.all([
+      api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url: aUrl }) }),
+      api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url: bUrl }) })
+    ]);
+    sbf.a.interfaces = a.interfaces;
+    sbf.b.interfaces = b.interfaces;
+    sbfDefaultRoles('a');
+    sbfDefaultRoles('b');
+    sbfRenderIfaceTable('a');
+    sbfRenderIfaceTable('b');
+    sbfSyncTopology();
+    setActionStatus('sbfProbeStatus', 'ok', `A: ${a.interfaces.length} IF · B: ${b.interfaces.length} IF`);
+  } finally {
+    $('sbfProbe').disabled = false;
+  }
+}
+
+function sbfRenderResult(report) {
+  const el = $('sbfResult');
+  el.classList.remove('hidden');
+  const overallCls = report.overall === 'PASS' ? 'pass' : 'fail';
+  const dirs = report.directions.map((d) => {
+    const capRows = d.captures.map((c) => `
+      <tr class="${c.pass ? 'pass' : 'fail'}">
+        <td>${c.role}</td>
+        <td>${c.node}</td>
+        <td><code>${c.interface.name}</code></td>
+        <td><code>${c.interface.mac}</code></td>
+        <td>${c.expectMatch ? '≥ ' + d.count : '== 0'}</td>
+        <td>${c.matched}</td>
+        <td><span class="sbfBadge ${c.pass ? 'sbf-primary' : 'sbf-monitor'}" style="background:${c.pass ? '#dcfce7' : '#fee2e2'};color:${c.pass ? '#14532d' : '#9b1c1c'}">${c.pass ? 'PASS' : 'FAIL'}</span></td>
+        <td>${c.error || ''}</td>
+      </tr>
+    `).join('');
+    return `
+      <div class="sbfDirection">
+        <h5>${d.direction} — <span class="sbfBadge ${d.result === 'PASS' ? 'sbf-primary' : 'sbf-monitor'}" style="background:${d.result === 'PASS' ? '#dcfce7' : '#fee2e2'};color:${d.result === 'PASS' ? '#14532d' : '#9b1c1c'}">${d.result}</span></h5>
+        <div style="color:var(--muted);font-size:12px">
+          ${d.senderUrl} / <code>${d.senderInterface.name}</code> → ${d.receiverUrl} / <code>${d.expectedInterface.name}</code>
+          · marker <code>${d.marker}</code> · UDP ${d.udpSrcPort}→${d.udpDstPort} · sent ${d.sent}/${d.count}
+        </div>
+        <table class="sbfCapTable">
+          <thead><tr><th>Role</th><th>Node</th><th>Interface</th><th>MAC</th><th>Expect</th><th>Matched</th><th>Result</th><th>Error</th></tr></thead>
+          <tbody>${capRows}</tbody>
+        </table>
+        <div class="sbfSeq">missing sequences (${d.missingSequences.length}): ${d.missingSequences.slice(0, 100).join(', ') || '<em>none</em>'}${d.missingSequences.length > 100 ? ' …' : ''}</div>
+      </div>
+    `;
+  }).join('');
+  el.innerHTML = `
+    <div class="sbfResultSummary">
+      <div class="box ${overallCls}"><span>Overall</span><strong>${report.overall}</strong></div>
+      <div class="box"><span>Directions</span><strong>${report.directions.length}</strong></div>
+      <div class="box"><span>Generated</span><strong style="font-size:12px">${new Date(report.generatedAt).toLocaleString()}</strong></div>
+    </div>
+    ${dirs}
+  `;
+  $('sbfOpenReport').classList.remove('disabled');
+  $('sbfOpenJson').classList.remove('disabled');
+}
+
+async function sbfRun(direction) {
+  const aPrimary = sbfPrimary('a'), bPrimary = sbfPrimary('b');
+  if (!aPrimary) throw new Error('Node A의 Primary 인터페이스를 선택하세요.');
+  if (!bPrimary) throw new Error('Node B의 Primary 인터페이스를 선택하세요.');
+  const buttons = ['sbfRunAtoB', 'sbfRunBtoA', 'sbfRunBoth', 'sbfProbe'];
+  buttons.forEach((id) => { const b = $(id); if (b) b.disabled = true; });
+  const prog = progressFor('progSimpleBidir');
+  const count = Number($('sbfCount').value || 10);
+  const intervalMs = Number($('sbfInterval').value || 100);
+  const captureTimeoutMs = Number($('sbfCaptureTimeout').value || 3000);
+  const passes = direction === 'BOTH' ? 2 : 1;
+  const estSec = passes * Math.max(1, (count * intervalMs + captureTimeoutMs) / 1000 + 1);
+  setActionStatus('statusSimpleBidir', 'running', `${direction} running...`);
+  prog.start(estSec);
+  setStatus(`Simple bidir forward ${direction}...`);
+  try {
+    const body = {
+      nodeAUrl: $('sbfNodeAUrl').value.trim(),
+      nodeBUrl: $('sbfNodeBUrl').value.trim(),
+      nodeAPrimaryInterface: aPrimary.name,
+      nodeBPrimaryInterface: bPrimary.name,
+      nodeAMonitorInterfaces: sbfMonitors('a').map((m) => m.name),
+      nodeBMonitorInterfaces: sbfMonitors('b').map((m) => m.name),
+      direction,
+      count,
+      intervalMs,
+      udpSrcPort: Number($('sbfUdpSrc').value || 40000),
+      udpDstPort: Number($('sbfUdpDst').value || 50000),
+      payloadMarkerPrefix: $('sbfMarker').value.trim() || 'KETI_SIMPLE_FORWARD',
+      captureTimeoutMs
+    };
+    const result = await api('/api/simple-bidir-forward-test', { method: 'POST', body: JSON.stringify(body) });
+    sbfRenderResult(result.report);
+    const overall = result.report.overall;
+    setActionStatus('statusSimpleBidir', overall === 'PASS' ? 'ok' : 'fail',
+      result.directions.map((d) => `${d.direction}:${d.result}`).join(' · '));
+    if (overall === 'PASS') prog.finish(); else prog.fail();
+    setStatus(`Simple bidir forward ${overall}`, overall !== 'PASS');
+  } catch (err) {
+    setActionStatus('statusSimpleBidir', 'fail', 'fail');
+    prog.fail();
+    throw err;
+  } finally {
+    buttons.forEach((id) => { const b = $(id); if (b) b.disabled = false; });
+  }
+}
+
+(function sbfInit() {
+  const a = $('sbfNodeAUrl'); const b = $('sbfNodeBUrl');
+  if (b && !b.value) b.value = window.location.origin;
+  ['sbfNodeAUrl','sbfNodeBUrl'].forEach((id) => $(id)?.addEventListener('input', sbfSyncTopology));
+  sbfRenderIfaceTable('a'); sbfRenderIfaceTable('b');
+  sbfSyncTopology();
+  $('sbfProbe')?.addEventListener('click', () => sbfProbe().catch(toastError));
+  $('sbfRunAtoB')?.addEventListener('click', () => sbfRun('A_TO_B').catch(toastError));
+  $('sbfRunBtoA')?.addEventListener('click', () => sbfRun('B_TO_A').catch(toastError));
+  $('sbfRunBoth')?.addEventListener('click', () => sbfRun('BOTH').catch(toastError));
+})();
 
 async function ensurePeerReady() {
   if (!state.peer.url) throw new Error('Peer URL not set. Fill the Peer field in the top link strip.');
