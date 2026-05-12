@@ -1282,6 +1282,12 @@ function renderInterfaceOptions(selectId, interfaces) {
   }).join('');
 }
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
 function controlListId(role) {
   return role === 'sender' ? 'controlSenderIfaceList' : 'controlReceiverIfaceList';
 }
@@ -1406,6 +1412,61 @@ function selectedControlPairs() {
   })));
 }
 
+function initControlRunBoard(title, pairs) {
+  const board = $('controlRunBoard');
+  const cards = $('controlRunCards');
+  if (!board || !cards) return;
+  $('controlRunTitle').textContent = title;
+  $('controlRunSummary').textContent = `${pairs.length} pair(s) queued`;
+  cards.innerHTML = pairs.map((pair, index) => `
+    <div class="controlRunCard" data-run-index="${index}">
+      <div class="controlRunPair">
+        <strong>${escapeHtml(pair.label)}</strong>
+        <span class="controlRunBadge">pending</span>
+      </div>
+      <div class="controlRunMetrics"></div>
+      <div class="controlRunError hidden"></div>
+    </div>
+  `).join('');
+  board.classList.remove('hidden');
+}
+
+function updateControlRunSummary(done, total, okCount) {
+  const el = $('controlRunSummary');
+  if (el) el.textContent = `${done}/${total} done · ${okCount} pass`;
+}
+
+function updateControlRunCard(index, status, metrics = {}, error = '') {
+  const card = document.querySelector(`.controlRunCard[data-run-index="${index}"]`);
+  if (!card) return;
+  card.classList.remove('running', 'ok', 'fail');
+  if (status !== 'pending') card.classList.add(status);
+  const badge = card.querySelector('.controlRunBadge');
+  if (badge) badge.textContent = status;
+  const metricEl = card.querySelector('.controlRunMetrics');
+  if (metricEl) {
+    metricEl.innerHTML = Object.entries(metrics).map(([key, value]) => `
+      <div><span>${escapeHtml(key)}</span><b>${escapeHtml(value)}</b></div>
+    `).join('');
+  }
+  const errEl = card.querySelector('.controlRunError');
+  if (errEl) {
+    errEl.textContent = error || '';
+    errEl.classList.toggle('hidden', !error);
+  }
+}
+
+async function apiReport(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && !data.report) throw new Error(data.error || data.stderr || `HTTP ${res.status}`);
+  return data;
+}
+
 function renderNodeGrid() {
   const sender = state.nodes.sender;
   const receiver = state.nodes.receiver;
@@ -1487,12 +1548,13 @@ async function runE2E() {
     const e2eInterval = Number($('e2eInterval').value || 200);
     const profile = { ...getProfile(), count: burst, intervalMs: e2eInterval };
     prog.start(7 * pairs.length);
+    initControlRunBoard('E2E Progress', pairs);
     const results = [];
     for (const [index, pair] of pairs.entries()) {
       setStatus(`Running E2E ${index + 1}/${pairs.length}: ${pair.label}`);
-      const result = await api('/api/e2e-test', {
-        method: 'POST',
-        body: JSON.stringify({
+      updateControlRunCard(index, 'running', { tx: '-', match: '-', capture: '-' });
+      try {
+        const result = await apiReport('/api/e2e-test', {
           senderUrl: pair.senderUrl,
           receiverUrl: pair.receiverUrl,
           senderInterface: pair.senderIf,
@@ -1500,13 +1562,22 @@ async function runE2E() {
           profile,
           timeoutSec: Math.max(5, Math.ceil((burst * e2eInterval) / 1000) + 3),
           maxFrames: Math.max(50, burst + 20)
-        })
-      });
-      results.push({ pair, report: result.report });
-      renderE2EReport(result.report);
+        });
+        results.push({ pair, report: result.report });
+        renderE2EReport(result.report);
+        updateControlRunCard(index, result.report.ok ? 'ok' : 'fail', {
+          tx: result.report.sent?.framesSent ?? 0,
+          match: result.report.matchCount ?? 0,
+          capture: result.report.captureSummary?.total ?? 0
+        }, result.report.ok ? '' : 'No matching frame captured for this pair.');
+      } catch (err) {
+        results.push({ pair, error: err });
+        updateControlRunCard(index, 'fail', { tx: 0, match: 0, capture: 0 }, err.message);
+      }
+      updateControlRunSummary(index + 1, pairs.length, results.filter((item) => item.report?.ok).length);
     }
-    const pass = results.filter((item) => item.report.ok).length;
-    const matches = results.reduce((sum, item) => sum + Number(item.report.matchCount || 0), 0);
+    const pass = results.filter((item) => item.report?.ok).length;
+    const matches = results.reduce((sum, item) => sum + Number(item.report?.matchCount || 0), 0);
     const ok = pass === results.length;
     setActionStatus('statusE2E', ok ? 'ok' : 'fail', `${pass}/${results.length} pairs · ${matches} match`);
     if (ok) prog.finish(); else prog.fail();
@@ -1532,33 +1603,43 @@ async function runReport() {
     syncControlFromPeer();
     const pairs = selectedControlPairs();
     prog.start(25 * pairs.length);
+    initControlRunBoard('Wire Validation Progress', pairs);
     const results = [];
     for (const [index, pair] of pairs.entries()) {
       setStatus(`Running wire validation ${index + 1}/${pairs.length}: ${pair.label}`);
-      const result = await api('/api/wire-validation', {
-        method: 'POST',
-        body: JSON.stringify({
+      updateControlRunCard(index, 'running', { sent: '-', match: '-', failed: '-' });
+      try {
+        const result = await apiReport('/api/wire-validation', {
           senderUrl: pair.senderUrl,
           receiverUrl: pair.receiverUrl,
           senderInterface: pair.senderIf,
           receiverInterface: pair.receiverIf,
           count: 2,
           intervalMs: 100
-        })
-      });
-      results.push({ pair, report: result.report });
+        });
+        results.push({ pair, report: result.report });
+        updateControlRunCard(index, result.report.ok ? 'ok' : 'fail', {
+          sent: result.report.summary?.framesSent ?? 0,
+          match: result.report.summary?.matched ?? 0,
+          failed: result.report.summary?.failed ?? 0
+        }, result.report.ok ? '' : 'One or more validation steps failed.');
+      } catch (err) {
+        results.push({ pair, error: err });
+        updateControlRunCard(index, 'fail', { sent: 0, match: 0, failed: 1 }, err.message);
+      }
+      updateControlRunSummary(index + 1, pairs.length, results.filter((item) => item.report?.ok).length);
     }
-    const lastReport = results.at(-1).report;
-    const failedPairs = results.filter((item) => !item.report.ok).length;
-    const framesSent = results.reduce((sum, item) => sum + Number(item.report.summary.framesSent || 0), 0);
-    const matched = results.reduce((sum, item) => sum + Number(item.report.summary.matched || 0), 0);
+    const lastReport = [...results].reverse().find((item) => item.report)?.report;
+    const failedPairs = results.filter((item) => !item.report?.ok).length;
+    const framesSent = results.reduce((sum, item) => sum + Number(item.report?.summary?.framesSent || 0), 0);
+    const matched = results.reduce((sum, item) => sum + Number(item.report?.summary?.matched || 0), 0);
     $('reportSummary').innerHTML = `
       <div><span>Status</span><strong>${failedPairs === 0 ? 'PASS' : 'FAIL'}</strong></div>
       <div><span>Pairs</span><strong>${results.length - failedPairs}/${results.length}</strong></div>
       <div><span>Sent</span><strong>${framesSent}</strong></div>
       <div><span>Matched</span><strong>${matched}</strong></div>
     `;
-    $('reportRows').innerHTML = lastReport.steps.map((step, index) => `
+    $('reportRows').innerHTML = lastReport ? lastReport.steps.map((step, index) => `
       <tr>
         <td>${index + 1}</td>
         <td>Wire</td>
@@ -1568,7 +1649,7 @@ async function runReport() {
         <td>${step.protocol || step.kind}</td>
         <td>${step.kind === 'delay' ? `${step.delayMs} ms` : `${step.matchCount || 0} match`}</td>
       </tr>
-    `).join('');
+    `).join('') : '<tr><td colspan="7" class="empty">No report generated</td></tr>';
     $('openReport')?.classList.remove('disabled');
     $('openCaseReport')?.classList.remove('disabled');
     setActionStatus('statusReport', failedPairs === 0 ? 'ok' : 'fail', `${results.length - failedPairs}/${results.length} pairs`);
@@ -2534,12 +2615,13 @@ async function runBenchmark() {
     syncControlFromPeer();
     const pairs = selectedControlPairs();
     prog.start(estSec * pairs.length);
+    initControlRunBoard('Benchmark Progress', pairs);
     const results = [];
     for (const [index, pair] of pairs.entries()) {
       setStatus(`Running benchmark ${index + 1}/${pairs.length}: ${pair.label}`);
-      const data = await api('/api/benchmark', {
-        method: 'POST',
-        body: JSON.stringify({
+      updateControlRunCard(index, 'running', { rx: '-', loss: '-', mbps: '-' });
+      try {
+        const data = await apiReport('/api/benchmark', {
           senderUrl: pair.senderUrl,
           receiverUrl: pair.receiverUrl,
           senderInterface: pair.senderIf,
@@ -2548,11 +2630,23 @@ async function runBenchmark() {
           count: Number($('benchCount').value || 500),
           intervalMs: Number($('benchInterval').value || 1),
           payloadSize: Number($('benchPayloadSize').value || 64)
-        })
-      });
-      results.push({ pair, report: data.report });
+        });
+        results.push({ pair, report: data.report });
+        const stats = data.report.stats;
+        const ok = Number(stats.rxCount || 0) > 0;
+        updateControlRunCard(index, ok ? 'ok' : 'fail', {
+          rx: `${stats.rxCount}/${stats.txCount}`,
+          loss: `${Number(stats.lossPct || 0).toFixed(2)}%`,
+          mbps: Number(stats.throughputMbps || 0).toFixed(2)
+        }, ok ? '' : 'Receiver got 0 benchmark packets.');
+      } catch (err) {
+        results.push({ pair, error: err });
+        updateControlRunCard(index, 'fail', { rx: '0/0', loss: '-', mbps: '-' }, err.message);
+      }
+      updateControlRunSummary(index + 1, pairs.length, results.filter((item) => Number(item.report?.stats?.rxCount || 0) > 0).length);
     }
-    const last = results.at(-1).report;
+    const last = [...results].reverse().find((item) => item.report)?.report;
+    if (!last) throw new Error('No benchmark report generated');
     const s = last.stats;
     const pass = results.filter((item) => item.report.stats.rxCount > 0).length;
     const totalRx = results.reduce((sum, item) => sum + Number(item.report.stats.rxCount || 0), 0);
@@ -2600,12 +2694,13 @@ async function runRfc2544() {
     syncControlFromPeer();
     const pairs = selectedControlPairs();
     prog.start(estSec * pairs.length);
+    initControlRunBoard('RFC 2544 Progress', pairs);
     const results = [];
     for (const [index, pair] of pairs.entries()) {
       setStatus(`Running RFC 2544 ${index + 1}/${pairs.length}: ${pair.label}`);
-      const result = await api('/api/rfc2544', {
-        method: 'POST',
-        body: JSON.stringify({
+      updateControlRunCard(index, 'running', { sizes: '-', util: '-', report: '-' });
+      try {
+        const result = await apiReport('/api/rfc2544', {
           senderUrl: pair.senderUrl,
           receiverUrl: pair.receiverUrl,
           senderInterface: pair.senderIf,
@@ -2613,11 +2708,19 @@ async function runRfc2544() {
           trialDurationSec: trial,
           linkRateMbps: link,
           tolerancePps: tol
-        })
-      });
-      results.push({ pair, report: result.report });
+        });
+        results.push({ pair, report: result.report });
+        const sizesNow = result.report.results.length;
+        const utilNow = (result.report.results.reduce((sum, r) => sum + (r.utilizationPct || 0), 0) / sizesNow).toFixed(1);
+        updateControlRunCard(index, 'ok', { sizes: sizesNow, util: `${utilNow}%`, report: 'saved' });
+      } catch (err) {
+        results.push({ pair, error: err });
+        updateControlRunCard(index, 'fail', { sizes: 0, util: '-', report: '-' }, err.message);
+      }
+      updateControlRunSummary(index + 1, pairs.length, results.filter((item) => item.report).length);
     }
-    const last = results.at(-1).report;
+    const last = [...results].reverse().find((item) => item.report)?.report;
+    if (!last) throw new Error('No RFC 2544 report generated');
     const sizes = last.results.length;
     const avgUtil = (last.results.reduce((sum, r) => sum + (r.utilizationPct || 0), 0) / sizes).toFixed(1);
     setActionStatus('statusRfc', 'ok', `${results.length} pair(s) · last avg ${avgUtil}%`);
@@ -2652,22 +2755,36 @@ async function runSweep() {
     syncControlFromPeer();
     const pairs = selectedControlPairs();
     prog.start(estSec * pairs.length);
+    initControlRunBoard('Frame-size Sweep Progress', pairs);
     const results = [];
     for (const [index, pair] of pairs.entries()) {
       setStatus(`Running sweep ${index + 1}/${pairs.length}: ${pair.label}`);
-      const result = await api('/api/sweep', {
-        method: 'POST',
-        body: JSON.stringify({
+      updateControlRunCard(index, 'running', { sizes: '-', rx: '-', loss: '-' });
+      try {
+        const result = await apiReport('/api/sweep', {
           senderUrl: pair.senderUrl,
           receiverUrl: pair.receiverUrl,
           senderInterface: pair.senderIf,
           receiverInterface: pair.receiverIf,
           count, intervalMs
-        })
-      });
-      results.push({ pair, report: result.report });
+        });
+        results.push({ pair, report: result.report });
+        const totalRx = result.report.results.reduce((sum, r) => sum + Number(r.stats?.rxCount || 0), 0);
+        const avgLoss = result.report.results.reduce((sum, r) => sum + Number(r.stats?.lossPct || 0), 0) / result.report.results.length;
+        updateControlRunCard(index, 'ok', {
+          sizes: result.report.results.length,
+          rx: totalRx,
+          loss: `${avgLoss.toFixed(2)}%`
+        });
+      } catch (err) {
+        results.push({ pair, error: err });
+        updateControlRunCard(index, 'fail', { sizes: 0, rx: 0, loss: '-' }, err.message);
+      }
+      updateControlRunSummary(index + 1, pairs.length, results.filter((item) => item.report).length);
     }
-    const sizes = results.at(-1).report.results.length;
+    const lastSweep = [...results].reverse().find((item) => item.report)?.report;
+    if (!lastSweep) throw new Error('No sweep report generated');
+    const sizes = lastSweep.results.length;
     setActionStatus('statusSweep', 'ok', `${results.length} pair(s) · ${sizes} sizes`);
     prog.finish();
     setStatus(`Sweep done: ${results.length} pair(s), ${sizes} sizes each`);
