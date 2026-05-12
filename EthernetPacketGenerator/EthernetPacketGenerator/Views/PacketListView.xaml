@@ -1,0 +1,191 @@
+<UserControl x:Class="EthernetPacketGenerator.Views.PacketListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:EthernetPacketGenerator.Models">
+    <DockPanel Background="{StaticResource SurfaceBrush}">
+
+        <!-- Header -->
+        <TextBlock DockPanel.Dock="Top" Text="PACKET LIST" Style="{StaticResource PanelHeader}"/>
+
+        <!-- Toolbar -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="4,4,4,2">
+            <Button Content="+" ToolTip="Add Packet" Width="28" Command="{Binding AddPacketCommand}"/>
+            <Button Content="-" ToolTip="Delete"     Width="28" Margin="3,0,0,0" Command="{Binding DeleteItemCommand}"/>
+            <Button Content="⧉" ToolTip="Duplicate" Width="28" Margin="3,0,0,0" Command="{Binding DuplicatePacketCommand}"/>
+            <Button Content="↑" ToolTip="Move Up"    Width="28" Margin="3,0,0,0" Command="{Binding MoveUpCommand}"/>
+            <Button Content="↓" ToolTip="Move Down"  Width="28" Margin="3,0,0,0" Command="{Binding MoveDownCommand}"/>
+        </StackPanel>
+
+        <!-- Sequence ListView -->
+        <ListView x:Name="SequenceList"
+                  ItemsSource="{Binding Sequence}"
+                  SelectedItem="{Binding SelectedSequenceItem, Mode=TwoWay}"
+                  SelectionMode="Single"
+                  BorderThickness="0"
+                  FontFamily="Consolas" FontSize="11"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                  VirtualizingStackPanel.IsVirtualizing="True"
+                  VirtualizingStackPanel.VirtualizationMode="Recycling"
+                  UseLayoutRounding="True">
+            <ListView.View>
+                <GridView>
+                    <!-- Checkbox (all rows — checked items are included in Send Selected) -->
+                    <GridViewColumn Header="" Width="28">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Index (0-based) -->
+                    <GridViewColumn Header="Index" Width="46">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Index}"
+                                           Foreground="{StaticResource ForegroundBrush}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Name (inline editable for packets, delay label for events) -->
+                    <GridViewColumn Header="Name" Width="120">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <StackPanel x:Name="PacketPanel" Orientation="Horizontal"
+                                                MouseLeftButtonDown="PacketName_MouseLeftButtonDown">
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   Foreground="{StaticResource ForegroundBrush}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBox x:Name="EditBox" Visibility="Collapsed"
+                                             Text="{Binding Packet.Name, UpdateSourceTrigger=Explicit}"
+                                             MinWidth="90"
+                                             KeyDown="EditBox_KeyDown"
+                                             LostFocus="EditBox_LostFocus"/>
+                                    <TextBlock x:Name="EventLabel"
+                                               Text="{Binding DisplayName}"
+                                               Foreground="#FFAA44" FontStyle="Italic"
+                                               VerticalAlignment="Center" Visibility="Collapsed"/>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Event">
+                                        <Setter TargetName="PacketPanel" Property="Visibility" Value="Collapsed"/>
+                                        <Setter TargetName="EventLabel"  Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Src MAC -->
+                    <GridViewColumn Header="Src MAC" Width="140">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplaySrcMac}"
+                                           Foreground="{StaticResource ForegroundBrush}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Dst MAC -->
+                    <GridViewColumn Header="Dst MAC" Width="140">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayDstMac}"
+                                           Foreground="{StaticResource ForegroundBrush}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Protocol / Length -->
+                    <GridViewColumn Header="Protocol / Length" Width="180">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayProtocol}"
+                                           Foreground="{StaticResource ForegroundBrush}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Interface (패킷별 전송 인터페이스 선택) -->
+                    <GridViewColumn Header="Interface" Width="160">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <!-- Packet row: ComboBox -->
+                                    <ComboBox x:Name="IfaceCombo"
+                                              ItemsSource="{Binding DataContext.InterfaceOptions,
+                                                            RelativeSource={RelativeSource AncestorType=ListView}}"
+                                              SelectedValuePath="ShortName"
+                                              SelectedValue="{Binding Packet.OutgoingInterfaceName, Mode=TwoWay}"
+                                              FontSize="11" Height="20" Padding="3,1"
+                                              ToolTip="이 패킷을 전송할 인터페이스&#x0a;(Default) = 체크된 전체 인터페이스, 없으면 기본 인터페이스">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock FontSize="11" TextTrimming="CharacterEllipsis">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="{Binding ShortName}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDefaultSentinel}" Value="True">
+                                                                    <Setter Property="Text"       Value="(Default)"/>
+                                                                    <Setter Property="FontStyle"  Value="Italic"/>
+                                                                    <Setter Property="Foreground" Value="#88CCFF"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <!-- Event row: 빈 칸 -->
+                                    <TextBlock x:Name="IfaceEventLabel" Text="" Visibility="Collapsed"/>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Event">
+                                        <Setter TargetName="IfaceCombo"       Property="Visibility" Value="Collapsed"/>
+                                        <Setter TargetName="IfaceEventLabel"  Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+
+                    <!-- Description -->
+                    <GridViewColumn Header="Description" Width="280">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayDescription}"
+                                           Foreground="{StaticResource ForegroundBrush}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+                    <Setter Property="Padding"    Value="0"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Kind}" Value="Event">
+                            <Setter Property="Background" Value="#2A2010"/>
+                            <Setter Property="Foreground" Value="#FFAA44"/>
+                        </DataTrigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{StaticResource SelectionBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#2A2A50"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </ListView.ItemContainerStyle>
+        </ListView>
+    </DockPanel>
+</UserControl>
