@@ -592,7 +592,9 @@
               </div>
             </div>
 
-            <div class="actionCard" id="simpleBidirCard" style="margin-top:18px">
+            <details class="advancedForwarding">
+              <summary class="advancedSummary">Advanced forwarding / leakage test</summary>
+            <div class="actionCard" id="simpleBidirCard" style="margin-top:10px">
               <div class="actionHeader">
                 <h3>Simple Bidirectional Forwarding Test <span class="badge wire">on the wire</span></h3>
                 <span class="actionDesc">PC당 N개 인터페이스 · 4포트 DUT 스위치 forwarding 검증. 각 인터페이스에 Primary(송신/기대 수신) 또는 Monitor(누설 감지) 역할을 지정합니다. 인터페이스마다 별도 agent가 병렬 capture합니다.</span>
@@ -700,6 +702,7 @@
               </div>
               <div id="sbfResult" class="sbfResult hidden"></div>
             </div>
+            </details>
 
             <details class="advanced">
               <summary class="advancedSummary">Manual override (sender / receiver URL + interface)</summary>

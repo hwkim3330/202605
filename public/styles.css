@@ -762,6 +762,20 @@ body.serialMode .serialPane {
   color: var(--accent);
 }
 
+.advancedForwarding {
+  margin-top: 16px;
+}
+
+.advancedForwarding > .advancedSummary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+}
+
 .controlPaneFull {
   width: 100%;
   padding: 18px 22px;
