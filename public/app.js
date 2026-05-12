@@ -965,58 +965,102 @@ async function loadInterfaces() {
   sel.innerHTML = state.interfaces
     .map((iface) => `<option value="${iface.name}">${iface.name} (${iface.state})</option>`)
     .join('');
-  // Default: pick the first 'up' non-virtual NIC so the UI starts with one
-  // checked, matching the old single-select default behaviour.
-  if (!Array.from(sel.options).some((o) => o.selected)) {
-    const def = state.interfaces.find((i) => i.state === 'up' && !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name))
-             || state.interfaces[0];
-    if (def) {
-      const opt = Array.from(sel.options).find((o) => o.value === def.name);
-      if (opt) opt.selected = true;
-    }
+  // Default: pick the first 'up' non-virtual NIC for both pickers so the UI
+  // starts with one selection (matches the old single-select default).
+  const def = state.interfaces.find((i) => i.state === 'up' && !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name))
+           || state.interfaces[0];
+  if (def) {
+    if (!ifaceSel.sender.size)  ifaceSel.sender.add(def.name);
+    if (!ifaceSel.capture.size) ifaceSel.capture.add(def.name);
   }
-  renderInterfaceCheckboxes();
+  renderInterfacePickers();
   updateInterfaceInfo();
   setStatus(`${state.interfaces.length} interfaces loaded`);
 }
 
-function renderInterfaceCheckboxes() {
-  const host = $('interfaceCheckboxes');
-  if (!host) return;
-  if (!state.interfaces.length) { host.textContent = '— no interfaces —'; return; }
-  const checked = new Set(selectedInterfaceNames());
-  host.innerHTML = state.interfaces.map((iface) => {
-    const isChecked = checked.has(iface.name);
-    return `<label class="${isChecked ? 'checked' : ''}" data-iface="${iface.name}">
-      <input type="checkbox" value="${iface.name}"${isChecked ? ' checked' : ''}>
-      <span>${iface.name}</span>
-      <span class="ifaceState">${iface.state || ''}</span>
-    </label>`;
-  }).join('') + `<span class="ifaceCount" id="ifaceChecksCount">${checked.size}/${state.interfaces.length} selected</span>`;
-  host.querySelectorAll('input[type=checkbox]').forEach((cb) => {
-    cb.addEventListener('change', () => syncCheckboxesToSelect());
-  });
+// Per-tab interface picker state. The Sender tab picks 'which NICs to
+// transmit on'; the Capture tab picks 'which NICs to sniff on'. The hidden
+// <select id=interfaceSelect> always mirrors the *active* tab's pick set so
+// the rest of the app (which still reads interfaceSelect) stays correct.
+const ifaceSel = { sender: new Set(), capture: new Set() };
+
+function ifacePickerScope() {
+  // 'capture' while the Capture tab is up, otherwise 'sender' (Control / Serial
+  // share the sender NIC selection — sending from the Control SBF card etc.).
+  return document.body.classList.contains('captureMode') ? 'capture' : 'sender';
 }
 
-function syncCheckboxesToSelect() {
+function renderInterfacePickers() {
+  renderOneIfacePicker('sender');
+  renderOneIfacePicker('capture');
+  mirrorIfaceSelectionToHiddenSelect();
+}
+
+function renderOneIfacePicker(scope) {
+  const listId = scope === 'sender' ? 'senderIfaceList' : 'captureIfaceList';
+  const countId = scope === 'sender' ? 'senderIfaceCount' : 'captureIfaceCount';
+  const host = document.getElementById(listId);
+  if (!host) return;
+  if (!state.interfaces.length) {
+    host.textContent = '— probe to load —';
+    document.getElementById(countId).textContent = '0 selected';
+    return;
+  }
+  const picked = ifaceSel[scope];
+  host.innerHTML = state.interfaces.map((iface) => {
+    const isChecked = picked.has(iface.name);
+    const stateCls = iface.state === 'up' ? 'up' : iface.state === 'down' ? 'down' : 'unknown';
+    const speed = iface.speedMbps ? `${iface.speedMbps} Mbps` : '';
+    const ipv4 = (iface.ipv4 || [])[0];
+    const ipText = ipv4 ? `${ipv4.local}/${ipv4.prefixlen}` : '';
+    const extras = [speed, ipText].filter(Boolean).join(' · ');
+    return `<label class="ifaceItem${isChecked ? ' checked' : ''}" data-iface="${iface.name}" data-scope="${scope}">
+      <span class="ifaceCheck"></span>
+      <input type="checkbox" value="${iface.name}"${isChecked ? ' checked' : ''}>
+      <div class="ifaceMain">
+        <div class="ifaceNameLine">
+          <span class="ifaceName">${iface.name}</span>
+          <span class="ifaceState ${stateCls}">${iface.state || '?'}</span>
+        </div>
+        <div class="ifaceMac">${iface.mac || '—'}</div>
+        ${extras ? `<div class="ifaceExtras">${extras}</div>` : ''}
+      </div>
+    </label>`;
+  }).join('');
+  host.querySelectorAll('.ifaceItem').forEach((lab) => {
+    lab.addEventListener('click', (e) => {
+      // Avoid double-toggle when the inner checkbox itself emits a change.
+      if (e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+      toggleIface(scope, lab.dataset.iface);
+    });
+    lab.querySelector('input[type=checkbox]').addEventListener('change', () => {
+      toggleIface(scope, lab.dataset.iface, true);
+    });
+  });
+  document.getElementById(countId).textContent =
+    `${picked.size}/${state.interfaces.length} selected`;
+}
+
+function toggleIface(scope, name, fromInputEvent = false) {
+  const set = ifaceSel[scope];
+  if (set.has(name)) set.delete(name); else set.add(name);
+  renderOneIfacePicker(scope);
+  if (scope === ifacePickerScope()) mirrorIfaceSelectionToHiddenSelect();
+}
+
+function mirrorIfaceSelectionToHiddenSelect() {
   const sel = $('interfaceSelect');
   if (!sel) return;
-  const names = Array.from(document.querySelectorAll('#interfaceCheckboxes input[type=checkbox]:checked')).map((c) => c.value);
-  // Update the hidden multi-select so legacy `.value` reads return the first
-  // checked NIC, and `selectedOptions` returns all of them.
+  const scope = ifacePickerScope();
+  const names = Array.from(ifaceSel[scope]);
   Array.from(sel.options).forEach((o) => { o.selected = names.includes(o.value); });
   sel.value = names[0] || '';
-  // Visual highlight on the label
-  document.querySelectorAll('#interfaceCheckboxes label').forEach((lab) => {
-    const cb = lab.querySelector('input[type=checkbox]');
-    lab.classList.toggle('checked', !!cb?.checked);
-  });
-  const count = $('ifaceChecksCount');
-  if (count) count.textContent = `${names.length}/${state.interfaces.length} selected`;
-  // Fire change so all the other listeners (interfaceInfo, persist to
-  // localStorage, etc.) react as if a normal <select change> happened.
   sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
+
+// Backward-compat shim — many call sites still call renderInterfaceCheckboxes().
+function renderInterfaceCheckboxes() { renderInterfacePickers(); }
 
 function updateInterfaceInfo() {
   const selected = state.interfaces.find((iface) => iface.name === $('interfaceSelect').value);
@@ -1320,6 +1364,10 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     if (button.dataset.view === 'serialView' && !state.serial.ports.length) refreshTtyList().catch(() => {});
     document.body.classList.toggle('captureMode', button.dataset.view === 'captureView');
     document.body.classList.toggle('serialMode', button.dataset.view === 'serialView');
+    // When switching tabs, mirror the active tab's picker into the hidden
+    // <select id=interfaceSelect> so legacy callers (send/capture handlers,
+    // peer-locking code, localStorage) see the correct selection.
+    mirrorIfaceSelectionToHiddenSelect();
   });
 });
 

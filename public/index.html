@@ -82,11 +82,7 @@
           <button class="modeTab" data-view="controlView">Control</button>
           <button class="modeTab" data-view="serialView">Serial</button>
         </div>
-        <div class="toolbarField">
-          <span>Interface(s)</span>
-          <div id="interfaceCheckboxes" class="ifaceChecks">— loading —</div>
-          <select id="interfaceSelect" hidden></select>
-        </div>
+        <select id="interfaceSelect" hidden multiple></select>
         <div id="interfaceInfo" class="muted"></div>
       </section>
 
@@ -132,7 +128,15 @@
       <section class="workspace">
         <section id="senderView" class="roleView active">
           <aside class="sidebar">
-            <div class="interfaceBox">
+            <div class="ifacePicker" id="senderIfacePicker">
+              <div class="ifacePickerHead">
+                <strong>Send via</strong>
+                <span class="ifacePickerCount" id="senderIfaceCount">0 selected</span>
+              </div>
+              <div class="ifacePickerList" id="senderIfaceList">— probe to load —</div>
+              <div class="ifacePickerHint">여러 NIC을 선택하면 같은 패킷이 각 NIC에서 송신됩니다 (각각 독립 agent).</div>
+            </div>
+            <div class="interfaceBox" style="display:none">
               <div id="selectedInterfaceName">-</div>
               <div id="selectedInterfaceMac" class="muted">-</div>
             </div>
@@ -329,6 +333,13 @@
 
         <section id="captureView" class="roleView captureViewWS">
           <section class="workPane wiresharkPane">
+            <div class="ifacePicker ifacePickerHoriz" id="captureIfacePicker">
+              <div class="ifacePickerHead">
+                <strong>Capture from</strong>
+                <span class="ifacePickerCount" id="captureIfaceCount">0 selected</span>
+              </div>
+              <div class="ifacePickerList ifacePickerListHoriz" id="captureIfaceList">— probe to load —</div>
+            </div>
             <div class="captureBar">
               <button id="captureStart" class="primaryAction wsStart">▶ Start</button>
               <button id="captureStop" class="ghostBtn wsStop" disabled>■ Stop</button>
