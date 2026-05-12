@@ -1832,7 +1832,9 @@ $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
 }));
 
 // ----------- Simple Bidirectional Forwarding Test (Control tab) -----------
-const sbf = { a: { interfaces: [] }, b: { interfaces: [] } };
+const sbf = { a: { interfaces: [] }, b: { interfaces: [] }, local: { interfaces: [] } };
+function sbfIsSinglePc() { return $('sbfSinglePc')?.checked === true; }
+function sbfLocalUrl() { return window.location.origin; }
 
 function sbfFillSelect(selectId, interfaces, fallbackIndex) {
   const sel = $(selectId);
@@ -1853,45 +1855,110 @@ function sbfMonitor(side) {
   const sel = $(side === 'a' ? 'sbfNodeAMonitor' : 'sbfNodeBMonitor');
   return sbf[side].interfaces.find((i) => i.name === sel.value) || null;
 }
+function sbfMonitor2(side) {
+  const sel = $(side === 'a' ? 'sbfNodeAMonitor2' : 'sbfNodeBMonitor2');
+  return sbf[side].interfaces.find((i) => i.name === sel.value) || null;
+}
+function sbfMonitorList(side) {
+  const seen = new Set();
+  const primary = sbfPrimary(side)?.name;
+  return [sbfMonitor(side), sbfMonitor2(side)]
+    .filter((m) => m && m.name !== primary && !seen.has(m.name) && (seen.add(m.name), true));
+}
 
 function sbfSyncTopology() {
+  if (sbfIsSinglePc()) {
+    const url = sbfLocalUrl();
+    $('sbfTopoAUrl').textContent = url + ' (this PC)';
+    $('sbfTopoBUrl').textContent = url + ' (this PC)';
+    $('sbfSingleEcho').textContent = url;
+    const s = sbfSingleSender(), r = sbfSingleReceiver(), mons = sbfSingleMonitors();
+    $('sbfTopoAPrimary').innerHTML  = `<span class="sbfBadge sbf-primary">Sender</span> ${s ? `${s.name} <small style="color:var(--muted)">${s.mac}</small>` : '—'}`;
+    $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${mons.length ? mons.map((m) => m.name).join(', ') : '—'}`;
+    $('sbfTopoBPrimary').innerHTML  = `<span class="sbfBadge sbf-primary">Receiver</span> ${r ? `${r.name} <small style="color:var(--muted)">${r.mac}</small>` : '—'}`;
+    $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">(captures dispatched on same PC)</span>`;
+    return;
+  }
   $('sbfTopoAUrl').textContent = $('sbfNodeAUrl').value || '-';
   $('sbfTopoBUrl').textContent = $('sbfNodeBUrl').value || '-';
   $('sbfNodeAEcho').textContent = $('sbfNodeAUrl').value || '';
   $('sbfNodeBEcho').textContent = $('sbfNodeBUrl').value || '';
   const ap = sbfPrimary('a'), bp = sbfPrimary('b');
-  const am = sbfMonitor('a'), bm = sbfMonitor('b');
+  const aMons = sbfMonitorList('a'), bMons = sbfMonitorList('b');
   $('sbfTopoAPrimary').innerHTML = `<span class="sbfBadge sbf-primary">Primary</span> ${ap ? `${ap.name} <small style="color:var(--muted)">${ap.mac}</small>` : '—'}`;
-  $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitor</span> ${am ? `${am.name} <small style="color:var(--muted)">${am.mac}</small>` : '—'}`;
+  $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${aMons.length ? aMons.map((m) => m.name).join(', ') : '—'}`;
   $('sbfTopoBPrimary').innerHTML = `<span class="sbfBadge sbf-primary">Primary</span> ${bp ? `${bp.name} <small style="color:var(--muted)">${bp.mac}</small>` : '—'}`;
-  $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitor</span> ${bm ? `${bm.name} <small style="color:var(--muted)">${bm.mac}</small>` : '—'}`;
+  $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${bMons.length ? bMons.map((m) => m.name).join(', ') : '—'}`;
 }
 
 async function sbfProbe() {
-  const aUrl = $('sbfNodeAUrl').value.trim();
-  const bUrl = $('sbfNodeBUrl').value.trim();
-  if (!aUrl || !bUrl) throw new Error('Node A URL과 Node B URL을 모두 입력하세요.');
   setActionStatus('sbfProbeStatus', 'running', 'probing...');
   $('sbfProbe').disabled = true;
   try {
+    if (sbfIsSinglePc()) {
+      const url = sbfLocalUrl();
+      const r = await api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url }) });
+      sbf.local.interfaces = r.interfaces;
+      const real = r.interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
+      sbfFillSelect('sbfSingleSender',   r.interfaces, real >= 0 ? real : 0);
+      sbfFillSelect('sbfSingleReceiver', r.interfaces, real + 1 < r.interfaces.length ? real + 1 : null);
+      sbfFillSelect('sbfSingleMonitor',  r.interfaces, real + 2 < r.interfaces.length ? real + 2 : null);
+      sbfFillSelect('sbfSingleMonitor2', r.interfaces, real + 3 < r.interfaces.length ? real + 3 : null);
+      sbfSyncTopology();
+      setActionStatus('sbfProbeStatus', 'ok', `local: ${r.interfaces.length} IF`);
+      return;
+    }
+    const aUrl = $('sbfNodeAUrl').value.trim();
+    const bUrl = $('sbfNodeBUrl').value.trim();
+    if (!aUrl || !bUrl) throw new Error('Node A URL과 Node B URL을 모두 입력하세요.');
     const [a, b] = await Promise.all([
       api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url: aUrl }) }),
       api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url: bUrl }) })
     ]);
     sbf.a.interfaces = a.interfaces;
     sbf.b.interfaces = b.interfaces;
-    // Skip virtual / wifi / loopback so the dropdowns default to real test NICs.
     const realA = a.interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
     const realB = b.interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
-    sbfFillSelect('sbfNodeAPrimary', a.interfaces, realA >= 0 ? realA : 0);
-    sbfFillSelect('sbfNodeAMonitor', a.interfaces, realA + 1 < a.interfaces.length ? realA + 1 : null);
-    sbfFillSelect('sbfNodeBPrimary', b.interfaces, realB >= 0 ? realB : 0);
-    sbfFillSelect('sbfNodeBMonitor', b.interfaces, realB + 1 < b.interfaces.length ? realB + 1 : null);
+    sbfFillSelect('sbfNodeAPrimary',  a.interfaces, realA >= 0 ? realA : 0);
+    sbfFillSelect('sbfNodeAMonitor',  a.interfaces, realA + 1 < a.interfaces.length ? realA + 1 : null);
+    sbfFillSelect('sbfNodeAMonitor2', a.interfaces, realA + 2 < a.interfaces.length ? realA + 2 : null);
+    sbfFillSelect('sbfNodeBPrimary',  b.interfaces, realB >= 0 ? realB : 0);
+    sbfFillSelect('sbfNodeBMonitor',  b.interfaces, realB + 1 < b.interfaces.length ? realB + 1 : null);
+    sbfFillSelect('sbfNodeBMonitor2', b.interfaces, realB + 2 < b.interfaces.length ? realB + 2 : null);
     sbfSyncTopology();
     setActionStatus('sbfProbeStatus', 'ok', `A: ${a.interfaces.length} IF · B: ${b.interfaces.length} IF`);
   } finally {
     $('sbfProbe').disabled = false;
   }
+}
+
+function sbfSingleSender() { return sbf.local.interfaces.find((i) => i.name === $('sbfSingleSender').value) || null; }
+function sbfSingleReceiver() { return sbf.local.interfaces.find((i) => i.name === $('sbfSingleReceiver').value) || null; }
+function sbfSingleMonitors() {
+  const seen = new Set();
+  const used = new Set([sbfSingleSender()?.name, sbfSingleReceiver()?.name]);
+  return [$('sbfSingleMonitor').value, $('sbfSingleMonitor2').value]
+    .map((n) => sbf.local.interfaces.find((i) => i.name === n))
+    .filter((m) => m && !used.has(m.name) && !seen.has(m.name) && (seen.add(m.name), true));
+}
+
+function sbfSetSinglePcMode(on) {
+  $('sbfTwoPcUrls').style.display = on ? 'none' : '';
+  $('sbfSinglePcUrl').style.display = on ? '' : 'none';
+  $('sbfSingleBlock').style.display = on ? '' : 'none';
+  $('sbfTwoPcIfaces').style.display = on ? 'none' : '';
+  const btnBoth = $('sbfRunBoth'); const btnBtoA = $('sbfRunBtoA');
+  if (on) {
+    if (btnBoth) btnBoth.style.display = 'none';
+    if (btnBtoA) btnBtoA.style.display = 'none';
+    $('sbfRunAtoB').textContent = '▶ Run (Send → Receive)';
+    $('sbfLocalUrl').value = sbfLocalUrl();
+  } else {
+    if (btnBoth) btnBoth.style.display = '';
+    if (btnBtoA) btnBtoA.style.display = '';
+    $('sbfRunAtoB').textContent = '▶ Run A to B';
+  }
+  sbfSyncTopology();
 }
 
 function sbfRenderResult(report) {
@@ -1939,37 +2006,57 @@ function sbfRenderResult(report) {
 }
 
 async function sbfRun(direction) {
-  const aPrimary = sbfPrimary('a'), bPrimary = sbfPrimary('b');
-  if (!aPrimary) throw new Error('Node A의 Primary 인터페이스를 선택하세요.');
-  if (!bPrimary) throw new Error('Node B의 Primary 인터페이스를 선택하세요.');
-  const aMonitor = sbfMonitor('a'), bMonitor = sbfMonitor('b');
-  const buttons = ['sbfRunAtoB', 'sbfRunBtoA', 'sbfRunBoth', 'sbfProbe'];
-  buttons.forEach((id) => { const b = $(id); if (b) b.disabled = true; });
-  const prog = progressFor('progSimpleBidir');
+  const singlePc = sbfIsSinglePc();
   const count = Number($('sbfCount').value || 10);
   const intervalMs = Number($('sbfInterval').value || 100);
   const captureTimeoutMs = Number($('sbfCaptureTimeout').value || 3000);
-  const passes = direction === 'BOTH' ? 2 : 1;
-  const estSec = passes * Math.max(1, (count * intervalMs + captureTimeoutMs) / 1000 + 1);
-  setActionStatus('statusSimpleBidir', 'running', `${direction} running...`);
-  prog.start(estSec);
-  setStatus(`Simple bidir forward ${direction}...`);
-  try {
-    const body = {
+  const params = {
+    count, intervalMs,
+    udpSrcPort: Number($('sbfUdpSrc').value || 40000),
+    udpDstPort: Number($('sbfUdpDst').value || 50000),
+    payloadMarkerPrefix: $('sbfMarker').value.trim() || 'KETI_SIMPLE_FORWARD',
+    captureTimeoutMs
+  };
+  let body;
+  if (singlePc) {
+    const send = sbfSingleSender(), recv = sbfSingleReceiver();
+    if (!send) throw new Error('Sender 인터페이스를 선택하세요.');
+    if (!recv) throw new Error('Receiver 인터페이스를 선택하세요.');
+    if (send.name === recv.name) throw new Error('Sender와 Receiver는 다른 인터페이스여야 합니다.');
+    const url = sbfLocalUrl();
+    body = {
+      ...params,
+      nodeAUrl: url, nodeBUrl: url,
+      nodeAPrimaryInterface: send.name,
+      nodeBPrimaryInterface: recv.name,
+      nodeAMonitorInterfaces: [],
+      nodeBMonitorInterfaces: sbfSingleMonitors().map((m) => m.name),
+      direction: 'A_TO_B'
+    };
+  } else {
+    const aPrimary = sbfPrimary('a'), bPrimary = sbfPrimary('b');
+    if (!aPrimary) throw new Error('Node A의 Primary 인터페이스를 선택하세요.');
+    if (!bPrimary) throw new Error('Node B의 Primary 인터페이스를 선택하세요.');
+    body = {
+      ...params,
       nodeAUrl: $('sbfNodeAUrl').value.trim(),
       nodeBUrl: $('sbfNodeBUrl').value.trim(),
       nodeAPrimaryInterface: aPrimary.name,
       nodeBPrimaryInterface: bPrimary.name,
-      nodeAMonitorInterfaces: aMonitor ? [aMonitor.name] : [],
-      nodeBMonitorInterfaces: bMonitor ? [bMonitor.name] : [],
-      direction,
-      count,
-      intervalMs,
-      udpSrcPort: Number($('sbfUdpSrc').value || 40000),
-      udpDstPort: Number($('sbfUdpDst').value || 50000),
-      payloadMarkerPrefix: $('sbfMarker').value.trim() || 'KETI_SIMPLE_FORWARD',
-      captureTimeoutMs
+      nodeAMonitorInterfaces: sbfMonitorList('a').map((m) => m.name),
+      nodeBMonitorInterfaces: sbfMonitorList('b').map((m) => m.name),
+      direction
     };
+  }
+  const buttons = ['sbfRunAtoB', 'sbfRunBtoA', 'sbfRunBoth', 'sbfProbe'];
+  buttons.forEach((id) => { const b = $(id); if (b) b.disabled = true; });
+  const prog = progressFor('progSimpleBidir');
+  const passes = body.direction === 'BOTH' ? 2 : 1;
+  const estSec = passes * Math.max(1, (count * intervalMs + captureTimeoutMs) / 1000 + 1);
+  setActionStatus('statusSimpleBidir', 'running', `${body.direction} running...`);
+  prog.start(estSec);
+  setStatus(`Simple bidir forward ${body.direction}...`);
+  try {
     const result = await api('/api/simple-bidir-forward-test', { method: 'POST', body: JSON.stringify(body) });
     sbfRenderResult(result.report);
     const overall = result.report.overall;
@@ -1989,10 +2076,19 @@ async function sbfRun(direction) {
 (function sbfInit() {
   const b = $('sbfNodeBUrl');
   if (b && !b.value) b.value = window.location.origin;
-  ['sbfNodeAUrl','sbfNodeBUrl','sbfNodeAPrimary','sbfNodeAMonitor','sbfNodeBPrimary','sbfNodeBMonitor'].forEach((id) => {
+  if ($('sbfLocalUrl')) $('sbfLocalUrl').value = window.location.origin;
+  const syncIds = [
+    'sbfNodeAUrl','sbfNodeBUrl',
+    'sbfNodeAPrimary','sbfNodeAMonitor','sbfNodeAMonitor2',
+    'sbfNodeBPrimary','sbfNodeBMonitor','sbfNodeBMonitor2',
+    'sbfSingleSender','sbfSingleReceiver','sbfSingleMonitor','sbfSingleMonitor2'
+  ];
+  syncIds.forEach((id) => {
     $(id)?.addEventListener('input', sbfSyncTopology);
     $(id)?.addEventListener('change', sbfSyncTopology);
   });
+  $('sbfSinglePc')?.addEventListener('change', (e) => sbfSetSinglePcMode(e.target.checked));
+  sbfSetSinglePcMode(false);
   sbfSyncTopology();
   $('sbfProbe')?.addEventListener('click', () => sbfProbe().catch(toastError));
   $('sbfRunAtoB')?.addEventListener('click', () => sbfRun('A_TO_B').catch(toastError));

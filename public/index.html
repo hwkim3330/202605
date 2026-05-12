@@ -546,10 +546,17 @@
               </div>
 
               <div class="sbfStep">
-                <h4>① Nodes</h4>
-                <div class="grid2 overrideGrid">
+                <h4>① Nodes
+                  <label style="margin-left:auto; display:inline-flex; align-items:center; gap:6px; font-weight:400; font-size:12px; color:var(--muted)">
+                    <input id="sbfSinglePc" type="checkbox"> Single-PC mode (이 PC에서 송신·수신·모니터 모두)
+                  </label>
+                </h4>
+                <div id="sbfTwoPcUrls" class="grid2 overrideGrid">
                   <label>Node A URL<input id="sbfNodeAUrl" autocomplete="off" placeholder="http://PC-A-IP:8080"></label>
                   <label>Node B URL<input id="sbfNodeBUrl" autocomplete="off" placeholder="http://localhost:8080"></label>
+                </div>
+                <div id="sbfSinglePcUrl" style="display:none">
+                  <label>This PC URL<input id="sbfLocalUrl" autocomplete="off" readonly></label>
                 </div>
                 <div class="actionFooter" style="margin-top:8px">
                   <button id="sbfProbe" class="secondaryAction">Probe Nodes</button>
@@ -564,19 +571,31 @@
                     <span class="sbfBadge sbf-monitor">Monitor</span> 누설 감지 (다른 포트)
                   </span>
                 </h4>
-                <div class="sbfIfaceGrid">
+                <div class="sbfIfaceBlock" id="sbfSingleBlock" style="display:none">
+                  <div class="sbfIfaceHeader">This PC <small id="sbfSingleEcho">-</small></div>
+                  <div class="row" style="gap:8px">
+                    <label><strong><span class="sbfBadge sbf-primary">Sender</span></strong><select id="sbfSingleSender"></select></label>
+                    <label><strong><span class="sbfBadge sbf-primary">Receiver</span></strong><select id="sbfSingleReceiver"></select></label>
+                    <label><strong><span class="sbfBadge sbf-monitor">Monitor 1</span></strong><select id="sbfSingleMonitor"></select></label>
+                    <label><strong><span class="sbfBadge sbf-monitor">Monitor 2</span></strong><select id="sbfSingleMonitor2"></select></label>
+                  </div>
+                  <div class="hint" style="font-size:11.5px; color:var(--muted); margin-top:4px">에이전트 = 송신 1 + 캡처 1 + 모니터 N개 (각각 독립 프로세스로 병렬 실행)</div>
+                </div>
+                <div class="sbfIfaceGrid" id="sbfTwoPcIfaces">
                   <div class="sbfIfaceBlock">
                     <div class="sbfIfaceHeader">Node A <small id="sbfNodeAEcho">-</small></div>
                     <div class="row" style="gap:8px">
                       <label><strong><span class="sbfBadge sbf-primary">Primary</span>Interface</strong><select id="sbfNodeAPrimary"></select></label>
-                      <label><strong><span class="sbfBadge sbf-monitor">Monitor</span>Interface</strong><select id="sbfNodeAMonitor"></select></label>
+                      <label><strong><span class="sbfBadge sbf-monitor">Monitor 1</span></strong><select id="sbfNodeAMonitor"></select></label>
+                      <label><strong><span class="sbfBadge sbf-monitor">Monitor 2</span></strong><select id="sbfNodeAMonitor2"></select></label>
                     </div>
                   </div>
                   <div class="sbfIfaceBlock">
                     <div class="sbfIfaceHeader">Node B <small id="sbfNodeBEcho">-</small></div>
                     <div class="row" style="gap:8px">
                       <label><strong><span class="sbfBadge sbf-primary">Primary</span>Interface</strong><select id="sbfNodeBPrimary"></select></label>
-                      <label><strong><span class="sbfBadge sbf-monitor">Monitor</span>Interface</strong><select id="sbfNodeBMonitor"></select></label>
+                      <label><strong><span class="sbfBadge sbf-monitor">Monitor 1</span></strong><select id="sbfNodeBMonitor"></select></label>
+                      <label><strong><span class="sbfBadge sbf-monitor">Monitor 2</span></strong><select id="sbfNodeBMonitor2"></select></label>
                     </div>
                   </div>
                 </div>
