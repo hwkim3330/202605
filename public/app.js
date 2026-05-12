@@ -242,6 +242,7 @@ function packetInfo(decoded) {
 const capture = {
   packets: [],
   reader: null,
+  readers: [],
   abort: null,
   selectedIdx: -1,
   startedAtMs: 0,
@@ -469,47 +470,83 @@ function clearCapture() {
   refreshCaptureStats();
 }
 
-async function startCaptureStream() {
-  if (capture.reader) return;
-  clearCapture();
-  $('capStatState').textContent = 'capturing';
-  $('capStatState').classList.add('running');
-  $('captureStart').disabled = true;
-  $('captureStop').disabled = false;
-  capture.startedAtMs = performance.now();
-  capture.lastWindow = { t: capture.startedAtMs, count: 0, pps: 0 };
-  capture.filter = $('captureDisplayFilter').value.trim();
-  // Pre-decode filters are manual only (collapsed advanced panel). Default = sniff all.
+function selectedInterfaceNames() {
+  const el = $('interfaceSelect');
+  if (!el) return [];
+  if (el.multiple) return Array.from(el.selectedOptions).map((o) => o.value).filter(Boolean);
+  return el.value ? [el.value] : [];
+}
+
+async function spawnCaptureStream(ifaceName, signal, statTimer) {
   const body = {
-    interface: $('interfaceSelect').value,
+    interface: ifaceName,
     timeoutSec: 0,
     maxFrames: 0,
     srcMac: $('captureSrcMac')?.value.trim() || '',
     dstMac: $('captureDstMac')?.value.trim() || '',
     etherType: $('captureEtherType')?.value.trim() || ''
   };
-  const ctrl = new AbortController();
-  capture.abort = ctrl;
-  let res;
-  try {
-    res = await fetch('/api/capture-stream', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: ctrl.signal
-    });
-  } catch (err) {
-    finishCaptureStream(`error: ${err.message}`);
-    throw err;
-  }
-  if (!res.ok || !res.body) {
-    finishCaptureStream(`error: HTTP ${res.status}`);
-    return;
-  }
+  const res = await fetch('/api/capture-stream', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+    signal
+  });
+  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} on ${ifaceName}`);
   const reader = res.body.getReader();
-  capture.reader = reader;
+  capture.readers.push(reader);
   const dec = new TextDecoder();
   let buf = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let ev;
+      try { ev = JSON.parse(line); } catch { continue; }
+      if (ev.type === 'frame') {
+        ev._idx = capture.packets.length;
+        ev._iface = ifaceName; // tag origin so the user can tell where it came from
+        capture.packets.push(ev);
+        capture.totalBytes += ev.length;
+        capture.lastWindow.count += 1;
+        if (capture.packets.length > capture.maxBuffer) {
+          capture.packets.shift();
+          capture.truncated += 1;
+          if (capture.truncated === 1) toast(`Capture buffer hit ${capture.maxBuffer} packets — oldest are now being dropped to keep memory bounded.`, 'warn', 6000);
+        }
+        if (frameMatchesFilter(ev, capture.filter)) appendPacketRow(ev);
+      } else if (ev.type === 'stats') {
+        $('capStatDrops').textContent = String(ev.kernelDrops || 0);
+        if ((ev.kernelDrops || 0) > 0) {
+          $('capStatDrops').parentElement.style.background = 'rgba(155, 28, 28, 0.12)';
+          $('capStatDrops').parentElement.style.color = '#9b1c1c';
+        }
+      } else if (ev.type === 'log') {
+        setStatus(`agent[${ifaceName}]: ${ev.stderr}`, true);
+      }
+    }
+  }
+}
+
+async function startCaptureStream() {
+  if (capture.readers && capture.readers.length) return;
+  const ifaces = selectedInterfaceNames();
+  if (!ifaces.length) { setStatus('No interface selected', true); return; }
+  clearCapture();
+  $('capStatState').textContent = ifaces.length > 1 ? `capturing × ${ifaces.length}` : 'capturing';
+  $('capStatState').classList.add('running');
+  $('captureStart').disabled = true;
+  $('captureStop').disabled = false;
+  capture.startedAtMs = performance.now();
+  capture.lastWindow = { t: capture.startedAtMs, count: 0, pps: 0 };
+  capture.filter = $('captureDisplayFilter').value.trim();
+  capture.readers = [];
+  capture.abort = new AbortController();
   const statTimer = setInterval(() => {
     const now = performance.now();
     const dt = (now - capture.lastWindow.t) / 1000;
@@ -518,49 +555,21 @@ async function startCaptureStream() {
     capture.lastWindow.count = 0;
     const elapsed = (now - capture.startedAtMs) / 1000;
     const stateEl = $('capStatState');
-    if (stateEl?.classList.contains('running')) stateEl.textContent = `capturing · ${elapsed.toFixed(1)}s`;
+    if (stateEl?.classList.contains('running')) stateEl.textContent = ifaces.length > 1
+      ? `capturing × ${ifaces.length} · ${elapsed.toFixed(1)}s`
+      : `capturing · ${elapsed.toFixed(1)}s`;
     refreshCaptureStats();
   }, 500);
   try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let nl;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl).trim();
-        buf = buf.slice(nl + 1);
-        if (!line) continue;
-        let ev;
-        try { ev = JSON.parse(line); } catch { continue; }
-        if (ev.type === 'frame') {
-          ev._idx = capture.packets.length;
-          capture.packets.push(ev);
-          capture.totalBytes += ev.length;
-          capture.lastWindow.count += 1;
-          // Cap the in-memory buffer so a long-running capture cannot OOM the
-          // tab. Drop oldest, keep newest. The DOM is already capped in
-          // appendPacketRow; this caps the underlying array (used by .pcap
-          // export and filter re-application).
-          if (capture.packets.length > capture.maxBuffer) {
-            capture.packets.shift();
-            capture.truncated += 1;
-            if (capture.truncated === 1) toast(`Capture buffer hit ${capture.maxBuffer} packets — oldest are now being dropped to keep memory bounded.`, 'warn', 6000);
-          }
-          if (frameMatchesFilter(ev, capture.filter)) appendPacketRow(ev);
-        } else if (ev.type === 'stats') {
-          $('capStatDrops').textContent = String(ev.kernelDrops || 0);
-          if ((ev.kernelDrops || 0) > 0) {
-            $('capStatDrops').parentElement.style.background = 'rgba(155, 28, 28, 0.12)';
-            $('capStatDrops').parentElement.style.color = '#9b1c1c';
-          }
-        } else if (ev.type === 'log') {
-          setStatus(`agent: ${ev.stderr}`, true);
-        }
-      }
-    }
-  } catch (err) {
-    if (err.name !== 'AbortError') setStatus(err.message, true);
+    // Each spawnCaptureStream call hits /api/capture-stream which spawns its own
+    // packet_agent.py subprocess on the server, so N interfaces == N parallel
+    // agents on the same machine. Frames are merged into capture.packets and
+    // tagged with the originating interface (frame._iface) so the user can
+    // tell rows apart.
+    await Promise.all(ifaces.map((iface) =>
+      spawnCaptureStream(iface, capture.abort.signal, statTimer)
+        .catch((err) => { if (err.name !== 'AbortError') setStatus(`${iface}: ${err.message}`, true); })
+    ));
   } finally {
     clearInterval(statTimer);
     finishCaptureStream('stopped');
@@ -568,7 +577,7 @@ async function startCaptureStream() {
 }
 
 function finishCaptureStream(label) {
-  capture.reader = null;
+  capture.readers = [];
   capture.abort = null;
   $('captureStart').disabled = false;
   $('captureStop').disabled = true;
@@ -579,7 +588,7 @@ function finishCaptureStream(label) {
 
 function stopCaptureStream() {
   try { capture.abort?.abort(); } catch {}
-  try { capture.reader?.cancel(); } catch {}
+  for (const r of capture.readers || []) { try { r.cancel(); } catch {} }
 }
 
 function reapplyFilter() {
@@ -1016,10 +1025,33 @@ async function build() {
 async function send() {
   const err = validateProfileFields();
   if (err) { setStatus(err, true); toast(err, 'fail'); return; }
-  setStatus('Sending packet...');
-  const result = await api('/api/send', { method: 'POST', body: JSON.stringify(getProfile()) });
-  showResult(result);
-  setStatus(`Sent ${result.stdout.framesSent} frame(s), ${result.stdout.bytesSent} bytes`);
+  const ifaces = selectedInterfaceNames();
+  if (!ifaces.length) { setStatus('No interface selected', true); return; }
+  if (ifaces.length === 1) {
+    setStatus('Sending packet...');
+    const result = await api('/api/send', { method: 'POST', body: JSON.stringify(getProfile()) });
+    showResult(result);
+    setStatus(`Sent ${result.stdout.framesSent} frame(s), ${result.stdout.bytesSent} bytes on ${ifaces[0]}`);
+    return;
+  }
+  // Multi-interface fan-out: each NIC sends independently, with its own srcMac.
+  setStatus(`Sending on ${ifaces.length} interface(s)...`);
+  let totalFrames = 0, totalBytes = 0;
+  const errors = [];
+  for (const name of ifaces) {
+    const iface = state.interfaces.find((i) => i.name === name);
+    const profile = { ...getProfile(), interface: name, srcMac: iface?.mac || getProfile().srcMac };
+    try {
+      const r = await api('/api/send', { method: 'POST', body: JSON.stringify(profile) });
+      totalFrames += Number(r.stdout?.framesSent || 0);
+      totalBytes += Number(r.stdout?.bytesSent || 0);
+      showResult(r);
+    } catch (e) {
+      errors.push(`${name}: ${e.message}`);
+    }
+  }
+  if (errors.length) setStatus(`Sent ${totalFrames} frames across ${ifaces.length - errors.length}/${ifaces.length}; errors: ${errors.join('; ')}`, true);
+  else setStatus(`Sent ${totalFrames} frames / ${totalBytes} bytes across ${ifaces.length} interfaces`);
 }
 
 // `capture()` legacy function removed; use startCaptureStream / stopCaptureStream.
@@ -1439,6 +1471,19 @@ $('refreshInterfaces').addEventListener('click', () => loadInterfaces().catch((e
   toastError(err);
 }));
 $('interfaceSelect').addEventListener('change', updateInterfaceInfo);
+$('interfaceMulti')?.addEventListener('change', (e) => {
+  const sel = $('interfaceSelect');
+  const prev = sel.value;
+  sel.multiple = e.target.checked;
+  if (e.target.checked) {
+    sel.size = Math.min(6, Math.max(3, state.interfaces.length));
+    if (prev) Array.from(sel.options).forEach((o) => { if (o.value === prev) o.selected = true; });
+  } else {
+    sel.size = 1;
+    if (prev) sel.value = prev;
+  }
+  updateInterfaceInfo();
+});
 $('build').addEventListener('click', () => build().catch((err) => {
   toastError(err);
 }));

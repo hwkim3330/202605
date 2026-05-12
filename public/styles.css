@@ -1982,3 +1982,19 @@ pre {
 .sbfCapTable tr.pass td { background: rgba(31,122,77,.05); }
 .sbfCapTable tr.fail td { background: rgba(155,28,28,.05); }
 .sbfSeq { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); margin-top: 4px; word-break: break-all; }
+
+/* Fix: control tab content should scroll when SBF card is long */
+#controlView.roleView .controlPaneFull {
+  height: 100%;
+  min-height: 0;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+
+/* Multi-interface picker (Sender + Capture tabs share this) */
+#interfaceSelect { min-width: 240px; }
+#interfaceSelect[multiple] { height: 80px; vertical-align: top; padding: 4px; }
+.toolbarField .interfaceMode {
+  margin-left: 6px; font-size: 11px; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 4px;
+}

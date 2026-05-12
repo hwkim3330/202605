@@ -83,8 +83,11 @@
           <button class="modeTab" data-view="serialView">Serial</button>
         </div>
         <div class="toolbarField">
-          <span>Interface</span>
+          <span>Interface(s)</span>
           <select id="interfaceSelect"></select>
+          <label class="interfaceMode" title="여러 인터페이스에서 동시에 송신/캡처">
+            <input id="interfaceMulti" type="checkbox"> multi
+          </label>
         </div>
         <div id="interfaceInfo" class="muted"></div>
       </section>
