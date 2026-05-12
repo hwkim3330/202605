@@ -1047,7 +1047,37 @@ function toggleIface(scope, name, fromInputEvent = false) {
   if (set.has(name)) set.delete(name); else set.add(name);
   renderOneIfacePicker(scope);
   if (scope === ifacePickerScope()) mirrorIfaceSelectionToHiddenSelect();
+  if (scope === 'sender') autofillSenderFromPickedIface();
 }
+
+// When the user picks a NIC in the Sender picker, fill in Source MAC and
+// Source IP from that NIC's properties — but only if the field is empty or
+// matches the previously-picked NIC. Never clobber a value the user typed.
+function autofillSenderFromPickedIface() {
+  if (!document.body.classList.contains('senderMode')
+      && document.body.classList.contains('captureMode')) return;
+  const picked = Array.from(ifaceSel.sender)[0];
+  if (!picked) return;
+  const iface = state.interfaces.find((i) => i.name === picked);
+  if (!iface) return;
+  const srcMac = $('srcMac');
+  const srcIp  = $('srcIp');
+  if (srcMac && (!srcMac.value || srcMac.dataset.autofill === '1')) {
+    srcMac.value = iface.mac || '';
+    srcMac.dataset.autofill = '1';
+  }
+  if (srcIp && (!srcIp.value || srcIp.dataset.autofill === '1')) {
+    const v4 = (iface.ipv4 || [])[0];
+    srcIp.value = v4 ? v4.local : '';
+    srcIp.dataset.autofill = '1';
+  }
+}
+// Clear the autofill flag when the user actually types into the field.
+document.addEventListener('input', (e) => {
+  if (e.target && (e.target.id === 'srcMac' || e.target.id === 'srcIp')) {
+    e.target.dataset.autofill = '';
+  }
+}, true);
 
 function mirrorIfaceSelectionToHiddenSelect() {
   const sel = $('interfaceSelect');
@@ -1061,6 +1091,9 @@ function mirrorIfaceSelectionToHiddenSelect() {
 
 // Backward-compat shim — many call sites still call renderInterfaceCheckboxes().
 function renderInterfaceCheckboxes() { renderInterfacePickers(); }
+
+// Initial body-class state — Sender tab is active on load.
+document.body.classList.add('senderMode');
 
 function updateInterfaceInfo() {
   const selected = state.interfaces.find((iface) => iface.name === $('interfaceSelect').value);
@@ -1364,6 +1397,8 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     if (button.dataset.view === 'serialView' && !state.serial.ports.length) refreshTtyList().catch(() => {});
     document.body.classList.toggle('captureMode', button.dataset.view === 'captureView');
     document.body.classList.toggle('serialMode', button.dataset.view === 'serialView');
+    document.body.classList.toggle('controlMode', button.dataset.view === 'controlView');
+    document.body.classList.toggle('senderMode', button.dataset.view === 'senderView');
     // When switching tabs, mirror the active tab's picker into the hidden
     // <select id=interfaceSelect> so legacy callers (send/capture handlers,
     // peer-locking code, localStorage) see the correct selection.

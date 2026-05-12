@@ -2099,3 +2099,11 @@ pre {
 .ifacePickerHint {
   font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.4;
 }
+
+/* Hide the legacy linkStrip outside Control tab — the per-tab interface
+   pickers replace it for Sender/Capture, and Control still needs the peer
+   URL flow for Wire Validation / E2E / Benchmark. */
+body:not(.controlMode) .linkStrip { display: none; }
+
+/* Slimmer toolbar (no more checkbox row living there) */
+.modeToolbar { padding: 8px 12px; }
