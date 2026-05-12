@@ -1327,6 +1327,7 @@ function updateControlInterfaceState(role) {
   updateControlPairMode();
   renderNodeGrid();
   renderPairCard();
+  renderControlTopology();
 }
 
 function updateControlPairMode() {
@@ -1422,6 +1423,69 @@ function selectedControlPairs() {
     receiverIf,
     label: `${senderIf} -> ${receiverIf}`
   })));
+}
+
+function ifaceByName(node, name) {
+  return node?.interfaces?.find((iface) => iface.name === name) || null;
+}
+
+function ifaceIp(iface) {
+  return iface?.ipv4?.find((addr) => addr.local && !addr.local.includes(':'))?.local || '';
+}
+
+function renderControlTopology() {
+  const svg = $('controlTopologySvg');
+  if (!svg) return;
+  let pairs = [];
+  try {
+    pairs = selectedControlPairs();
+  } catch {
+    pairs = [];
+  }
+  const senderNode = state.nodes.sender;
+  const receiverNode = state.nodes.receiver;
+  const summary = $('controlTopologySummary');
+  if (summary) summary.textContent = pairs.length ? `${pairs.length} selected link(s)` : 'select sender/receiver ports';
+  if (!pairs.length) {
+    svg.innerHTML = `
+      <text x="460" y="132" text-anchor="middle" class="topoSubtext">Probe peer and select interface pairs</text>
+    `;
+    return;
+  }
+  const laneYs = pairs.map((_, index) => 78 + index * Math.min(64, 132 / Math.max(1, pairs.length - 1 || 1)));
+  const port = (x, y, label, ip, cls = '') => `
+    <rect class="topoPort ${cls}" x="${x - 72}" y="${y - 22}" width="144" height="44" rx="12"></rect>
+    <text x="${x}" y="${y - 3}" text-anchor="middle" class="topoText">${escapeHtml(label)}</text>
+    <text x="${x}" y="${y + 14}" text-anchor="middle" class="topoSubtext">${escapeHtml(ip || '-')}</text>
+  `;
+  const links = pairs.map((pair, index) => {
+    const y = laneYs[index];
+    const cls = index % 2 ? 'alt' : '';
+    return `
+      <path class="topoLink ${cls}" d="M250 ${y} C330 ${y}, 330 130, 410 130"></path>
+      <path class="topoLink ${cls}" d="M510 130 C590 130, 590 ${y}, 670 ${y}"></path>
+    `;
+  }).join('');
+  const senderPorts = pairs.map((pair, index) => {
+    const iface = ifaceByName(senderNode, pair.senderIf);
+    return port(170, laneYs[index], pair.senderIf, ifaceIp(iface));
+  }).join('');
+  const receiverPorts = pairs.map((pair, index) => {
+    const iface = ifaceByName(receiverNode, pair.receiverIf);
+    return port(750, laneYs[index], pair.receiverIf, ifaceIp(iface), 'peer');
+  }).join('');
+  svg.innerHTML = `
+    <rect class="topoNode" x="28" y="34" width="260" height="190" rx="22"></rect>
+    <rect class="topoNode" x="632" y="34" width="260" height="190" rx="22"></rect>
+    <text x="158" y="58" text-anchor="middle" class="topoSubtext">THIS PC / SENDER</text>
+    <text x="762" y="58" text-anchor="middle" class="topoSubtext">PEER PC / RECEIVER</text>
+    ${links}
+    <rect class="topoSwitch" x="410" y="92" width="100" height="76" rx="18"></rect>
+    <text x="460" y="125" text-anchor="middle" class="topoSwitchText">DUT</text>
+    <text x="460" y="145" text-anchor="middle" class="topoSwitchText">SWITCH</text>
+    ${senderPorts}
+    ${receiverPorts}
+  `;
 }
 
 function initControlRunBoard(title, pairs) {
@@ -3283,6 +3347,7 @@ function syncControlFromPeer() {
   }
   renderNodeGrid();
   renderPairCard();
+  renderControlTopology();
 }
 
 async function probePeer() {

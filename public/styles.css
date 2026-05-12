@@ -24,6 +24,10 @@ body {
   overflow: hidden;
 }
 
+body.controlMode {
+  overflow: auto;
+}
+
 button,
 input,
 select,
@@ -116,6 +120,11 @@ textarea {
   overflow: hidden;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+}
+
+body.controlMode .workspace {
+  overflow: visible;
+  display: block;
 }
 
 body.captureMode .workspace { padding: 0; }
@@ -779,7 +788,7 @@ body.serialMode .serialPane {
 .controlPaneFull {
   width: 100%;
   padding: 18px 22px;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 #controlView.roleView {
@@ -1292,6 +1301,96 @@ body.serialMode .serialPane {
 
 .controlIfaceChipState.up {
   background: #22c55e;
+}
+
+.controlTopology {
+  margin: 12px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.controlTopologyHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fbfc;
+}
+
+.controlTopologyHead strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.controlTopologyHead span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#controlTopologySvg {
+  display: block;
+  width: 100%;
+  height: clamp(210px, 28vw, 290px);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(14, 165, 233, 0.08), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f5f9fa 100%);
+}
+
+.topoNode {
+  fill: #ffffff;
+  stroke: #d2dae3;
+  stroke-width: 1.2;
+  filter: drop-shadow(0 4px 10px rgba(15, 23, 42, 0.08));
+}
+
+.topoSwitch {
+  fill: #14323a;
+  stroke: #0f6f78;
+  stroke-width: 2;
+}
+
+.topoPort {
+  fill: #e8f5f7;
+  stroke: #0f6f78;
+  stroke-width: 1.2;
+}
+
+.topoPort.peer {
+  fill: #fff4e0;
+  stroke: #b9651a;
+}
+
+.topoLink {
+  fill: none;
+  stroke: #0f6f78;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.topoLink.alt {
+  stroke: #b9651a;
+}
+
+.topoText {
+  fill: #18212b;
+  font: 700 13px ui-monospace, SFMono-Regular, monospace;
+}
+
+.topoSubtext {
+  fill: #62707f;
+  font: 11px ui-monospace, SFMono-Regular, monospace;
+}
+
+.topoSwitchText {
+  fill: #ffffff;
+  font: 800 15px system-ui, sans-serif;
+  letter-spacing: .08em;
 }
 
 .suiteCard {
@@ -2408,11 +2507,10 @@ pre {
 
 /* Fix: control tab content should scroll when SBF card is long */
 #controlView.roleView .controlPaneFull {
-  height: 100%;
+  height: auto;
   min-height: 0;
-  max-height: calc(100vh - 120px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  max-height: none;
+  overflow: visible;
   padding-bottom: 42px;
 }
 
