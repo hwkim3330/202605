@@ -94,12 +94,19 @@ function payloadData(profile) {
 function setProfile(profile) {
   const payload = payloadData(profile);
   $('protocol').value = profile.protocol || 'udp';
-  if (!state.locked) {
-    $('dstMac').value = profile.dstMac || '';
-    $('srcMac').value = profile.srcMac || '';
-    $('srcIp').value = profile.ipv4?.src || profile.arp?.senderIp || '';
-    $('dstIp').value = profile.ipv4?.dst || profile.arp?.targetIp || '';
-  }
+  // Templates carry placeholder source MAC/IP (e.g. 02:00:00:00:00:01 or
+  // 192.168.100.10) that have nothing to do with the user's real NIC. Only
+  // pull destination + frame content from the template; source addressing
+  // is owned by the Sender interface picker and stays put.
+  $('dstMac').value = profile.dstMac || '';
+  $('dstIp').value  = profile.ipv4?.dst || profile.arp?.targetIp || '';
+  // Re-apply autofill so srcMac / srcIp reflect the currently picked NIC
+  // (clear the user-typed sticky flag — when picking a template the user
+  // wants the source to follow the active interface).
+  ['srcMac','srcIp'].forEach((id) => { const el = $(id); if (el) el.dataset.autofill = '1'; });
+  $('srcMac').value = '';
+  $('srcIp').value  = '';
+  autofillSenderFromPickedIface();
   $('srcPort').value = profile.udp?.srcPort || 40000;
   $('dstPort').value = profile.udp?.dstPort || 50000;
   $('payloadMode').value = payload.mode || 'text';
