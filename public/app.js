@@ -919,25 +919,69 @@ async function runCurrentCase({ selectedOnly = false } = {}) {
   $('caseEndTime').textContent = '-';
   $('caseCycleStatus').textContent = 'running';
   setStatus(selectedOnly ? 'Sending selected packet list rows...' : 'Sending full packet list...');
-  await ensurePeerReady();
-  syncControlFromPeer();
+  // Packet list Send is a local fan-out — fire each step's profile out the
+  // Sender-picked NIC(s) via /api/send. No peer round-trip, no test-case
+  // matching. (Peer-side matching lives on the Control tab's Wire
+  // Validation / E2E pipelines, which already have their own URL fields.)
   const testCase = caseForRun({ selectedOnly });
-  const result = await api('/api/run-test-case', {
-    method: 'POST',
-    body: JSON.stringify({
-      senderUrl: $('senderNodeUrl').value,
-      receiverUrl: $('receiverNodeUrl').value,
-      senderInterface: $('senderNodeInterface').value,
-      receiverInterface: $('receiverNodeInterface').value,
-      testCase,
-      loopCount: $('caseRepeat').checked ? Number($('caseLoopCount').value || 1) : 1,
-      cyclePeriodMs: Number($('caseCycleMs').value || 0)
-    })
-  });
+  const senderIfaces = selectedInterfaceNames();
+  if (!senderIfaces.length) throw new Error('No interface selected. Pick a NIC in "Send via" first.');
+  const loopCount = $('caseRepeat').checked ? Math.max(1, Number($('caseLoopCount').value || 1)) : 1;
+  const cyclePeriodMs = Math.max(0, Number($('caseCycleMs').value || 0));
+  const stepResults = [];
+  let totalFrames = 0, totalBytes = 0;
+  for (let loop = 0; loop < loopCount; loop += 1) {
+    const passStarted = Date.now();
+    for (const step of testCase.steps) {
+      if (step.kind === 'delay') {
+        await new Promise((r) => setTimeout(r, Number(step.delayMs || 0)));
+        stepResults.push({ kind: 'delay', name: step.name, delayMs: step.delayMs, ok: true });
+        continue;
+      }
+      if (step.enabled === false) {
+        stepResults.push({ kind: 'packet', name: step.name, skipped: true, ok: true, framesSent: 0 });
+        continue;
+      }
+      for (const ifaceName of senderIfaces) {
+        const ifaceObj = state.interfaces.find((i) => i.name === ifaceName);
+        const profile = {
+          ...step.profile,
+          interface: ifaceName,
+          srcMac: ifaceObj?.mac || step.profile.srcMac,
+          count: step.count, intervalMs: step.intervalMs
+        };
+        try {
+          const r = await api('/api/send', { method: 'POST', body: JSON.stringify(profile) });
+          totalFrames += Number(r.stdout?.framesSent || 0);
+          totalBytes += Number(r.stdout?.bytesSent || 0);
+          stepResults.push({ kind: 'packet', name: `${step.name} via ${ifaceName}`, ok: true, framesSent: r.stdout?.framesSent, protocol: profile.protocol });
+        } catch (e) {
+          stepResults.push({ kind: 'packet', name: `${step.name} via ${ifaceName}`, ok: false, error: e.message });
+        }
+      }
+    }
+    const elapsed = Date.now() - passStarted;
+    if (loop < loopCount - 1 && cyclePeriodMs > elapsed) {
+      await new Promise((r) => setTimeout(r, cyclePeriodMs - elapsed));
+    }
+  }
+  const result = {
+    report: {
+      ok: stepResults.every((s) => s.ok),
+      summary: {
+        framesSent: totalFrames,
+        matched: 0, // no peer capture — receiver-side matching skipped
+        total: stepResults.filter((s) => s.kind === 'packet').length,
+        loopCount, cyclePeriodMs
+      },
+      steps: stepResults,
+      capturedFrames: []
+    }
+  };
   $('caseEndTime').textContent = new Date().toLocaleTimeString();
   $('caseCycleStatus').textContent = `${Date.now() - started.getTime()} ms`;
   $('caseSentPackets').textContent = String(result.report.summary.framesSent);
-  $('caseSentBytes').textContent = String(result.report.steps.reduce((sum, step) => sum + ((step.framesSent || 0) * (step.txProfile?.targetFrameLength || 64)), 0));
+  $('caseSentBytes').textContent = String(totalBytes);
   $('caseRunSummary').textContent = JSON.stringify(result.report.summary, null, 2);
   $('reportSummary').innerHTML = `
     <div><span>Status</span><strong>${result.report.ok ? 'PASS' : 'FAIL'}</strong></div>
