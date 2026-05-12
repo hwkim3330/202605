@@ -854,7 +854,7 @@ body.serialMode .serialPane {
 
 .actionsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 14px;
   margin-top: 18px;
 }
@@ -868,7 +868,7 @@ body.serialMode .serialPane {
   border-radius: 16px;
   background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04);
-  min-height: 180px;
+  min-height: 156px;
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -1457,6 +1457,80 @@ body.serialMode .serialPane {
   color: #9b1c1c;
   font-size: 11px;
   line-height: 1.35;
+}
+
+.controlPacketPanel {
+  margin: 12px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.controlPacketHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8fbfc;
+  border-bottom: 1px solid var(--line);
+}
+
+.controlPacketHead strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.controlPacketHead span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.controlPacketScroll {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.controlPacketPanel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.controlPacketPanel th,
+.controlPacketPanel td {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  padding: 7px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.controlPacketPanel th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fbfc;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.controlPacketPanel td.hex,
+.controlPacketPanel td.iface,
+.controlPacketPanel td.addr {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.controlPacketPanel td.hex {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #334155;
 }
 
 .pairFlow {
@@ -2336,8 +2410,10 @@ pre {
 #controlView.roleView .controlPaneFull {
   height: 100%;
   min-height: 0;
-  max-height: calc(100vh - 180px);
+  max-height: calc(100vh - 120px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 42px;
 }
 
 /* Multi-interface picker (Sender + Capture tabs share this) */

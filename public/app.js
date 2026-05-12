@@ -1468,6 +1468,74 @@ function updateControlRunCard(index, status, metrics = {}, error = '') {
   }
 }
 
+function packetProtocol(decoded) {
+  if (decoded?.arp) return 'ARP';
+  if (decoded?.icmp) return 'ICMP';
+  if (decoded?.udp) return 'UDP';
+  if (decoded?.tcp) return 'TCP';
+  if (decoded?.ipv4) return `IP ${decoded.ipv4.protocol}`;
+  return decoded?.ethernet?.etherType || '-';
+}
+
+function packetSrc(decoded) {
+  return decoded?.ipv4?.src || decoded?.arp?.senderIp || decoded?.ethernet?.srcMac || '-';
+}
+
+function packetDst(decoded) {
+  return decoded?.ipv4?.dst || decoded?.arp?.targetIp || decoded?.ethernet?.dstMac || '-';
+}
+
+function renderControlPackets(frames, pairLabel = '') {
+  const panel = $('controlPacketPanel');
+  const rows = $('controlPacketRows');
+  if (!panel || !rows) return;
+  const sample = (frames || []).slice(0, 80);
+  rows.innerHTML = sample.map((frame, index) => {
+    const decoded = frame.decoded || {};
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(pairLabel || frame.pairLabel || '-')}</td>
+        <td class="iface">${escapeHtml(frame.interface || '-')}</td>
+        <td>${escapeHtml(packetProtocol(decoded))}</td>
+        <td class="addr">${escapeHtml(packetSrc(decoded))}</td>
+        <td class="addr">${escapeHtml(packetDst(decoded))}</td>
+        <td>${escapeHtml(frame.length ?? '-')}</td>
+        <td class="hex" title="${escapeHtml(frame.frameHex || '')}">${escapeHtml((frame.frameHex || '').slice(0, 96))}</td>
+      </tr>`;
+  }).join('') || '<tr><td colspan="8" class="empty">No captured frames available for this run</td></tr>';
+  $('controlPacketSummary').textContent = `${frames?.length || 0} frame(s)${frames?.length > sample.length ? ` · showing ${sample.length}` : ''}`;
+  panel.classList.remove('hidden');
+}
+
+function appendControlPackets(frames, pairLabel = '') {
+  const existing = Array.from($('controlPacketRows')?.querySelectorAll('tr') || []).length;
+  if (!existing || $('controlPacketPanel')?.classList.contains('hidden')) {
+    renderControlPackets(frames, pairLabel);
+    return;
+  }
+  const panel = $('controlPacketPanel');
+  const rows = $('controlPacketRows');
+  const currentCount = Number(panel.dataset.frameCount || existing);
+  const sample = (frames || []).slice(0, 40);
+  rows.insertAdjacentHTML('beforeend', sample.map((frame, offset) => {
+    const decoded = frame.decoded || {};
+    return `
+      <tr>
+        <td>${currentCount + offset + 1}</td>
+        <td>${escapeHtml(pairLabel || frame.pairLabel || '-')}</td>
+        <td class="iface">${escapeHtml(frame.interface || '-')}</td>
+        <td>${escapeHtml(packetProtocol(decoded))}</td>
+        <td class="addr">${escapeHtml(packetSrc(decoded))}</td>
+        <td class="addr">${escapeHtml(packetDst(decoded))}</td>
+        <td>${escapeHtml(frame.length ?? '-')}</td>
+        <td class="hex" title="${escapeHtml(frame.frameHex || '')}">${escapeHtml((frame.frameHex || '').slice(0, 96))}</td>
+      </tr>`;
+  }).join(''));
+  panel.dataset.frameCount = String(currentCount + (frames?.length || 0));
+  $('controlPacketSummary').textContent = `${panel.dataset.frameCount} frame(s)`;
+}
+
 async function apiReport(path, body) {
   const res = await fetch(path, {
     method: 'POST',
@@ -1695,6 +1763,7 @@ async function runE2E() {
         });
         results.push({ pair, report: result.report });
         renderE2EReport(result.report);
+        appendControlPackets(result.report.capturedFrames || [], pair.label);
         updateControlRunCard(index, result.report.ok ? 'ok' : 'fail', {
           tx: result.report.sent?.framesSent ?? 0,
           match: result.report.matchCount ?? 0,
@@ -1748,6 +1817,7 @@ async function runReport() {
           intervalMs: 100
         });
         results.push({ pair, report: result.report });
+        appendControlPackets(result.report.capturedFrames || [], pair.label);
         updateControlRunCard(index, result.report.ok ? 'ok' : 'fail', {
           sent: result.report.summary?.framesSent ?? 0,
           match: result.report.summary?.matched ?? 0,
@@ -2951,6 +3021,7 @@ async function runFullSuite() {
         const data = await apiReport(item.stage.path, item.stage.body);
         const summary = item.stage.summarize(data);
         if (summary.ok) pass += 1;
+        if (data.report?.capturedFrames?.length) appendControlPackets(data.report.capturedFrames, item.label);
         updateControlRunCard(index, summary.ok ? 'ok' : 'fail', summary.metrics, summary.error);
       } catch (err) {
         updateControlRunCard(index, 'fail', { status: 'error', pair: item.stage.name, result: '-' }, err.message);

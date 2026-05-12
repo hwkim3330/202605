@@ -510,6 +510,21 @@
               <div id="controlRunCards" class="controlRunCards"></div>
             </div>
 
+            <div id="controlPacketPanel" class="controlPacketPanel hidden">
+              <div class="controlPacketHead">
+                <strong>Captured Packets</strong>
+                <span id="controlPacketSummary">0 frames</span>
+              </div>
+              <div class="controlPacketScroll">
+                <table>
+                  <thead>
+                    <tr><th>#</th><th>Pair</th><th>IF</th><th>Proto</th><th>Src</th><th>Dst</th><th>Len</th><th>Hex</th></tr>
+                  </thead>
+                  <tbody id="controlPacketRows"></tbody>
+                </table>
+              </div>
+            </div>
+
             <div class="actionsGrid">
               <div class="actionCard">
                 <div class="actionHeader">
