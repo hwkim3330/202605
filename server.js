@@ -1300,6 +1300,12 @@ function matchMarkerFrames(frames, marker, senderMac, expectedMac, udpDstPort) {
   return { matched, seqs };
 }
 
+function asInterfaceNameArray(value) {
+  if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' && v.trim());
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  return [];
+}
+
 async function runOneForwardDirection(direction, params) {
   const isAtoB = direction === 'A_TO_B';
   const senderUrl = isAtoB ? params.nodeAUrl : params.nodeBUrl;
@@ -1314,10 +1320,14 @@ async function runOneForwardDirection(direction, params) {
     receiverIfaces,
     isAtoB ? params.nodeBPrimaryInterface : params.nodeAPrimaryInterface
   );
-  const receiverMonitor = selectInterface(
-    receiverIfaces,
-    isAtoB ? params.nodeBMonitorInterface : params.nodeAMonitorInterface
-  );
+  const senderMonitorNames = isAtoB ? params.nodeAMonitorInterfaces : params.nodeBMonitorInterfaces;
+  const receiverMonitorNames = isAtoB ? params.nodeBMonitorInterfaces : params.nodeAMonitorInterfaces;
+  const senderMonitors = senderMonitorNames
+    .filter((name) => name && name !== senderPrimary.name)
+    .map((name) => selectInterface(senderIfaces, name));
+  const receiverMonitors = receiverMonitorNames
+    .filter((name) => name && name !== receiverPrimary.name)
+    .map((name) => selectInterface(receiverIfaces, name));
 
   const markerPrefix = String(params.payloadMarkerPrefix || 'KETI_SIMPLE_FORWARD');
   const marker = `${markerPrefix}_${direction}_SEQ_`;
@@ -1353,36 +1363,64 @@ async function runOneForwardDirection(direction, params) {
     srcMac: senderPrimary.mac
   });
 
-  const primaryCap = remoteJson(receiverUrl, '/api/capture', {
-    method: 'POST',
-    body: buildCaptureBody(receiverPrimary)
-  });
-  const monitorCap = remoteJson(receiverUrl, '/api/capture', {
-    method: 'POST',
-    body: buildCaptureBody(receiverMonitor)
-  });
+  // Each capture is dispatched to its own packet_agent.py subprocess (one agent
+  // per interface) so the 4-port DUT validation can monitor every NIC in
+  // parallel without contention.
+  const captureSpecs = [
+    { role: 'receiver-primary', node: 'receiver', url: receiverUrl, iface: receiverPrimary, expectMatch: true,  expectedDstMac: receiverPrimary.mac },
+    { role: 'sender-primary',   node: 'sender',   url: senderUrl,   iface: senderPrimary,   expectMatch: true,  expectedDstMac: receiverPrimary.mac },
+    ...receiverMonitors.map((iface) => ({ role: 'receiver-monitor', node: 'receiver', url: receiverUrl, iface, expectMatch: false, expectedDstMac: null })),
+    ...senderMonitors.map((iface)   => ({ role: 'sender-monitor',   node: 'sender',   url: senderUrl,   iface, expectMatch: false, expectedDstMac: null }))
+  ];
+  const capturePromises = captureSpecs.map((spec) =>
+    remoteJson(spec.url, '/api/capture', { method: 'POST', body: buildCaptureBody(spec.iface) })
+      .then((r) => ({ ok: true, result: r }))
+      .catch((err) => ({ ok: false, error: err.message }))
+  );
 
   await new Promise((resolve) => setTimeout(resolve, captureLeadMs));
   const sendResult = await remoteJson(senderUrl, '/api/send', {
     method: 'POST',
     body: { ...txProfile, timeoutMs: captureTimeoutSec * 1000 + 8000 }
   });
-  const [primaryRes, monitorRes] = await Promise.all([primaryCap, monitorCap]);
+  const captureResults = await Promise.all(capturePromises);
 
-  const primaryFrames = primaryRes.stdout?.frames || [];
-  const monitorFrames = monitorRes.stdout?.frames || [];
-  const primaryMatch = matchMarkerFrames(primaryFrames, marker, senderPrimary.mac, receiverPrimary.mac, udpDstPort);
-  const monitorMatch = matchMarkerFrames(monitorFrames, marker, senderPrimary.mac, null, udpDstPort);
+  const captures = captureSpecs.map((spec, i) => {
+    const cap = captureResults[i];
+    if (!cap.ok) {
+      return {
+        role: spec.role,
+        node: spec.node,
+        interface: { name: spec.iface.name, mac: spec.iface.mac },
+        matched: 0,
+        seqs: [],
+        pass: false,
+        error: cap.error
+      };
+    }
+    const frames = cap.result?.stdout?.frames || [];
+    const m = matchMarkerFrames(frames, marker, senderPrimary.mac, spec.expectedDstMac, udpDstPort);
+    const seqs = [...m.seqs].sort((a, b) => a - b);
+    const pass = spec.expectMatch ? m.matched.length >= count : m.matched.length === 0;
+    return {
+      role: spec.role,
+      node: spec.node,
+      interface: { name: spec.iface.name, mac: spec.iface.mac },
+      expectMatch: spec.expectMatch,
+      matched: m.matched.length,
+      seqs,
+      pass
+    };
+  });
 
   const sent = Number(sendResult.stdout?.framesSent || count);
+  const rxPrimary = captures.find((c) => c.role === 'receiver-primary');
   const expected = new Set();
   for (let i = 1; i <= count; i += 1) expected.add(i);
-  const missingSequences = [...expected].filter((s) => !primaryMatch.seqs.has(s));
-  const unexpectedMonitorSequences = [...monitorMatch.seqs].sort((a, b) => a - b);
-
-  const expectedPass = primaryMatch.matched.length >= count;
-  const monitorPass = monitorMatch.matched.length === 0;
-  const result = expectedPass && monitorPass ? 'PASS' : 'FAIL';
+  const missingSequences = rxPrimary
+    ? [...expected].filter((s) => !rxPrimary.seqs.includes(s))
+    : [...expected];
+  const result = captures.every((c) => c.pass) ? 'PASS' : 'FAIL';
 
   return {
     direction,
@@ -1390,49 +1428,59 @@ async function runOneForwardDirection(direction, params) {
     receiverUrl,
     senderInterface: { name: senderPrimary.name, mac: senderPrimary.mac },
     expectedInterface: { name: receiverPrimary.name, mac: receiverPrimary.mac },
-    monitorInterface: { name: receiverMonitor.name, mac: receiverMonitor.mac },
+    senderMonitorInterfaces: senderMonitors.map((m) => ({ name: m.name, mac: m.mac })),
+    receiverMonitorInterfaces: receiverMonitors.map((m) => ({ name: m.name, mac: m.mac })),
     marker,
     udpSrcPort,
     udpDstPort,
     srcIp,
     dstIp,
+    count,
     sent,
-    expectedMatched: primaryMatch.matched.length,
-    monitorMatched: monitorMatch.matched.length,
-    expectedPass,
-    monitorPass,
+    captures,
     missingSequences,
-    unexpectedMonitorSequences,
-    monitorSamples: monitorMatch.matched.slice(0, 20),
     result
   };
 }
 
 function simpleBidirReportHtml(report) {
-  const dirRows = report.directions.map((d) => `
-    <tr class="${d.result === 'PASS' ? 'pass' : 'fail'}">
-      <td>${escapeHtml(d.direction)}</td>
-      <td>${escapeHtml(d.senderInterface.name)} (${escapeHtml(d.senderInterface.mac)})</td>
-      <td>${escapeHtml(d.expectedInterface.name)} (${escapeHtml(d.expectedInterface.mac)})</td>
-      <td>${escapeHtml(d.monitorInterface.name)} (${escapeHtml(d.monitorInterface.mac)})</td>
-      <td>${d.sent}</td>
-      <td>${d.expectedMatched}</td>
-      <td>${d.monitorMatched}</td>
-      <td><strong>${d.result}</strong></td>
-    </tr>
-  `).join('');
-  const detail = report.directions.map((d) => `
-    <h3>${escapeHtml(d.direction)} — <span class="${d.result === 'PASS' ? 'pass' : 'fail'}">${d.result}</span></h3>
-    <ul>
-      <li>Sender: ${escapeHtml(d.senderUrl)} / ${escapeHtml(d.senderInterface.name)} (${escapeHtml(d.senderInterface.mac)})</li>
-      <li>Expected receiver: ${escapeHtml(d.receiverUrl)} / ${escapeHtml(d.expectedInterface.name)} (${escapeHtml(d.expectedInterface.mac)})</li>
-      <li>Monitor receiver: ${escapeHtml(d.receiverUrl)} / ${escapeHtml(d.monitorInterface.name)} (${escapeHtml(d.monitorInterface.mac)})</li>
-      <li>Marker: <code>${escapeHtml(d.marker)}</code> · UDP ${d.udpSrcPort} → ${d.udpDstPort} · ${escapeHtml(d.srcIp)} → ${escapeHtml(d.dstIp)}</li>
-      <li>Sent ${d.sent} · expected matched ${d.expectedMatched} · monitor matched ${d.monitorMatched}</li>
-      <li>Missing sequences (${d.missingSequences.length}): ${d.missingSequences.slice(0, 50).join(', ') || '-'}${d.missingSequences.length > 50 ? ', …' : ''}</li>
-      <li>Unexpected monitor sequences (${d.unexpectedMonitorSequences.length}): ${d.unexpectedMonitorSequences.slice(0, 50).join(', ') || '-'}${d.unexpectedMonitorSequences.length > 50 ? ', …' : ''}</li>
-    </ul>
-  `).join('');
+  const dirRows = report.directions.map((d) => {
+    const capRows = d.captures.map((c) => `
+      <tr class="${c.pass ? 'pass' : 'fail'}">
+        <td>${escapeHtml(c.role)}</td>
+        <td>${escapeHtml(c.node)}</td>
+        <td>${escapeHtml(c.interface.name)}</td>
+        <td><code>${escapeHtml(c.interface.mac)}</code></td>
+        <td>${c.expectMatch ? '≥ ' + d.count : '== 0'}</td>
+        <td>${c.matched}</td>
+        <td><strong>${c.pass ? 'PASS' : 'FAIL'}</strong></td>
+        <td>${c.error ? escapeHtml(c.error) : ''}</td>
+      </tr>
+    `).join('');
+    return `
+      <h3>${escapeHtml(d.direction)} — <span class="${d.result === 'PASS' ? 'pass' : 'fail'}">${d.result}</span></h3>
+      <div>Sender ${escapeHtml(d.senderUrl)} / ${escapeHtml(d.senderInterface.name)} (${escapeHtml(d.senderInterface.mac)}) → Expected ${escapeHtml(d.receiverUrl)} / ${escapeHtml(d.expectedInterface.name)} (${escapeHtml(d.expectedInterface.mac)})</div>
+      <div>Marker: <code>${escapeHtml(d.marker)}</code> · UDP ${d.udpSrcPort} → ${d.udpDstPort} · ${escapeHtml(d.srcIp)} → ${escapeHtml(d.dstIp)} · Sent ${d.sent}/${d.count}</div>
+      <table>
+        <thead><tr><th>Role</th><th>Node</th><th>Interface</th><th>MAC</th><th>Expect</th><th>Matched</th><th>Result</th><th>Error</th></tr></thead>
+        <tbody>${capRows}</tbody>
+      </table>
+      <div class="seq">Missing sequences (${d.missingSequences.length}): ${d.missingSequences.slice(0, 100).join(', ') || '—'}${d.missingSequences.length > 100 ? ' …' : ''}</div>
+    `;
+  }).join('');
+  const summaryRows = report.directions.map((d) => {
+    const okCaps = d.captures.filter((c) => c.pass).length;
+    return `
+      <tr class="${d.result === 'PASS' ? 'pass' : 'fail'}">
+        <td>${escapeHtml(d.direction)}</td>
+        <td>${escapeHtml(d.senderInterface.name)} → ${escapeHtml(d.expectedInterface.name)}</td>
+        <td>${d.sent}</td>
+        <td>${okCaps}/${d.captures.length}</td>
+        <td><strong>${d.result}</strong></td>
+      </tr>
+    `;
+  }).join('');
+  const detail = dirRows;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Simple Bidirectional Forwarding Test</title>
 <style>
@@ -1449,14 +1497,14 @@ table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border-bottom:1px 
 <div class="box">
   <div>Node A: ${escapeHtml(report.nodeAUrl)}</div>
   <div>  primary: ${escapeHtml(report.nodeA.primary.name)} (${escapeHtml(report.nodeA.primary.mac)})</div>
-  <div>  monitor: ${escapeHtml(report.nodeA.monitor.name)} (${escapeHtml(report.nodeA.monitor.mac)})</div>
+  <div>  monitors: ${report.nodeA.monitors.length ? report.nodeA.monitors.map((m) => `${escapeHtml(m.name)} (${escapeHtml(m.mac)})`).join(', ') : '—'}</div>
   <div>Node B: ${escapeHtml(report.nodeBUrl)}</div>
   <div>  primary: ${escapeHtml(report.nodeB.primary.name)} (${escapeHtml(report.nodeB.primary.mac)})</div>
-  <div>  monitor: ${escapeHtml(report.nodeB.monitor.name)} (${escapeHtml(report.nodeB.monitor.mac)})</div>
+  <div>  monitors: ${report.nodeB.monitors.length ? report.nodeB.monitors.map((m) => `${escapeHtml(m.name)} (${escapeHtml(m.mac)})`).join(', ') : '—'}</div>
 </div>
 <table>
-<thead><tr><th>Direction</th><th>Sender IF</th><th>Expected IF</th><th>Monitor IF</th><th>Sent</th><th>Expected match</th><th>Monitor match</th><th>Result</th></tr></thead>
-<tbody>${dirRows}</tbody>
+<thead><tr><th>Direction</th><th>Pair</th><th>Sent</th><th>Captures passing</th><th>Result</th></tr></thead>
+<tbody>${summaryRows}</tbody>
 </table>
 ${detail}
 </body></html>`;
@@ -1469,17 +1517,25 @@ async function runSimpleBidirForwardTest(reqBody) {
     remoteJson(nodeAUrl, '/api/interfaces'),
     remoteJson(nodeBUrl, '/api/interfaces')
   ]);
+  const nodeAMonitorNames = asInterfaceNameArray(reqBody.nodeAMonitorInterfaces ?? reqBody.nodeAMonitorInterface);
+  const nodeBMonitorNames = asInterfaceNameArray(reqBody.nodeBMonitorInterfaces ?? reqBody.nodeBMonitorInterface);
   const params = {
     ...reqBody,
     nodeAUrl,
     nodeBUrl,
     nodeAInterfaces: aInfo.stdout?.interfaces || [],
-    nodeBInterfaces: bInfo.stdout?.interfaces || []
+    nodeBInterfaces: bInfo.stdout?.interfaces || [],
+    nodeAMonitorInterfaces: nodeAMonitorNames,
+    nodeBMonitorInterfaces: nodeBMonitorNames
   };
   const nodeAPrimary = selectInterface(params.nodeAInterfaces, reqBody.nodeAPrimaryInterface);
-  const nodeAMonitor = selectInterface(params.nodeAInterfaces, reqBody.nodeAMonitorInterface);
   const nodeBPrimary = selectInterface(params.nodeBInterfaces, reqBody.nodeBPrimaryInterface);
-  const nodeBMonitor = selectInterface(params.nodeBInterfaces, reqBody.nodeBMonitorInterface);
+  const nodeAMonitors = nodeAMonitorNames
+    .filter((n) => n !== nodeAPrimary.name)
+    .map((n) => selectInterface(params.nodeAInterfaces, n));
+  const nodeBMonitors = nodeBMonitorNames
+    .filter((n) => n !== nodeBPrimary.name)
+    .map((n) => selectInterface(params.nodeBInterfaces, n));
 
   const direction = String(reqBody.direction || 'A_TO_B').toUpperCase();
   const directions = [];
@@ -1499,11 +1555,11 @@ async function runSimpleBidirForwardTest(reqBody) {
     nodeBUrl,
     nodeA: {
       primary: { name: nodeAPrimary.name, mac: nodeAPrimary.mac },
-      monitor: { name: nodeAMonitor.name, mac: nodeAMonitor.mac }
+      monitors: nodeAMonitors.map((m) => ({ name: m.name, mac: m.mac }))
     },
     nodeB: {
       primary: { name: nodeBPrimary.name, mac: nodeBPrimary.mac },
-      monitor: { name: nodeBMonitor.name, mac: nodeBMonitor.mac }
+      monitors: nodeBMonitors.map((m) => ({ name: m.name, mac: m.mac }))
     },
     config: {
       direction,
@@ -1755,13 +1811,22 @@ async function handleApi(req, res) {
       return sendJson(res, 200, {
         ok: true,
         result: report.overall,
-        directions: report.directions.map((d) => ({
-          direction: d.direction,
-          sent: d.sent,
-          expectedMatched: d.expectedMatched,
-          monitorMatched: d.monitorMatched,
-          result: d.result
-        })),
+        directions: report.directions.map((d) => {
+          const rxPrimary = d.captures.find((c) => c.role === 'receiver-primary');
+          const monitors = d.captures.filter((c) => c.role.endsWith('-monitor'));
+          return {
+            direction: d.direction,
+            sent: d.sent,
+            expectedMatched: rxPrimary?.matched || 0,
+            monitorMatched: monitors.reduce((s, m) => s + m.matched, 0),
+            captures: d.captures.map((c) => ({
+              role: c.role, node: c.node,
+              interface: c.interface.name, mac: c.interface.mac,
+              matched: c.matched, pass: c.pass, error: c.error
+            })),
+            result: d.result
+          };
+        }),
         htmlReport: '/reports/simple-bidir-forward-latest.html',
         jsonReport: '/reports/simple-bidir-forward-latest.json',
         report

@@ -6,30 +6,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
-      --bg: #edf1f4;
-      --panel: #ffffff;
-      --text: #18212b;
-      --muted: #62707f;
-      --line: #d2dae3;
-      --accent: #0f6f78;
-      --accent-strong: #0a5158;
-      --soft: #e7f3f4;
-      --ok: #1f7a4d;
-      --okBg: #e6f4ec;
-      --fail: #9b1c1c;
-      --failBg: #fdecec;
-      --warn: #a45b10;
+      --bg:#edf1f4; --panel:#fff; --text:#18212b; --muted:#62707f; --line:#d2dae3;
+      --accent:#0f6f78; --accent-strong:#0a5158; --soft:#e7f3f4;
+      --ok:#1f7a4d; --okBg:#e6f4ec; --fail:#9b1c1c; --failBg:#fdecec; --warn:#a45b10; --warnBg:#fff4e0;
     }
-    * { box-sizing: border-box; }
+    * { box-sizing:border-box; }
     body { margin:0; font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--text); background:var(--bg); }
     header { background:linear-gradient(120deg,var(--accent-strong),var(--accent)); color:#fff; padding:18px 24px; box-shadow:0 1px 3px rgba(0,0,0,.08); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
     header h1 { margin:0; font-size:20px; font-weight:600; }
     header .sub { opacity:.85; font-size:13px; margin-top:2px; }
     header nav a { color:#fff; text-decoration:none; padding:6px 12px; border:1px solid rgba(255,255,255,.4); border-radius:6px; font-size:13px; }
     header nav a:hover { background:rgba(255,255,255,.15); }
-    main { max-width:1180px; margin:0 auto; padding:20px; }
+    main { max-width:1240px; margin:0 auto; padding:20px; }
     .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
-    .card h2 { margin:0 0 12px; font-size:16px; color:var(--accent-strong); border-bottom:1px solid var(--line); padding-bottom:8px; }
+    .card h2 { margin:0 0 6px; font-size:16px; color:var(--accent-strong); }
+    .card .cardHint { color:var(--muted); font-size:12px; margin-bottom:12px; }
     .card h3 { margin:0 0 8px; font-size:14px; color:var(--accent-strong); }
     .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px 14px; }
     label { display:flex; flex-direction:column; font-size:12px; color:var(--muted); gap:4px; }
@@ -52,10 +43,13 @@
     .status.ok .dot { background:var(--ok); }
     .status.fail .dot { background:var(--fail); }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; letter-spacing:.02em; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
     .badge.pass { background:var(--okBg); color:var(--ok); }
     .badge.fail { background:var(--failBg); color:var(--fail); }
-    .summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:14px; }
+    .badge.role-primary { background:#dbeafe; color:#1d4ed8; }
+    .badge.role-monitor { background:var(--warnBg); color:var(--warn); }
+    .badge.role-unused { background:#f1f5f9; color:#64748b; }
+    .summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:14px; }
     .sumBox { border:1px solid var(--line); border-radius:8px; padding:10px 12px; background:#fff; }
     .sumBox span { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
     .sumBox strong { display:block; font-size:22px; font-weight:600; margin-top:2px; }
@@ -64,27 +58,47 @@
     table { width:100%; border-collapse:collapse; margin-top:12px; font-size:13px; }
     th, td { border-bottom:1px solid var(--line); padding:8px 10px; text-align:left; }
     th { background:var(--soft); color:var(--accent-strong); font-weight:600; }
-    .nodeLabel { display:inline-block; padding:1px 7px; border-radius:4px; font-size:11px; font-weight:600; background:var(--soft); color:var(--accent-strong); margin-right:6px; }
-    .topo { display:grid; grid-template-columns:1fr auto 1fr; gap:14px; align-items:center; padding:8px 0 14px; }
+    tr.pass td { background:rgba(31,122,77,.04); }
+    tr.fail td { background:rgba(155,28,28,.05); }
+    .ifaceCols { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    @media(max-width:780px){ .ifaceCols { grid-template-columns:1fr; } }
+    .ifaceBlock { border:1px solid var(--line); border-radius:8px; padding:12px 14px; background:#fcfdfd; }
+    .ifaceBlock h3 { display:flex; align-items:center; gap:8px; margin-top:0; }
+    .ifaceBlock .badge.role-Node { background:var(--soft); color:var(--accent-strong); }
+    .ifaceTable { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px; }
+    .ifaceTable th { background:transparent; border-bottom:1px solid var(--line); padding:6px 4px; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+    .ifaceTable td { border-bottom:1px solid #eef2f4; padding:6px 4px; vertical-align:middle; }
+    .ifaceTable td.name { font-family:ui-monospace,monospace; font-weight:600; }
+    .ifaceTable td.mac { font-family:ui-monospace,monospace; color:var(--muted); font-size:11.5px; }
+    .ifaceTable td.state { font-size:11px; }
+    .roleRadios { display:inline-flex; gap:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+    .roleRadios label { flex-direction:row; align-items:center; padding:4px 9px; cursor:pointer; font-size:11.5px; color:var(--muted); background:#fff; border-right:1px solid var(--line); }
+    .roleRadios label:last-child { border-right:none; }
+    .roleRadios input { display:none; }
+    .roleRadios label.sel-primary { background:#1d4ed8; color:#fff; }
+    .roleRadios label.sel-monitor { background:var(--warn); color:#fff; }
+    .roleRadios label.sel-unused { background:#e2e8f0; color:#334155; }
+    .topo { display:grid; grid-template-columns:1fr auto 1fr; gap:14px; align-items:center; padding:8px 0 4px; }
     .topoNode { border:1px dashed var(--accent); border-radius:8px; padding:10px 12px; background:#fff; }
-    .topoNode small { display:block; color:var(--muted); margin-top:4px; }
+    .topoNode strong { display:block; }
+    .topoNode small { display:block; color:var(--muted); margin-top:4px; font-family:ui-monospace,monospace; }
+    .topoNode .iface { font-family:ui-monospace,monospace; font-size:12px; color:var(--text); margin-top:2px; }
     .topoArrow { font-size:22px; color:var(--accent); text-align:center; }
-    .topoNode .iface { font-family:ui-monospace,monospace; font-size:12px; color:var(--text); }
-    .topoNode .mon { color:var(--warn); }
     .hint { font-size:12px; color:var(--muted); margin-top:6px; }
     code { font-family:ui-monospace,SFMono-Regular,monospace; font-size:12px; background:var(--soft); padding:1px 5px; border-radius:3px; }
-    .seqList { font-family:ui-monospace,monospace; font-size:12px; color:var(--muted); word-break:break-all; }
+    .seqList { font-family:ui-monospace,monospace; font-size:12px; color:var(--muted); word-break:break-all; margin-top:4px; }
     details { margin-top:10px; }
     summary { cursor:pointer; color:var(--accent-strong); font-weight:600; }
     .err { background:var(--failBg); color:var(--fail); padding:8px 12px; border-radius:6px; font-size:13px; margin-top:10px; display:none; white-space:pre-wrap; }
     .err.show { display:block; }
+    .stepNum { display:inline-block; width:22px; height:22px; line-height:22px; text-align:center; background:var(--accent); color:#fff; border-radius:50%; font-size:12px; font-weight:600; margin-right:8px; }
   </style>
 </head>
 <body>
   <header>
     <div>
       <h1>Simple Bidirectional Forwarding Test</h1>
-      <div class="sub">DUT 스위치의 양방향 포트 포워딩을 marker 기반 UDP로 검증합니다 · KETI Ethernet Packet Lab</div>
+      <div class="sub">PC당 N개 인터페이스 · 4포트 DUT 스위치 양방향 forwarding 검증 · KETI Ethernet Packet Lab</div>
     </div>
     <nav>
       <a href="/">← Main Lab</a>
@@ -93,50 +107,35 @@
 
   <main>
     <div class="card">
-      <h2>1. Nodes</h2>
+      <h2><span class="stepNum">1</span>Nodes</h2>
+      <div class="cardHint">관리망(연구원망 또는 Wi-Fi)으로 양쪽 노드에 HTTP API 접근이 가능해야 합니다. 시험용 NIC에는 IP가 없어도 됩니다.</div>
       <div class="row">
-        <label>
-          <strong>Node A URL</strong>
-          <input id="nodeAUrl" placeholder="http://PC-A-IP:8080" autocomplete="off">
-        </label>
-        <label>
-          <strong>Node B URL</strong>
-          <input id="nodeBUrl" placeholder="http://localhost:8080" autocomplete="off">
-        </label>
+        <label><strong>Node A URL</strong><input id="nodeAUrl" placeholder="http://PC-A-IP:8080" autocomplete="off"></label>
+        <label><strong>Node B URL</strong><input id="nodeBUrl" placeholder="http://localhost:8080" autocomplete="off"></label>
       </div>
       <div class="actions">
         <button id="btnProbe" class="secondary">Probe Nodes</button>
         <span class="status" id="probeStatus"><span class="dot"></span><span class="text">idle</span></span>
-        <span class="spacer"></span>
-        <span class="hint">관리망으로 양 노드에 HTTP 접근이 가능해야 합니다.</span>
       </div>
     </div>
 
     <div class="card">
-      <h2>2. Interfaces</h2>
-      <div class="row">
-        <label>
-          <strong><span class="nodeLabel">Node A</span>Primary Interface</strong>
-          <select id="nodeAPrimary"></select>
-        </label>
-        <label>
-          <strong><span class="nodeLabel">Node A</span>Monitor Interface</strong>
-          <select id="nodeAMonitor"></select>
-        </label>
-        <label>
-          <strong><span class="nodeLabel">Node B</span>Primary Interface</strong>
-          <select id="nodeBPrimary"></select>
-        </label>
-        <label>
-          <strong><span class="nodeLabel">Node B</span>Monitor Interface</strong>
-          <select id="nodeBMonitor"></select>
-        </label>
+      <h2><span class="stepNum">2</span>Interface Roles</h2>
+      <div class="cardHint">각 인터페이스에 역할을 지정하세요. <span class="badge role-primary">Primary</span> = 송신 / 기대 수신 (노드별 1개). <span class="badge role-monitor">Monitor</span> = 누설 감지 (노드별 0~N개). <span class="badge role-unused">Unused</span> = 시험 제외.</div>
+      <div class="ifaceCols">
+        <div class="ifaceBlock">
+          <h3><span class="badge role-Node">Node A</span><small id="nodeAUrlEcho" style="color:var(--muted);font-weight:400">-</small></h3>
+          <table class="ifaceTable" id="nodeAIfaceTable"><thead><tr><th>Interface</th><th>MAC</th><th>State</th><th>Role</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="ifaceBlock">
+          <h3><span class="badge role-Node">Node B</span><small id="nodeBUrlEcho" style="color:var(--muted);font-weight:400">-</small></h3>
+          <table class="ifaceTable" id="nodeBIfaceTable"><thead><tr><th>Interface</th><th>MAC</th><th>State</th><th>Role</th></tr></thead><tbody></tbody></table>
+        </div>
       </div>
-      <div class="hint">시험용 NIC는 IP가 없어도 됩니다 — 매칭은 MAC과 payload marker 기준으로 합니다.</div>
     </div>
 
     <div class="card">
-      <h2>3. Parameters</h2>
+      <h2><span class="stepNum">3</span>Parameters</h2>
       <div class="row">
         <label><strong>UDP Source Port</strong><input id="udpSrcPort" type="number" min="1" max="65535" value="40000"></label>
         <label><strong>UDP Destination Port</strong><input id="udpDstPort" type="number" min="1" max="65535" value="50000"></label>
@@ -148,26 +147,26 @@
     </div>
 
     <div class="card">
-      <h2>4. Topology Preview</h2>
+      <h2><span class="stepNum">4</span>Topology Preview</h2>
       <div class="topo">
         <div class="topoNode">
           <strong>Node A</strong>
           <small id="topoAUrl">-</small>
-          <div class="iface" id="topoAPrimary">primary: —</div>
-          <div class="iface mon" id="topoAMonitor">monitor: —</div>
+          <div class="iface" id="topoAPrimary"><span class="badge role-primary">Primary</span> —</div>
+          <div class="iface" id="topoAMonitors"><span class="badge role-monitor">Monitors</span> —</div>
         </div>
         <div class="topoArrow">⇄<br><small style="font-size:11px; color:var(--muted)">DUT switch</small></div>
         <div class="topoNode">
           <strong>Node B</strong>
           <small id="topoBUrl">-</small>
-          <div class="iface" id="topoBPrimary">primary: —</div>
-          <div class="iface mon" id="topoBMonitor">monitor: —</div>
+          <div class="iface" id="topoBPrimary"><span class="badge role-primary">Primary</span> —</div>
+          <div class="iface" id="topoBMonitors"><span class="badge role-monitor">Monitors</span> —</div>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h2>5. Run</h2>
+      <h2><span class="stepNum">5</span>Run</h2>
       <div class="actions">
         <button id="btnAtoB">▶ Run A to B</button>
         <button id="btnBtoA">▶ Run B to A</button>
@@ -181,54 +180,96 @@
     </div>
 
     <div class="card" id="resultCard" style="display:none">
-      <h2>6. Result <span id="overallBadge" class="badge"></span></h2>
+      <h2><span class="stepNum">6</span>Result <span id="overallBadge" class="badge"></span></h2>
       <div class="summary" id="resultSummary"></div>
-      <table id="resultTable">
-        <thead>
-          <tr><th>Direction</th><th>Sender → Expected</th><th>Monitor</th><th>Sent</th><th>Expected match</th><th>Monitor match</th><th>Result</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <details id="resultDetails">
-        <summary>Per-direction detail (missing / unexpected sequences)</summary>
-        <div id="detailBody"></div>
-      </details>
+      <div id="directionDetail"></div>
     </div>
   </main>
 
 <script>
 const $ = (id) => document.getElementById(id);
 
+const state = {
+  a: { interfaces: [], roles: {} },
+  b: { interfaces: [], roles: {} }
+};
+
 function setStatus(el, kind, text) {
   el.className = `status ${kind}`;
   el.querySelector('.text').textContent = text;
 }
-
-function showError(msg) {
-  const b = $('errBox');
-  b.textContent = msg;
-  b.classList.add('show');
-}
+function showError(msg) { const b=$('errBox'); b.textContent=msg; b.classList.add('show'); }
 function clearError() { $('errBox').classList.remove('show'); }
 
-function fillSelect(id, interfaces, preferIndex) {
-  const sel = $(id);
-  const prev = sel.value;
-  sel.innerHTML = interfaces.map((iface) =>
-    `<option value="${iface.name}">${iface.name} — ${iface.mac || '??'}${iface.state === 'up' ? ' (up)' : ''}</option>`
-  ).join('');
-  if (prev && interfaces.find((i) => i.name === prev)) sel.value = prev;
-  else if (preferIndex != null && interfaces[preferIndex]) sel.value = interfaces[preferIndex].name;
+function setRole(side, ifaceName, role) {
+  const s = state[side];
+  if (role === 'primary') {
+    for (const k of Object.keys(s.roles)) if (s.roles[k] === 'primary') s.roles[k] = 'unused';
+  }
+  s.roles[ifaceName] = role;
+  renderIfaceTable(side);
   syncTopology();
+}
+
+function renderIfaceTable(side) {
+  const id = side === 'a' ? 'nodeAIfaceTable' : 'nodeBIfaceTable';
+  const s = state[side];
+  const tbody = $(id).querySelector('tbody');
+  if (!s.interfaces.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:14px 0">Probe Nodes 후 표시됩니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = s.interfaces.map((iface) => {
+    const role = s.roles[iface.name] || 'unused';
+    const radios = ['unused','primary','monitor'].map((r) => {
+      const sel = role === r;
+      const cls = sel ? `sel-${r}` : '';
+      return `<label class="${cls}" data-side="${side}" data-iface="${iface.name}" data-role="${r}">${r[0].toUpperCase()+r.slice(1)}</label>`;
+    }).join('');
+    return `<tr>
+      <td class="name">${iface.name}</td>
+      <td class="mac">${iface.mac || '—'}</td>
+      <td class="state">${iface.state || ''}${iface.state==='up' ? '' : ''}</td>
+      <td><div class="roleRadios">${radios}</div></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('.roleRadios label').forEach((el) => {
+    el.addEventListener('click', () => setRole(el.dataset.side, el.dataset.iface, el.dataset.role));
+  });
+}
+
+function defaultRoles(side) {
+  const s = state[side];
+  s.roles = {};
+  const ifs = s.interfaces.filter((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
+  if (ifs[0]) s.roles[ifs[0].name] = 'primary';
+  for (let i = 1; i < ifs.length; i++) s.roles[ifs[i].name] = 'monitor';
+}
+
+function primaryOf(side) {
+  const s = state[side];
+  const name = Object.keys(s.roles).find((k) => s.roles[k] === 'primary');
+  return s.interfaces.find((i) => i.name === name) || null;
+}
+function monitorsOf(side) {
+  const s = state[side];
+  return Object.keys(s.roles)
+    .filter((k) => s.roles[k] === 'monitor')
+    .map((name) => s.interfaces.find((i) => i.name === name))
+    .filter(Boolean);
 }
 
 function syncTopology() {
   $('topoAUrl').textContent = $('nodeAUrl').value || '-';
   $('topoBUrl').textContent = $('nodeBUrl').value || '-';
-  $('topoAPrimary').textContent = `primary: ${$('nodeAPrimary').value || '—'}`;
-  $('topoAMonitor').textContent = `monitor: ${$('nodeAMonitor').value || '—'}`;
-  $('topoBPrimary').textContent = `primary: ${$('nodeBPrimary').value || '—'}`;
-  $('topoBMonitor').textContent = `monitor: ${$('nodeBMonitor').value || '—'}`;
+  $('nodeAUrlEcho').textContent = $('nodeAUrl').value || '';
+  $('nodeBUrlEcho').textContent = $('nodeBUrl').value || '';
+  const ap = primaryOf('a'); const bp = primaryOf('b');
+  const am = monitorsOf('a'); const bm = monitorsOf('b');
+  $('topoAPrimary').innerHTML = `<span class="badge role-primary">Primary</span> ${ap ? `${ap.name} <small style="color:var(--muted)">${ap.mac}</small>` : '—'}`;
+  $('topoAMonitors').innerHTML = `<span class="badge role-monitor">Monitors</span> ${am.length ? am.map((m) => `${m.name}`).join(', ') : '—'}`;
+  $('topoBPrimary').innerHTML = `<span class="badge role-primary">Primary</span> ${bp ? `${bp.name} <small style="color:var(--muted)">${bp.mac}</small>` : '—'}`;
+  $('topoBMonitors').innerHTML = `<span class="badge role-monitor">Monitors</span> ${bm.length ? bm.map((m) => `${m.name}`).join(', ') : '—'}`;
 }
 
 async function probeOne(url) {
@@ -251,10 +292,11 @@ async function probe() {
   $('btnProbe').disabled = true;
   try {
     const [a, b] = await Promise.all([probeOne(aUrl), probeOne(bUrl)]);
-    fillSelect('nodeAPrimary', a.interfaces, 0);
-    fillSelect('nodeAMonitor', a.interfaces, a.interfaces.length > 1 ? 1 : 0);
-    fillSelect('nodeBPrimary', b.interfaces, 0);
-    fillSelect('nodeBMonitor', b.interfaces, b.interfaces.length > 1 ? 1 : 0);
+    state.a.interfaces = a.interfaces;
+    state.b.interfaces = b.interfaces;
+    defaultRoles('a'); defaultRoles('b');
+    renderIfaceTable('a'); renderIfaceTable('b');
+    syncTopology();
     setStatus($('probeStatus'), 'ok', `A: ${a.interfaces.length} IF · B: ${b.interfaces.length} IF`);
   } catch (err) {
     setStatus($('probeStatus'), 'fail', 'fail');
@@ -265,8 +307,7 @@ async function probe() {
 }
 
 function renderResult(report) {
-  const card = $('resultCard');
-  card.style.display = '';
+  $('resultCard').style.display = '';
   const badge = $('overallBadge');
   badge.className = `badge ${report.overall === 'PASS' ? 'pass' : 'fail'}`;
   badge.textContent = report.overall;
@@ -275,37 +316,48 @@ function renderResult(report) {
     <div class="sumBox"><span>Directions</span><strong>${report.directions.length}</strong></div>
     <div class="sumBox"><span>Generated</span><strong style="font-size:12px">${new Date(report.generatedAt).toLocaleString()}</strong></div>
   `;
-  const tbody = $('resultTable').querySelector('tbody');
-  tbody.innerHTML = report.directions.map((d) => `
-    <tr>
-      <td><strong>${d.direction}</strong></td>
-      <td>${d.senderInterface.name}<br><small>→ ${d.expectedInterface.name}</small></td>
-      <td>${d.monitorInterface.name}</td>
-      <td>${d.sent}</td>
-      <td>${d.expectedMatched}</td>
-      <td>${d.monitorMatched}</td>
-      <td><span class="badge ${d.result === 'PASS' ? 'pass' : 'fail'}">${d.result}</span></td>
-    </tr>
-  `).join('');
-  $('detailBody').innerHTML = report.directions.map((d) => `
-    <h3>${d.direction}</h3>
-    <div class="seqList">marker: <code>${d.marker}</code></div>
-    <div class="seqList">missing sequences (${d.missingSequences.length}): ${d.missingSequences.slice(0,200).join(', ') || '<em>none</em>'}${d.missingSequences.length > 200 ? ' …' : ''}</div>
-    <div class="seqList">unexpected monitor sequences (${d.unexpectedMonitorSequences.length}): ${d.unexpectedMonitorSequences.slice(0,200).join(', ') || '<em>none</em>'}${d.unexpectedMonitorSequences.length > 200 ? ' …' : ''}</div>
-  `).join('');
+  $('directionDetail').innerHTML = report.directions.map((d) => {
+    const capRows = d.captures.map((c) => `
+      <tr class="${c.pass ? 'pass' : 'fail'}">
+        <td>${c.role}</td>
+        <td>${c.node}</td>
+        <td><code>${c.interface.name}</code></td>
+        <td><code>${c.interface.mac}</code></td>
+        <td>${c.expectMatch ? '≥ ' + d.count : '== 0'}</td>
+        <td>${c.matched}</td>
+        <td><span class="badge ${c.pass ? 'pass' : 'fail'}">${c.pass ? 'PASS' : 'FAIL'}</span></td>
+        <td>${c.error || ''}</td>
+      </tr>
+    `).join('');
+    return `
+      <h3 style="margin-top:18px">${d.direction} — <span class="badge ${d.result==='PASS'?'pass':'fail'}">${d.result}</span></h3>
+      <div style="color:var(--muted);font-size:12.5px">
+        ${d.senderUrl} / <code>${d.senderInterface.name}</code> → ${d.receiverUrl} / <code>${d.expectedInterface.name}</code>
+        · marker <code>${d.marker}</code> · UDP ${d.udpSrcPort}→${d.udpDstPort} · sent ${d.sent}/${d.count}
+      </div>
+      <table>
+        <thead><tr><th>Role</th><th>Node</th><th>Interface</th><th>MAC</th><th>Expect</th><th>Matched</th><th>Result</th><th>Error</th></tr></thead>
+        <tbody>${capRows}</tbody>
+      </table>
+      <div class="seqList">missing sequences (${d.missingSequences.length}): ${d.missingSequences.slice(0,200).join(', ') || '<em>none</em>'}${d.missingSequences.length > 200 ? ' …' : ''}</div>
+    `;
+  }).join('');
   $('openHtml').classList.remove('disabled');
   $('openJson').classList.remove('disabled');
 }
 
 async function runDirection(direction) {
   clearError();
+  const aPrimary = primaryOf('a'); const bPrimary = primaryOf('b');
+  if (!aPrimary) { showError('Node A의 Primary 인터페이스를 선택하세요.'); return; }
+  if (!bPrimary) { showError('Node B의 Primary 인터페이스를 선택하세요.'); return; }
   const body = {
     nodeAUrl: $('nodeAUrl').value.trim(),
     nodeBUrl: $('nodeBUrl').value.trim(),
-    nodeAPrimaryInterface: $('nodeAPrimary').value,
-    nodeAMonitorInterface: $('nodeAMonitor').value,
-    nodeBPrimaryInterface: $('nodeBPrimary').value,
-    nodeBMonitorInterface: $('nodeBMonitor').value,
+    nodeAPrimaryInterface: aPrimary.name,
+    nodeBPrimaryInterface: bPrimary.name,
+    nodeAMonitorInterfaces: monitorsOf('a').map((m) => m.name),
+    nodeBMonitorInterfaces: monitorsOf('b').map((m) => m.name),
     direction,
     count: Number($('count').value || 10),
     intervalMs: Number($('intervalMs').value || 100),
@@ -314,9 +366,7 @@ async function runDirection(direction) {
     payloadMarkerPrefix: $('marker').value.trim() || 'KETI_SIMPLE_FORWARD',
     captureTimeoutMs: Number($('captureTimeoutMs').value || 3000)
   };
-  for (const [k, v] of Object.entries(body)) {
-    if (v === '' || v == null) { showError(`Missing field: ${k}. Probe Nodes 먼저 실행하세요.`); return; }
-  }
+  if (!body.nodeAUrl || !body.nodeBUrl) { showError('Node A/B URL을 모두 입력하세요.'); return; }
   ['btnAtoB','btnBtoA','btnBoth','btnProbe'].forEach((id) => $(id).disabled = true);
   setStatus($('runStatus'), 'running', `${direction} running...`);
   try {
@@ -338,13 +388,12 @@ async function runDirection(direction) {
   }
 }
 
-// Defaults & wiring
 (function init() {
   $('nodeBUrl').value = window.location.origin;
-  ['nodeAUrl','nodeBUrl','nodeAPrimary','nodeAMonitor','nodeBPrimary','nodeBMonitor'].forEach((id) => {
-    $(id).addEventListener('change', syncTopology);
+  ['nodeAUrl','nodeBUrl'].forEach((id) => {
     $(id).addEventListener('input', syncTopology);
   });
+  renderIfaceTable('a'); renderIfaceTable('b');
   syncTopology();
   $('btnProbe').addEventListener('click', probe);
   $('btnAtoB').addEventListener('click', () => runDirection('A_TO_B'));
