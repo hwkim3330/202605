@@ -1869,16 +1869,13 @@ function sbfMonitorList(side) {
 function sbfSyncTopology() {
   if (sbfIsSinglePc()) {
     const url = sbfLocalUrl();
-    $('sbfTopoAUrl').textContent = url + ' (this PC · send side)';
-    $('sbfTopoBUrl').textContent = url + ' (this PC · receive side)';
-    $('sbfNodeAEcho').textContent = '(this PC)';
-    $('sbfNodeBEcho').textContent = '(this PC)';
-    const ap = sbfPrimary('a'), bp = sbfPrimary('b');
-    const aMons = sbfMonitorList('a'), bMons = sbfMonitorList('b');
-    $('sbfTopoAPrimary').innerHTML  = `<span class="sbfBadge sbf-primary">Sender</span> ${ap ? `${ap.name} <small style="color:var(--muted)">${ap.mac}</small>` : '—'}`;
-    $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Sender-side monitors</span> ${aMons.length ? aMons.map((m) => m.name).join(', ') : '—'}`;
-    $('sbfTopoBPrimary').innerHTML  = `<span class="sbfBadge sbf-primary">Receiver</span> ${bp ? `${bp.name} <small style="color:var(--muted)">${bp.mac}</small>` : '—'}`;
-    $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Receiver-side monitors</span> ${bMons.length ? bMons.map((m) => m.name).join(', ') : '—'}`;
+    $('sbfTopoAUrl').textContent = url + ' (this PC)';
+    $('sbfTopoBUrl').textContent = url + ' (this PC)';
+    const s = sbfUnifiedSend(), r = sbfUnifiedRecv(), mons = sbfUnifiedMonitors();
+    $('sbfTopoAPrimary').innerHTML  = `<span class="sbfBadge sbf-primary">Send</span> ${s ? `${s.name} <small style="color:var(--muted)">${s.mac}</small>` : '—'}`;
+    $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors (${mons.length})</span> ${mons.length ? mons.map((m) => m.name).join(', ') : '—'}`;
+    $('sbfTopoBPrimary').innerHTML  = `<span class="sbfBadge sbf-primary">Receive</span> ${r ? `${r.name} <small style="color:var(--muted)">${r.mac}</small>` : '—'}`;
+    $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">(all captures on this PC)</span>`;
     return;
   }
   $('sbfTopoAUrl').textContent = $('sbfNodeAUrl').value || '-';
@@ -1900,20 +1897,10 @@ async function sbfProbe() {
     if (sbfIsSinglePc()) {
       const url = sbfLocalUrl();
       const r = await api('/api/probe-node', { method: 'POST', body: JSON.stringify({ url }) });
-      // Populate BOTH Node A and Node B blocks from the same local probe so the
-      // user can pick send-side and receive-side interfaces independently on
-      // the same PC (matches the 4-port DUT validation, just one host).
-      sbf.a.interfaces = r.interfaces;
-      sbf.b.interfaces = r.interfaces;
-      const real = r.interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
-      sbfFillSelect('sbfNodeAPrimary',  r.interfaces, real >= 0 ? real : 0);
-      sbfFillSelect('sbfNodeAMonitor',  r.interfaces, real + 2 < r.interfaces.length ? real + 2 : null);
-      sbfFillSelect('sbfNodeAMonitor2', r.interfaces, null);
-      sbfFillSelect('sbfNodeBPrimary',  r.interfaces, real + 1 < r.interfaces.length ? real + 1 : 0);
-      sbfFillSelect('sbfNodeBMonitor',  r.interfaces, real + 3 < r.interfaces.length ? real + 3 : null);
-      sbfFillSelect('sbfNodeBMonitor2', r.interfaces, null);
+      sbf.local.interfaces = r.interfaces;
+      sbfRenderUnifiedTable(r.interfaces);
       sbfSyncTopology();
-      setActionStatus('sbfProbeStatus', 'ok', `local: ${r.interfaces.length} IF (both sides)`);
+      setActionStatus('sbfProbeStatus', 'ok', `local: ${r.interfaces.length} IF`);
       return;
     }
     const aUrl = $('sbfNodeAUrl').value.trim();
@@ -1953,28 +1940,59 @@ function sbfSingleMonitors() {
 function sbfSetSinglePcMode(on) {
   $('sbfTwoPcUrls').style.display = on ? 'none' : '';
   $('sbfSinglePcUrl').style.display = on ? '' : 'none';
-  // Keep both Node A / Node B blocks visible in single-PC mode — they both
-  // get populated from the local probe so the user can still pick 2 NICs per
-  // side (Primary + Monitor) just like the two-PC layout.
-  $('sbfTwoPcIfaces').style.display = '';
-  // Relabel the block headers so it's obvious they refer to send/receive sides
-  // of the same machine, not separate hosts.
-  const aHeader = document.querySelector('#sbfTwoPcIfaces .sbfIfaceBlock:first-child .sbfIfaceHeader');
-  const bHeader = document.querySelector('#sbfTwoPcIfaces .sbfIfaceBlock:last-child .sbfIfaceHeader');
-  if (aHeader) aHeader.firstChild.nodeValue = on ? 'Send side ' : 'Node A ';
-  if (bHeader) bHeader.firstChild.nodeValue = on ? 'Receive side ' : 'Node B ';
+  $('sbfUnifiedBlock').style.display = on ? '' : 'none';
+  $('sbfTwoPcIfaces').style.display = on ? 'none' : '';
   const btnBoth = $('sbfRunBoth'); const btnBtoA = $('sbfRunBtoA');
   if (on) {
     if (btnBoth) btnBoth.style.display = 'none';
     if (btnBtoA) btnBtoA.style.display = 'none';
     $('sbfRunAtoB').textContent = '▶ Run (Send → Receive)';
     $('sbfLocalUrl').value = sbfLocalUrl();
+    $('sbfUnifiedEcho').textContent = sbfLocalUrl();
   } else {
     if (btnBoth) btnBoth.style.display = '';
     if (btnBtoA) btnBtoA.style.display = '';
     $('sbfRunAtoB').textContent = '▶ Run A to B';
   }
   sbfSyncTopology();
+}
+
+function sbfRenderUnifiedTable(interfaces) {
+  const tbody = $('sbfUnifiedTable').querySelector('tbody');
+  if (!interfaces.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:12px">Probe Nodes 누른 뒤 인터페이스가 표시됩니다.</td></tr>';
+    return;
+  }
+  // Auto-select defaults: first non-virtual = Send, next = Receive
+  const real = interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
+  tbody.innerHTML = interfaces.map((iface, idx) => {
+    const isSend = idx === real;
+    const isRecv = idx === real + 1;
+    return `<tr>
+      <td class="name">${iface.name}</td>
+      <td class="mac">${iface.mac || '—'}</td>
+      <td class="state">${iface.state || ''}</td>
+      <td style="text-align:center"><input type="radio" name="sbfUSend" value="${iface.name}"${isSend ? ' checked' : ''}></td>
+      <td style="text-align:center"><input type="radio" name="sbfURecv" value="${iface.name}"${isRecv ? ' checked' : ''}></td>
+      <td style="text-align:center"><input type="checkbox" class="sbfUMon" value="${iface.name}"></td>
+    </tr>`;
+  }).join('');
+  tbody.querySelectorAll('input').forEach((el) => el.addEventListener('change', sbfSyncTopology));
+}
+
+function sbfUnifiedSend() {
+  const v = document.querySelector('input[name=sbfUSend]:checked')?.value;
+  return sbf.local.interfaces.find((i) => i.name === v) || null;
+}
+function sbfUnifiedRecv() {
+  const v = document.querySelector('input[name=sbfURecv]:checked')?.value;
+  return sbf.local.interfaces.find((i) => i.name === v) || null;
+}
+function sbfUnifiedMonitors() {
+  const used = new Set([sbfUnifiedSend()?.name, sbfUnifiedRecv()?.name]);
+  return Array.from(document.querySelectorAll('input.sbfUMon:checked'))
+    .map((el) => sbf.local.interfaces.find((i) => i.name === el.value))
+    .filter((m) => m && !used.has(m.name));
 }
 
 function sbfRenderResult(report) {
@@ -2035,18 +2053,22 @@ async function sbfRun(direction) {
   };
   let body;
   if (singlePc) {
-    const aPrimary = sbfPrimary('a'), bPrimary = sbfPrimary('b');
-    if (!aPrimary) throw new Error('Send side primary 인터페이스를 선택하세요.');
-    if (!bPrimary) throw new Error('Receive side primary 인터페이스를 선택하세요.');
-    if (aPrimary.name === bPrimary.name) throw new Error('Send와 Receive primary는 다른 인터페이스여야 합니다.');
+    const send = sbfUnifiedSend(), recv = sbfUnifiedRecv();
+    if (!send) throw new Error('Send 인터페이스(라디오)를 선택하세요.');
+    if (!recv) throw new Error('Receive 인터페이스(라디오)를 선택하세요.');
+    if (send.name === recv.name) throw new Error('Send와 Receive는 다른 인터페이스여야 합니다.');
+    const monitors = sbfUnifiedMonitors().map((m) => m.name);
     const url = sbfLocalUrl();
     body = {
       ...params,
       nodeAUrl: url, nodeBUrl: url,
-      nodeAPrimaryInterface: aPrimary.name,
-      nodeBPrimaryInterface: bPrimary.name,
-      nodeAMonitorInterfaces: sbfMonitorList('a').map((m) => m.name),
-      nodeBMonitorInterfaces: sbfMonitorList('b').map((m) => m.name),
+      nodeAPrimaryInterface: send.name,
+      nodeBPrimaryInterface: recv.name,
+      // All checked monitors land on the receive side so they're checked against
+      // the same expected dst MAC (receiver primary). Backend treats them as
+      // "must == 0" captures.
+      nodeAMonitorInterfaces: [],
+      nodeBMonitorInterfaces: monitors,
       direction: 'A_TO_B'
     };
   } else {

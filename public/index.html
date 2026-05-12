@@ -567,10 +567,24 @@
               <div class="sbfStep">
                 <h4>② Interfaces
                   <span class="sbfLegend">
-                    <span class="sbfBadge sbf-primary">Primary</span> 송신/기대 수신
-                    <span class="sbfBadge sbf-monitor">Monitor</span> 누설 감지 (다른 포트)
+                    <span class="sbfBadge sbf-primary">Send</span> 송신 NIC
+                    <span class="sbfBadge sbf-primary">Receive</span> 기대 수신 NIC
+                    <span class="sbfBadge sbf-monitor">Monitor</span> 누설 감지 (다중)
                   </span>
                 </h4>
+                <div id="sbfUnifiedBlock" class="sbfIfaceBlock" style="display:none">
+                  <div class="sbfIfaceHeader">This PC <small id="sbfUnifiedEcho">-</small></div>
+                  <table class="sbfIfaceTable" id="sbfUnifiedTable">
+                    <thead><tr>
+                      <th>Interface</th><th>MAC</th><th>State</th>
+                      <th style="text-align:center">Send</th>
+                      <th style="text-align:center">Receive</th>
+                      <th style="text-align:center">Monitor</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                  </table>
+                  <div class="hint" style="font-size:11.5px;color:var(--muted);margin-top:4px">Send 1개 + Receive 1개 + Monitor N개. 각 캡처는 독립 agent 프로세스로 병렬 실행.</div>
+                </div>
                 <div class="sbfIfaceGrid" id="sbfTwoPcIfaces">
                   <div class="sbfIfaceBlock">
                     <div class="sbfIfaceHeader">Node A <small id="sbfNodeAEcho">-</small></div>
