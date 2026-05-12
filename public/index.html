@@ -128,29 +128,32 @@
       <section class="workspace">
         <section id="senderView" class="roleView active">
           <aside class="sidebar">
-            <div class="ifacePicker" id="senderIfacePicker">
+            <div class="ifacePicker ifacePickerHoriz" id="senderIfacePicker">
               <div class="ifacePickerHead">
                 <strong>Send via</strong>
                 <span class="ifacePickerCount" id="senderIfaceCount">0 selected</span>
               </div>
-              <div class="ifacePickerList" id="senderIfaceList">— probe to load —</div>
-              <div class="ifacePickerHint">여러 NIC을 선택하면 같은 패킷이 각 NIC에서 송신됩니다 (각각 독립 agent).</div>
+              <div class="ifacePickerList ifacePickerListHoriz" id="senderIfaceList">— probe to load —</div>
+              <div class="ifacePickerHint">여러 NIC 선택 시 각각 독립 agent로 fan-out 송신.</div>
             </div>
             <div class="interfaceBox" style="display:none">
               <div id="selectedInterfaceName">-</div>
               <div id="selectedInterfaceMac" class="muted">-</div>
             </div>
 
-            <div class="buttonRow">
-              <button data-example="udp">UDP</button>
-              <button data-example="icmp">ICMP</button>
-              <button data-example="arp">ARP</button>
-            </div>
-            <label>
-              Test Profile
-              <select id="profileSelect"></select>
-            </label>
-            <div id="profileDescription" class="profileDescription">-</div>
+            <details class="senderTemplates">
+              <summary>Templates / Test Profiles</summary>
+              <div class="buttonRow">
+                <button data-example="udp">UDP</button>
+                <button data-example="icmp">ICMP</button>
+                <button data-example="arp">ARP</button>
+              </div>
+              <label>
+                Test Profile
+                <select id="profileSelect"></select>
+              </label>
+              <div id="profileDescription" class="profileDescription">-</div>
+            </details>
             <label>
               Protocol
               <select id="protocol">

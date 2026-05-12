@@ -354,7 +354,11 @@ body.captureMode .toolbar { padding: 6px 16px; }
 
 .wiresharkPane {
   display: grid;
-  grid-template-rows: auto auto 1fr 38vh;
+  /* ifacePicker (auto) + captureBar (auto) + captureFilters (auto)
+     + packetListLive (1fr) + detailGrid (38vh).
+     Five rows so the bottom Wireshark-style detail+hex panel keeps its
+     reserved space even with the new interface picker on top. */
+  grid-template-rows: auto auto auto 1fr 38vh;
   gap: 8px;
   padding: 8px 10px;
   height: 100%;
@@ -2107,3 +2111,35 @@ body:not(.controlMode) .linkStrip { display: none; }
 
 /* Slimmer toolbar (no more checkbox row living there) */
 .modeToolbar { padding: 8px 12px; }
+
+/* Templates / profiles tucked away to keep Sender sidebar focused */
+.senderTemplates {
+  margin: 6px 0 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+.senderTemplates > summary {
+  cursor: pointer; padding: 8px 10px;
+  font-size: 12.5px; color: var(--accent-strong); font-weight: 600;
+  list-style: none;
+}
+.senderTemplates > summary::-webkit-details-marker { display: none; }
+.senderTemplates > summary::before {
+  content: '▸'; display: inline-block; margin-right: 6px;
+  transition: transform .15s; color: var(--muted);
+}
+.senderTemplates[open] > summary::before { transform: rotate(90deg); }
+.senderTemplates > *:not(summary) { padding: 0 10px 10px; }
+
+/* Compact ifacePicker inside the Wireshark-style capture pane */
+.wiresharkPane #captureIfacePicker {
+  padding: 8px 10px; margin-bottom: 0;
+}
+.wiresharkPane #captureIfacePicker .ifacePickerHead { margin-bottom: 6px; }
+.wiresharkPane #captureIfacePicker .ifaceItem {
+  padding: 6px 8px;
+}
+.wiresharkPane #captureIfacePicker .ifaceItem .ifaceMac { font-size: 10.5px; }
+.wiresharkPane #captureIfacePicker .ifaceItem .ifaceExtras { display: none; }
+
+/* Make sure Sender's picker reads nicely when horizontal */
+#senderIfacePicker.ifacePickerHoriz .ifaceItem { flex: 1 1 220px; min-width: 200px; }
