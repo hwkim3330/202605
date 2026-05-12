@@ -539,6 +539,40 @@
               </div>
             </div>
 
+            <div class="actionCard" id="simpleBidirCard" style="margin-top:18px">
+              <div class="actionHeader">
+                <h3>Simple Bidirectional Forwarding Test <span class="badge wire">on the wire</span></h3>
+                <span class="actionDesc">Two-node DUT switch forwarding check. UDP unicast with payload marker; expected NIC must match, monitor NIC must NOT see the marker. Test NICs do not need an IP.</span>
+              </div>
+              <div class="grid2 overrideGrid">
+                <label>Node A URL<input id="sbfNodeAUrl" autocomplete="off" placeholder="http://PC-A-IP:8080"></label>
+                <label>Node B URL<input id="sbfNodeBUrl" autocomplete="off" placeholder="http://localhost:8080"></label>
+                <label>Node A Primary IF<select id="sbfNodeAPrimary"></select></label>
+                <label>Node A Monitor IF<select id="sbfNodeAMonitor"></select></label>
+                <label>Node B Primary IF<select id="sbfNodeBPrimary"></select></label>
+                <label>Node B Monitor IF<select id="sbfNodeBMonitor"></select></label>
+              </div>
+              <div class="actionParams">
+                <label>UDP src port<input id="sbfUdpSrc" type="number" min="1" max="65535" value="40000"></label>
+                <label>UDP dst port<input id="sbfUdpDst" type="number" min="1" max="65535" value="50000"></label>
+                <label>Count<input id="sbfCount" type="number" min="1" value="10"></label>
+                <label>Interval ms<input id="sbfInterval" type="number" min="0" value="100"></label>
+                <label>Payload Marker Prefix<input id="sbfMarker" value="KETI_SIMPLE_FORWARD"></label>
+                <label>Capture Timeout ms<input id="sbfCaptureTimeout" type="number" min="500" value="3000"></label>
+              </div>
+              <div class="progressTrack" id="progSimpleBidir"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
+              <div class="actionFooter">
+                <span class="actionStatus" id="statusSimpleBidir">idle</span>
+                <button id="sbfProbe" class="secondaryAction">Probe Nodes</button>
+                <button id="sbfRunAtoB" class="primaryAction">Run A to B</button>
+                <button id="sbfRunBtoA" class="primaryAction">Run B to A</button>
+                <button id="sbfRunBoth" class="primaryAction">Run Both Directions</button>
+                <a id="sbfOpenReport" class="linkButton disabled" href="/reports/simple-bidir-forward-latest.html" target="_blank" rel="noreferrer">Open Report</a>
+                <a id="sbfOpenJson" class="linkButton disabled" href="/reports/simple-bidir-forward-latest.json" target="_blank" rel="noreferrer">Open JSON</a>
+              </div>
+              <div id="sbfSummary" class="reportSummary hidden"></div>
+            </div>
+
             <details class="advanced">
               <summary class="advancedSummary">Manual override (sender / receiver URL + interface)</summary>
               <div class="grid2 overrideGrid">

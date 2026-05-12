@@ -1264,6 +1264,265 @@ new Chart(document.getElementById('jit'),{type:'line',data:{labels:sizes,dataset
 </script></body></html>`;
 }
 
+// --- Simple Bidirectional Forwarding Test --------------------------------
+// Two Linux PCs probe a DUT switch. The sender transmits UDP packets carrying
+// a text marker, the expected receiver matches on the marker, and a monitor
+// interface on the same node confirms the frame did NOT leak elsewhere.
+// Matching is done against the frameHex returned by the capture agent so we
+// don't need IP addresses on the test NICs.
+
+function matchMarkerFrames(frames, marker, senderMac, expectedMac, udpDstPort) {
+  const matched = [];
+  const seqs = new Set();
+  for (const frame of frames) {
+    if (!frame.frameHex) continue;
+    const decoded = frame.decoded || {};
+    if (senderMac && !sameValue(decoded.ethernet?.srcMac, senderMac)) continue;
+    if (expectedMac && !sameValue(decoded.ethernet?.dstMac, expectedMac)) continue;
+    if (typeof udpDstPort === 'number' && decoded.udp?.dstPort !== udpDstPort) continue;
+    let text;
+    try { text = Buffer.from(frame.frameHex, 'hex').toString('latin1'); }
+    catch { continue; }
+    const idx = text.indexOf(marker);
+    if (idx < 0) continue;
+    let seq = null;
+    const tail = text.slice(idx + marker.length, idx + marker.length + 6);
+    if (/^\d{6}$/.test(tail)) seq = parseInt(tail, 10);
+    matched.push({
+      length: frame.length,
+      seq,
+      srcMac: decoded.ethernet?.srcMac,
+      dstMac: decoded.ethernet?.dstMac,
+      udpDstPort: decoded.udp?.dstPort
+    });
+    if (seq != null) seqs.add(seq);
+  }
+  return { matched, seqs };
+}
+
+async function runOneForwardDirection(direction, params) {
+  const isAtoB = direction === 'A_TO_B';
+  const senderUrl = isAtoB ? params.nodeAUrl : params.nodeBUrl;
+  const receiverUrl = isAtoB ? params.nodeBUrl : params.nodeAUrl;
+  const senderIfaces = isAtoB ? params.nodeAInterfaces : params.nodeBInterfaces;
+  const receiverIfaces = isAtoB ? params.nodeBInterfaces : params.nodeAInterfaces;
+  const senderPrimary = selectInterface(
+    senderIfaces,
+    isAtoB ? params.nodeAPrimaryInterface : params.nodeBPrimaryInterface
+  );
+  const receiverPrimary = selectInterface(
+    receiverIfaces,
+    isAtoB ? params.nodeBPrimaryInterface : params.nodeAPrimaryInterface
+  );
+  const receiverMonitor = selectInterface(
+    receiverIfaces,
+    isAtoB ? params.nodeBMonitorInterface : params.nodeAMonitorInterface
+  );
+
+  const markerPrefix = String(params.payloadMarkerPrefix || 'KETI_SIMPLE_FORWARD');
+  const marker = `${markerPrefix}_${direction}_SEQ_`;
+  const srcIp = isAtoB ? '10.0.0.1' : '10.0.0.2';
+  const dstIp = isAtoB ? '10.0.0.2' : '10.0.0.1';
+  const count = Math.max(1, Math.min(1_000_000, Number(params.count || 10)));
+  const intervalMs = Math.max(0, Math.min(60_000, Number(params.intervalMs ?? 100)));
+  const udpSrcPort = Number(params.udpSrcPort || 40000);
+  const udpDstPort = Number(params.udpDstPort || 50000);
+  const captureTimeoutMs = Math.max(500, Number(params.captureTimeoutMs || 3000));
+  const captureLeadMs = 200;
+  const sendDurationMs = count * intervalMs;
+  const captureTimeoutSec = Math.max(1, Math.ceil((captureTimeoutMs + sendDurationMs) / 1000));
+
+  const txProfile = {
+    name: `Simple Bidir ${direction}`,
+    protocol: 'udp',
+    interface: senderPrimary.name,
+    srcMac: senderPrimary.mac,
+    dstMac: receiverPrimary.mac,
+    ipv4: { src: srcIp, dst: dstIp, ttl: 64 },
+    udp: { srcPort: udpSrcPort, dstPort: udpDstPort },
+    payload: { mode: 'sequence', template: `${marker}{seq:06d}`, start: 1 },
+    count,
+    intervalMs
+  };
+
+  const buildCaptureBody = (iface) => ({
+    interface: iface.name,
+    timeoutSec: captureTimeoutSec,
+    timeoutMs: captureTimeoutSec * 1000 + 4000,
+    maxFrames: count + 50,
+    srcMac: senderPrimary.mac
+  });
+
+  const primaryCap = remoteJson(receiverUrl, '/api/capture', {
+    method: 'POST',
+    body: buildCaptureBody(receiverPrimary)
+  });
+  const monitorCap = remoteJson(receiverUrl, '/api/capture', {
+    method: 'POST',
+    body: buildCaptureBody(receiverMonitor)
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, captureLeadMs));
+  const sendResult = await remoteJson(senderUrl, '/api/send', {
+    method: 'POST',
+    body: { ...txProfile, timeoutMs: captureTimeoutSec * 1000 + 8000 }
+  });
+  const [primaryRes, monitorRes] = await Promise.all([primaryCap, monitorCap]);
+
+  const primaryFrames = primaryRes.stdout?.frames || [];
+  const monitorFrames = monitorRes.stdout?.frames || [];
+  const primaryMatch = matchMarkerFrames(primaryFrames, marker, senderPrimary.mac, receiverPrimary.mac, udpDstPort);
+  const monitorMatch = matchMarkerFrames(monitorFrames, marker, senderPrimary.mac, null, udpDstPort);
+
+  const sent = Number(sendResult.stdout?.framesSent || count);
+  const expected = new Set();
+  for (let i = 1; i <= count; i += 1) expected.add(i);
+  const missingSequences = [...expected].filter((s) => !primaryMatch.seqs.has(s));
+  const unexpectedMonitorSequences = [...monitorMatch.seqs].sort((a, b) => a - b);
+
+  const expectedPass = primaryMatch.matched.length >= count;
+  const monitorPass = monitorMatch.matched.length === 0;
+  const result = expectedPass && monitorPass ? 'PASS' : 'FAIL';
+
+  return {
+    direction,
+    senderUrl,
+    receiverUrl,
+    senderInterface: { name: senderPrimary.name, mac: senderPrimary.mac },
+    expectedInterface: { name: receiverPrimary.name, mac: receiverPrimary.mac },
+    monitorInterface: { name: receiverMonitor.name, mac: receiverMonitor.mac },
+    marker,
+    udpSrcPort,
+    udpDstPort,
+    srcIp,
+    dstIp,
+    sent,
+    expectedMatched: primaryMatch.matched.length,
+    monitorMatched: monitorMatch.matched.length,
+    expectedPass,
+    monitorPass,
+    missingSequences,
+    unexpectedMonitorSequences,
+    monitorSamples: monitorMatch.matched.slice(0, 20),
+    result
+  };
+}
+
+function simpleBidirReportHtml(report) {
+  const dirRows = report.directions.map((d) => `
+    <tr class="${d.result === 'PASS' ? 'pass' : 'fail'}">
+      <td>${escapeHtml(d.direction)}</td>
+      <td>${escapeHtml(d.senderInterface.name)} (${escapeHtml(d.senderInterface.mac)})</td>
+      <td>${escapeHtml(d.expectedInterface.name)} (${escapeHtml(d.expectedInterface.mac)})</td>
+      <td>${escapeHtml(d.monitorInterface.name)} (${escapeHtml(d.monitorInterface.mac)})</td>
+      <td>${d.sent}</td>
+      <td>${d.expectedMatched}</td>
+      <td>${d.monitorMatched}</td>
+      <td><strong>${d.result}</strong></td>
+    </tr>
+  `).join('');
+  const detail = report.directions.map((d) => `
+    <h3>${escapeHtml(d.direction)} — <span class="${d.result === 'PASS' ? 'pass' : 'fail'}">${d.result}</span></h3>
+    <ul>
+      <li>Sender: ${escapeHtml(d.senderUrl)} / ${escapeHtml(d.senderInterface.name)} (${escapeHtml(d.senderInterface.mac)})</li>
+      <li>Expected receiver: ${escapeHtml(d.receiverUrl)} / ${escapeHtml(d.expectedInterface.name)} (${escapeHtml(d.expectedInterface.mac)})</li>
+      <li>Monitor receiver: ${escapeHtml(d.receiverUrl)} / ${escapeHtml(d.monitorInterface.name)} (${escapeHtml(d.monitorInterface.mac)})</li>
+      <li>Marker: <code>${escapeHtml(d.marker)}</code> · UDP ${d.udpSrcPort} → ${d.udpDstPort} · ${escapeHtml(d.srcIp)} → ${escapeHtml(d.dstIp)}</li>
+      <li>Sent ${d.sent} · expected matched ${d.expectedMatched} · monitor matched ${d.monitorMatched}</li>
+      <li>Missing sequences (${d.missingSequences.length}): ${d.missingSequences.slice(0, 50).join(', ') || '-'}${d.missingSequences.length > 50 ? ', …' : ''}</li>
+      <li>Unexpected monitor sequences (${d.unexpectedMonitorSequences.length}): ${d.unexpectedMonitorSequences.slice(0, 50).join(', ') || '-'}${d.unexpectedMonitorSequences.length > 50 ? ', …' : ''}</li>
+    </ul>
+  `).join('');
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Simple Bidirectional Forwarding Test</title>
+<style>
+body{margin:24px;font:14px/1.45 system-ui,sans-serif;color:#17202a}
+h1{margin:0 0 4px}.meta{color:#62707f;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border-bottom:1px solid #d2dae3;padding:8px;text-align:left}th{background:#eef5f6}
+.pass{color:#14532d;font-weight:700}.fail{color:#9b1c1c;font-weight:700}
+.box{border:1px solid #d2dae3;border-radius:8px;padding:10px 14px;margin:10px 0;background:#fff}
+.box strong{display:block;font-size:22px}
+</style></head><body>
+<h1>Simple Bidirectional Forwarding Test</h1>
+<div class="meta">Generated ${escapeHtml(report.generatedAt)}</div>
+<div class="box">Overall: <span class="${report.overall === 'PASS' ? 'pass' : 'fail'}">${escapeHtml(report.overall)}</span></div>
+<div class="box">
+  <div>Node A: ${escapeHtml(report.nodeAUrl)}</div>
+  <div>  primary: ${escapeHtml(report.nodeA.primary.name)} (${escapeHtml(report.nodeA.primary.mac)})</div>
+  <div>  monitor: ${escapeHtml(report.nodeA.monitor.name)} (${escapeHtml(report.nodeA.monitor.mac)})</div>
+  <div>Node B: ${escapeHtml(report.nodeBUrl)}</div>
+  <div>  primary: ${escapeHtml(report.nodeB.primary.name)} (${escapeHtml(report.nodeB.primary.mac)})</div>
+  <div>  monitor: ${escapeHtml(report.nodeB.monitor.name)} (${escapeHtml(report.nodeB.monitor.mac)})</div>
+</div>
+<table>
+<thead><tr><th>Direction</th><th>Sender IF</th><th>Expected IF</th><th>Monitor IF</th><th>Sent</th><th>Expected match</th><th>Monitor match</th><th>Result</th></tr></thead>
+<tbody>${dirRows}</tbody>
+</table>
+${detail}
+</body></html>`;
+}
+
+async function runSimpleBidirForwardTest(reqBody) {
+  const nodeAUrl = normalizeBaseUrl(reqBody.nodeAUrl);
+  const nodeBUrl = normalizeBaseUrl(reqBody.nodeBUrl);
+  const [aInfo, bInfo] = await Promise.all([
+    remoteJson(nodeAUrl, '/api/interfaces'),
+    remoteJson(nodeBUrl, '/api/interfaces')
+  ]);
+  const params = {
+    ...reqBody,
+    nodeAUrl,
+    nodeBUrl,
+    nodeAInterfaces: aInfo.stdout?.interfaces || [],
+    nodeBInterfaces: bInfo.stdout?.interfaces || []
+  };
+  const nodeAPrimary = selectInterface(params.nodeAInterfaces, reqBody.nodeAPrimaryInterface);
+  const nodeAMonitor = selectInterface(params.nodeAInterfaces, reqBody.nodeAMonitorInterface);
+  const nodeBPrimary = selectInterface(params.nodeBInterfaces, reqBody.nodeBPrimaryInterface);
+  const nodeBMonitor = selectInterface(params.nodeBInterfaces, reqBody.nodeBMonitorInterface);
+
+  const direction = String(reqBody.direction || 'A_TO_B').toUpperCase();
+  const directions = [];
+  if (direction === 'A_TO_B' || direction === 'BOTH') {
+    directions.push(await runOneForwardDirection('A_TO_B', params));
+    if (direction === 'BOTH') await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (direction === 'B_TO_A' || direction === 'BOTH') {
+    directions.push(await runOneForwardDirection('B_TO_A', params));
+  }
+  const overall = directions.length && directions.every((d) => d.result === 'PASS') ? 'PASS' : 'FAIL';
+
+  const report = {
+    test: 'Simple Bidirectional Forwarding Test',
+    generatedAt: new Date().toISOString(),
+    nodeAUrl,
+    nodeBUrl,
+    nodeA: {
+      primary: { name: nodeAPrimary.name, mac: nodeAPrimary.mac },
+      monitor: { name: nodeAMonitor.name, mac: nodeAMonitor.mac }
+    },
+    nodeB: {
+      primary: { name: nodeBPrimary.name, mac: nodeBPrimary.mac },
+      monitor: { name: nodeBMonitor.name, mac: nodeBMonitor.mac }
+    },
+    config: {
+      direction,
+      count: Number(reqBody.count || 10),
+      intervalMs: Number(reqBody.intervalMs ?? 100),
+      udpSrcPort: Number(reqBody.udpSrcPort || 40000),
+      udpDstPort: Number(reqBody.udpDstPort || 50000),
+      payloadMarkerPrefix: String(reqBody.payloadMarkerPrefix || 'KETI_SIMPLE_FORWARD'),
+      captureTimeoutMs: Number(reqBody.captureTimeoutMs || 3000)
+    },
+    directions,
+    overall
+  };
+  await mkdir(reportsDir, { recursive: true });
+  await writeFile(join(reportsDir, 'simple-bidir-forward-latest.json'), JSON.stringify(report, null, 2));
+  await writeFile(join(reportsDir, 'simple-bidir-forward-latest.html'), simpleBidirReportHtml(report));
+  return report;
+}
+
 // --- Serial / TTY console support ---------------------------------------
 const ttySessions = new Map(); // id -> { child, buffer, subscribers, config }
 let nextTtyId = 1;
@@ -1487,6 +1746,25 @@ async function handleApi(req, res) {
         report,
         html: '/reports/testcase-latest.html',
         json: '/reports/testcase-latest.json'
+      });
+    }
+
+    if (req.method === 'POST' && req.url === '/api/simple-bidir-forward-test') {
+      const body = await readRequestJson(req);
+      const report = await runSimpleBidirForwardTest(body);
+      return sendJson(res, 200, {
+        ok: true,
+        result: report.overall,
+        directions: report.directions.map((d) => ({
+          direction: d.direction,
+          sent: d.sent,
+          expectedMatched: d.expectedMatched,
+          monitorMatched: d.monitorMatched,
+          result: d.result
+        })),
+        htmlReport: '/reports/simple-bidir-forward-latest.html',
+        jsonReport: '/reports/simple-bidir-forward-latest.json',
+        report
       });
     }
 
