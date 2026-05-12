@@ -1035,6 +1035,8 @@ async function loadInterfaces() {
   // Now that we know which NIC is picked, push srcMac/srcIp into the form
   // (loadExamples ran first and already loaded a template's dst values).
   autofillSenderFromPickedIface();
+  // Fill the Control-tab linkStrip's quick-pick dropdown too.
+  syncLocalInterfacePin?.();
   setStatus(`${state.interfaces.length} interfaces loaded`);
 }
 
@@ -2818,6 +2820,29 @@ $('lockToggle').addEventListener('click', () => {
 $('interfaceSelect').addEventListener('change', () => {
   localStorage.setItem('localInterface', $('interfaceSelect').value);
   renderLinkStrip();
+  syncLocalInterfacePin();
+});
+
+// linkStrip local NIC dropdown (Control tab quick-pick). Mirrors the Sender
+// picker — picking here flips ifaceSel.sender to a single NIC.
+function syncLocalInterfacePin() {
+  const sel = $('localInterfacePin');
+  if (!sel) return;
+  const current = Array.from(ifaceSel.sender)[0] || '';
+  if (sel.options.length !== state.interfaces.length) {
+    sel.innerHTML = state.interfaces.map((i) =>
+      `<option value="${i.name}">${i.name} — ${i.mac || '?'}${i.state==='up' ? ' · up':''}</option>`
+    ).join('');
+  }
+  if (current) sel.value = current;
+}
+$('localInterfacePin')?.addEventListener('change', () => {
+  const name = $('localInterfacePin').value;
+  if (!name) return;
+  ifaceSel.sender.clear();
+  ifaceSel.sender.add(name);
+  renderInterfacePickers();
+  mirrorIfaceSelectionToHiddenSelect();
 });
 
 $('senderNodeInterface').addEventListener('change', () => {

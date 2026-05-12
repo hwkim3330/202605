@@ -97,11 +97,12 @@
       <section class="linkStrip">
         <div class="linkSide localSide">
           <div class="linkLabel">This PC <span class="roleTag" id="localRoleTag">SENDER</span></div>
+          <div class="linkInputs">
+            <select id="localInterfacePin" title="이 PC의 송신 NIC"></select>
+          </div>
           <div class="linkLine">
             <span id="localIfName" class="strong">-</span>
             <span id="localIp" class="muted">-</span>
-          </div>
-          <div class="linkLine">
             <code id="localMac" class="mac">--:--:--:--:--:--</code>
           </div>
         </div>
@@ -112,7 +113,7 @@
         <div class="linkSide peerSide">
           <div class="linkLabel">Peer PC <span class="roleTag" id="peerRoleTag">RECEIVER</span></div>
           <div class="linkInputs">
-            <input id="peerUrlPin" placeholder="http://169.254.x.x:8080" autocomplete="off">
+            <input id="peerUrlPin" placeholder="http://169.254.141.14:8080" autocomplete="off">
             <select id="peerInterfacePin"><option value="">probe peer first</option></select>
             <button id="peerProbeBtn" class="ghostBtn" title="Probe peer interfaces">Probe</button>
           </div>
