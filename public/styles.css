@@ -1280,6 +1280,39 @@ body.serialMode .serialPane {
   background: #22c55e;
 }
 
+.suiteCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  margin: 12px 0 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(15, 111, 120, 0.18);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 16px 16px, rgba(14, 165, 233, 0.12), transparent 28px),
+    linear-gradient(135deg, #ffffff 0%, #eef8fa 100%);
+  box-shadow: 0 8px 28px rgba(15, 111, 120, 0.08);
+}
+
+.suiteCard h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.suiteCard p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.suiteRunBtn {
+  min-width: 160px;
+  min-height: 38px;
+}
+
 .controlRunBoard {
   margin: 12px 0 18px;
   border: 1px solid var(--line);
@@ -1420,6 +1453,10 @@ body.serialMode .serialPane {
 }
 
 @media (max-width: 880px) {
+  .suiteCard {
+    grid-template-columns: 1fr;
+  }
+
   .linkStrip {
     grid-template-columns: 1fr;
   }

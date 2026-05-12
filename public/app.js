@@ -1467,6 +1467,124 @@ async function apiReport(path, body) {
   return data;
 }
 
+function controlSuiteStages(pair) {
+  const burst = Number($('e2eBurst').value || 5);
+  const e2eInterval = Number($('e2eInterval').value || 200);
+  const benchCount = Number($('benchCount').value || 500);
+  const benchInterval = Number($('benchInterval').value || 1);
+  const profile = getProfile();
+  return [
+    {
+      name: 'E2E',
+      path: '/api/e2e-test',
+      body: {
+        senderUrl: pair.senderUrl,
+        receiverUrl: pair.receiverUrl,
+        senderInterface: pair.senderIf,
+        receiverInterface: pair.receiverIf,
+        profile: { ...profile, count: burst, intervalMs: e2eInterval },
+        timeoutSec: Math.max(5, Math.ceil((burst * e2eInterval) / 1000) + 3),
+        maxFrames: Math.max(50, burst + 20)
+      },
+      summarize(data) {
+        const r = data.report;
+        return {
+          ok: Boolean(r.ok),
+          metrics: { tx: r.sent?.framesSent ?? 0, match: r.matchCount ?? 0, capture: r.captureSummary?.total ?? 0 },
+          error: r.ok ? '' : 'No matching frame captured.'
+        };
+      }
+    },
+    {
+      name: 'Wire',
+      path: '/api/wire-validation',
+      body: {
+        senderUrl: pair.senderUrl,
+        receiverUrl: pair.receiverUrl,
+        senderInterface: pair.senderIf,
+        receiverInterface: pair.receiverIf,
+        count: 2,
+        intervalMs: 100
+      },
+      summarize(data) {
+        const s = data.report.summary;
+        return {
+          ok: Boolean(data.report.ok),
+          metrics: { sent: s.framesSent ?? 0, match: s.matched ?? 0, failed: s.failed ?? 0 },
+          error: data.report.ok ? '' : 'Validation step failed.'
+        };
+      }
+    },
+    {
+      name: 'Benchmark',
+      path: '/api/benchmark',
+      body: {
+        senderUrl: pair.senderUrl,
+        receiverUrl: pair.receiverUrl,
+        senderInterface: pair.senderIf,
+        receiverInterface: pair.receiverIf,
+        profile,
+        count: benchCount,
+        intervalMs: benchInterval,
+        payloadSize: Number($('benchPayloadSize').value || 64)
+      },
+      summarize(data) {
+        const s = data.report.stats;
+        const ok = Number(s.rxCount || 0) > 0;
+        return {
+          ok,
+          metrics: { rx: `${s.rxCount}/${s.txCount}`, loss: `${Number(s.lossPct || 0).toFixed(2)}%`, mbps: Number(s.throughputMbps || 0).toFixed(2) },
+          error: ok ? '' : 'Receiver got 0 benchmark packets.'
+        };
+      }
+    },
+    {
+      name: 'Sweep',
+      path: '/api/sweep',
+      body: {
+        senderUrl: pair.senderUrl,
+        receiverUrl: pair.receiverUrl,
+        senderInterface: pair.senderIf,
+        receiverInterface: pair.receiverIf,
+        count: benchCount,
+        intervalMs: benchInterval
+      },
+      summarize(data) {
+        const rows = data.report.results || [];
+        const totalRx = rows.reduce((sum, row) => sum + Number(row.stats?.rxCount || 0), 0);
+        const avgLoss = rows.length ? rows.reduce((sum, row) => sum + Number(row.stats?.lossPct || 0), 0) / rows.length : 100;
+        return {
+          ok: rows.length > 0,
+          metrics: { sizes: rows.length, rx: totalRx, loss: `${avgLoss.toFixed(2)}%` },
+          error: rows.length ? '' : 'No sweep result.'
+        };
+      }
+    },
+    {
+      name: 'RFC2544',
+      path: '/api/rfc2544',
+      body: {
+        senderUrl: pair.senderUrl,
+        receiverUrl: pair.receiverUrl,
+        senderInterface: pair.senderIf,
+        receiverInterface: pair.receiverIf,
+        trialDurationSec: Number($('rfcTrial').value || 2),
+        linkRateMbps: Number($('rfcLink').value || 1000),
+        tolerancePps: Number($('rfcTol').value || 100)
+      },
+      summarize(data) {
+        const rows = data.report.results || [];
+        const avgUtil = rows.length ? rows.reduce((sum, row) => sum + Number(row.utilizationPct || 0), 0) / rows.length : 0;
+        return {
+          ok: rows.length > 0,
+          metrics: { sizes: rows.length, util: `${avgUtil.toFixed(1)}%`, report: 'saved' },
+          error: rows.length ? '' : 'No RFC2544 result.'
+        };
+      }
+    }
+  ];
+}
+
 function renderNodeGrid() {
   const sender = state.nodes.sender;
   const receiver = state.nodes.receiver;
@@ -2797,6 +2915,51 @@ async function runSweep() {
     $('runSweep').disabled = false;
   }
 }
+
+async function runFullSuite() {
+  if ($('runFullSuite').disabled) return;
+  $('runFullSuite').disabled = true;
+  setActionStatus('statusFullSuite', 'running', 'running');
+  try {
+    await ensurePeerReady();
+    syncControlFromPeer();
+    const pairs = selectedControlPairs();
+    const suiteItems = pairs.flatMap((pair) => controlSuiteStages(pair).map((stage) => ({
+      ...pair,
+      stage,
+      label: `${stage.name}: ${pair.label}`
+    })));
+    initControlRunBoard('Full Lab Suite Progress', suiteItems);
+    let done = 0;
+    let pass = 0;
+    for (const [index, item] of suiteItems.entries()) {
+      setStatus(`Full suite ${index + 1}/${suiteItems.length}: ${item.label}`);
+      updateControlRunCard(index, 'running', { status: 'running', pair: item.stage.name, result: '-' });
+      try {
+        const data = await apiReport(item.stage.path, item.stage.body);
+        const summary = item.stage.summarize(data);
+        if (summary.ok) pass += 1;
+        updateControlRunCard(index, summary.ok ? 'ok' : 'fail', summary.metrics, summary.error);
+      } catch (err) {
+        updateControlRunCard(index, 'fail', { status: 'error', pair: item.stage.name, result: '-' }, err.message);
+      }
+      done += 1;
+      updateControlRunSummary(done, suiteItems.length, pass);
+    }
+    const ok = pass === suiteItems.length;
+    setActionStatus('statusFullSuite', ok ? 'ok' : 'fail', `${pass}/${suiteItems.length}`);
+    setStatus(`Full suite ${ok ? 'PASS' : 'FAIL'}: ${pass}/${suiteItems.length} stage(s) passed`, !ok);
+  } catch (err) {
+    setActionStatus('statusFullSuite', 'fail', 'fail');
+    throw err;
+  } finally {
+    $('runFullSuite').disabled = false;
+  }
+}
+
+$('runFullSuite')?.addEventListener('click', () => runFullSuite().catch((err) => {
+  toastError(err);
+}));
 
 $('runBenchmark').addEventListener('click', () => runBenchmark().catch((err) => {
   toastError(err);
