@@ -2143,3 +2143,15 @@ body:not(.controlMode) .linkStrip { display: none; }
 
 /* Make sure Sender's picker reads nicely when horizontal */
 #senderIfacePicker.ifacePickerHoriz .ifaceItem { flex: 1 1 220px; min-width: 200px; }
+
+/* Sender tab: lift the interface picker out of the cramped sidebar into a
+   full-width top row, so the horizontal NIC card grid actually has room
+   to spread out like the Capture tab. */
+#senderView.roleView {
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.senderIfaceTopRow {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}

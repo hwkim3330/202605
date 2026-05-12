@@ -127,33 +127,22 @@
 
       <section class="workspace">
         <section id="senderView" class="roleView active">
-          <aside class="sidebar">
-            <div class="ifacePicker ifacePickerHoriz" id="senderIfacePicker">
-              <div class="ifacePickerHead">
-                <strong>Send via</strong>
-                <span class="ifacePickerCount" id="senderIfaceCount">0 selected</span>
-              </div>
-              <div class="ifacePickerList ifacePickerListHoriz" id="senderIfaceList">— probe to load —</div>
-              <div class="ifacePickerHint">여러 NIC 선택 시 각각 독립 agent로 fan-out 송신.</div>
+          <div class="ifacePicker ifacePickerHoriz senderIfaceTopRow" id="senderIfacePicker">
+            <div class="ifacePickerHead">
+              <strong>Send via</strong>
+              <span class="ifacePickerCount" id="senderIfaceCount">0 selected</span>
             </div>
+            <div class="ifacePickerList ifacePickerListHoriz" id="senderIfaceList">— probe to load —</div>
+            <div class="ifacePickerHint">여러 NIC 선택 시 각각 독립 agent로 fan-out 송신.</div>
+          </div>
+          <aside class="sidebar">
+            <!-- legacy holders kept hidden for JS that still references them -->
             <div class="interfaceBox" style="display:none">
               <div id="selectedInterfaceName">-</div>
               <div id="selectedInterfaceMac" class="muted">-</div>
             </div>
-
-            <details class="senderTemplates">
-              <summary>Templates / Test Profiles</summary>
-              <div class="buttonRow">
-                <button data-example="udp">UDP</button>
-                <button data-example="icmp">ICMP</button>
-                <button data-example="arp">ARP</button>
-              </div>
-              <label>
-                Test Profile
-                <select id="profileSelect"></select>
-              </label>
-              <div id="profileDescription" class="profileDescription">-</div>
-            </details>
+            <select id="profileSelect" hidden></select>
+            <div id="profileDescription" hidden>-</div>
             <label>
               Protocol
               <select id="protocol">
