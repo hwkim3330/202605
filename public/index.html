@@ -558,27 +558,26 @@
               </div>
 
               <div class="sbfStep">
-                <h4>② Interface Roles
+                <h4>② Interfaces
                   <span class="sbfLegend">
-                    <span class="sbfBadge sbf-primary">Primary</span> 송신/기대수신 (노드별 1개)
-                    <span class="sbfBadge sbf-monitor">Monitor</span> 누설 감지 (0~N개)
-                    <span class="sbfBadge sbf-unused">Unused</span> 시험 제외
+                    <span class="sbfBadge sbf-primary">Primary</span> 송신/기대 수신
+                    <span class="sbfBadge sbf-monitor">Monitor</span> 누설 감지 (다른 포트)
                   </span>
                 </h4>
                 <div class="sbfIfaceGrid">
                   <div class="sbfIfaceBlock">
                     <div class="sbfIfaceHeader">Node A <small id="sbfNodeAEcho">-</small></div>
-                    <table class="sbfIfaceTable" id="sbfNodeAIfaceTable">
-                      <thead><tr><th>Interface</th><th>MAC</th><th>State</th><th>Role</th></tr></thead>
-                      <tbody></tbody>
-                    </table>
+                    <div class="row" style="gap:8px">
+                      <label><strong><span class="sbfBadge sbf-primary">Primary</span>Interface</strong><select id="sbfNodeAPrimary"></select></label>
+                      <label><strong><span class="sbfBadge sbf-monitor">Monitor</span>Interface</strong><select id="sbfNodeAMonitor"></select></label>
+                    </div>
                   </div>
                   <div class="sbfIfaceBlock">
                     <div class="sbfIfaceHeader">Node B <small id="sbfNodeBEcho">-</small></div>
-                    <table class="sbfIfaceTable" id="sbfNodeBIfaceTable">
-                      <thead><tr><th>Interface</th><th>MAC</th><th>State</th><th>Role</th></tr></thead>
-                      <tbody></tbody>
-                    </table>
+                    <div class="row" style="gap:8px">
+                      <label><strong><span class="sbfBadge sbf-primary">Primary</span>Interface</strong><select id="sbfNodeBPrimary"></select></label>
+                      <label><strong><span class="sbfBadge sbf-monitor">Monitor</span>Interface</strong><select id="sbfNodeBMonitor"></select></label>
+                    </div>
                   </div>
                 </div>
               </div>

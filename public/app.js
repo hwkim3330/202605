@@ -1832,67 +1832,26 @@ $('runE2E').addEventListener('click', () => runE2E().catch((err) => {
 }));
 
 // ----------- Simple Bidirectional Forwarding Test (Control tab) -----------
-const sbf = {
-  a: { interfaces: [], roles: {} },
-  b: { interfaces: [], roles: {} }
-};
+const sbf = { a: { interfaces: [] }, b: { interfaces: [] } };
 
-function sbfSetRole(side, ifaceName, role) {
-  const s = sbf[side];
-  if (role === 'primary') {
-    for (const k of Object.keys(s.roles)) if (s.roles[k] === 'primary') s.roles[k] = 'unused';
-  }
-  s.roles[ifaceName] = role;
-  sbfRenderIfaceTable(side);
-  sbfSyncTopology();
-}
-
-function sbfRenderIfaceTable(side) {
-  const id = side === 'a' ? 'sbfNodeAIfaceTable' : 'sbfNodeBIfaceTable';
-  const s = sbf[side];
-  const tbody = $(id).querySelector('tbody');
-  if (!s.interfaces.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:10px 0">Probe Nodes 후 표시됩니다.</td></tr>';
-    return;
-  }
-  tbody.innerHTML = s.interfaces.map((iface) => {
-    const role = s.roles[iface.name] || 'unused';
-    const radios = ['unused','primary','monitor'].map((r) => {
-      const cls = role === r ? `sbf-sel-${r}` : '';
-      const label = r[0].toUpperCase() + r.slice(1);
-      return `<label class="${cls}" data-side="${side}" data-iface="${iface.name}" data-role="${r}">${label}</label>`;
-    }).join('');
-    return `<tr>
-      <td class="name">${iface.name}</td>
-      <td class="mac">${iface.mac || '—'}</td>
-      <td class="state">${iface.state || ''}</td>
-      <td><div class="sbfRoleRadios">${radios}</div></td>
-    </tr>`;
-  }).join('');
-  tbody.querySelectorAll('.sbfRoleRadios label').forEach((el) => {
-    el.addEventListener('click', () => sbfSetRole(el.dataset.side, el.dataset.iface, el.dataset.role));
-  });
-}
-
-function sbfDefaultRoles(side) {
-  const s = sbf[side];
-  s.roles = {};
-  const ifs = s.interfaces.filter((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
-  if (ifs[0]) s.roles[ifs[0].name] = 'primary';
-  for (let i = 1; i < ifs.length; i++) s.roles[ifs[i].name] = 'monitor';
+function sbfFillSelect(selectId, interfaces, fallbackIndex) {
+  const sel = $(selectId);
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— select —</option>' + interfaces.map((iface) =>
+    `<option value="${iface.name}">${iface.name} — ${iface.mac || '?'}${iface.state === 'up' ? ' · up' : ''}</option>`
+  ).join('');
+  if (prev && interfaces.find((i) => i.name === prev)) sel.value = prev;
+  else if (fallbackIndex != null && interfaces[fallbackIndex]) sel.value = interfaces[fallbackIndex].name;
 }
 
 function sbfPrimary(side) {
-  const s = sbf[side];
-  const name = Object.keys(s.roles).find((k) => s.roles[k] === 'primary');
-  return s.interfaces.find((i) => i.name === name) || null;
+  const sel = $(side === 'a' ? 'sbfNodeAPrimary' : 'sbfNodeBPrimary');
+  return sbf[side].interfaces.find((i) => i.name === sel.value) || null;
 }
-function sbfMonitors(side) {
-  const s = sbf[side];
-  return Object.keys(s.roles)
-    .filter((k) => s.roles[k] === 'monitor')
-    .map((name) => s.interfaces.find((i) => i.name === name))
-    .filter(Boolean);
+function sbfMonitor(side) {
+  const sel = $(side === 'a' ? 'sbfNodeAMonitor' : 'sbfNodeBMonitor');
+  return sbf[side].interfaces.find((i) => i.name === sel.value) || null;
 }
 
 function sbfSyncTopology() {
@@ -1901,11 +1860,11 @@ function sbfSyncTopology() {
   $('sbfNodeAEcho').textContent = $('sbfNodeAUrl').value || '';
   $('sbfNodeBEcho').textContent = $('sbfNodeBUrl').value || '';
   const ap = sbfPrimary('a'), bp = sbfPrimary('b');
-  const am = sbfMonitors('a'), bm = sbfMonitors('b');
+  const am = sbfMonitor('a'), bm = sbfMonitor('b');
   $('sbfTopoAPrimary').innerHTML = `<span class="sbfBadge sbf-primary">Primary</span> ${ap ? `${ap.name} <small style="color:var(--muted)">${ap.mac}</small>` : '—'}`;
-  $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${am.length ? am.map((m) => m.name).join(', ') : '—'}`;
+  $('sbfTopoAMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitor</span> ${am ? `${am.name} <small style="color:var(--muted)">${am.mac}</small>` : '—'}`;
   $('sbfTopoBPrimary').innerHTML = `<span class="sbfBadge sbf-primary">Primary</span> ${bp ? `${bp.name} <small style="color:var(--muted)">${bp.mac}</small>` : '—'}`;
-  $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitors</span> ${bm.length ? bm.map((m) => m.name).join(', ') : '—'}`;
+  $('sbfTopoBMonitors').innerHTML = `<span class="sbfBadge sbf-monitor">Monitor</span> ${bm ? `${bm.name} <small style="color:var(--muted)">${bm.mac}</small>` : '—'}`;
 }
 
 async function sbfProbe() {
@@ -1921,10 +1880,13 @@ async function sbfProbe() {
     ]);
     sbf.a.interfaces = a.interfaces;
     sbf.b.interfaces = b.interfaces;
-    sbfDefaultRoles('a');
-    sbfDefaultRoles('b');
-    sbfRenderIfaceTable('a');
-    sbfRenderIfaceTable('b');
+    // Skip virtual / wifi / loopback so the dropdowns default to real test NICs.
+    const realA = a.interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
+    const realB = b.interfaces.findIndex((i) => !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name));
+    sbfFillSelect('sbfNodeAPrimary', a.interfaces, realA >= 0 ? realA : 0);
+    sbfFillSelect('sbfNodeAMonitor', a.interfaces, realA + 1 < a.interfaces.length ? realA + 1 : null);
+    sbfFillSelect('sbfNodeBPrimary', b.interfaces, realB >= 0 ? realB : 0);
+    sbfFillSelect('sbfNodeBMonitor', b.interfaces, realB + 1 < b.interfaces.length ? realB + 1 : null);
     sbfSyncTopology();
     setActionStatus('sbfProbeStatus', 'ok', `A: ${a.interfaces.length} IF · B: ${b.interfaces.length} IF`);
   } finally {
@@ -1980,6 +1942,7 @@ async function sbfRun(direction) {
   const aPrimary = sbfPrimary('a'), bPrimary = sbfPrimary('b');
   if (!aPrimary) throw new Error('Node A의 Primary 인터페이스를 선택하세요.');
   if (!bPrimary) throw new Error('Node B의 Primary 인터페이스를 선택하세요.');
+  const aMonitor = sbfMonitor('a'), bMonitor = sbfMonitor('b');
   const buttons = ['sbfRunAtoB', 'sbfRunBtoA', 'sbfRunBoth', 'sbfProbe'];
   buttons.forEach((id) => { const b = $(id); if (b) b.disabled = true; });
   const prog = progressFor('progSimpleBidir');
@@ -1997,8 +1960,8 @@ async function sbfRun(direction) {
       nodeBUrl: $('sbfNodeBUrl').value.trim(),
       nodeAPrimaryInterface: aPrimary.name,
       nodeBPrimaryInterface: bPrimary.name,
-      nodeAMonitorInterfaces: sbfMonitors('a').map((m) => m.name),
-      nodeBMonitorInterfaces: sbfMonitors('b').map((m) => m.name),
+      nodeAMonitorInterfaces: aMonitor ? [aMonitor.name] : [],
+      nodeBMonitorInterfaces: bMonitor ? [bMonitor.name] : [],
       direction,
       count,
       intervalMs,
@@ -2024,10 +1987,12 @@ async function sbfRun(direction) {
 }
 
 (function sbfInit() {
-  const a = $('sbfNodeAUrl'); const b = $('sbfNodeBUrl');
+  const b = $('sbfNodeBUrl');
   if (b && !b.value) b.value = window.location.origin;
-  ['sbfNodeAUrl','sbfNodeBUrl'].forEach((id) => $(id)?.addEventListener('input', sbfSyncTopology));
-  sbfRenderIfaceTable('a'); sbfRenderIfaceTable('b');
+  ['sbfNodeAUrl','sbfNodeBUrl','sbfNodeAPrimary','sbfNodeAMonitor','sbfNodeBPrimary','sbfNodeBMonitor'].forEach((id) => {
+    $(id)?.addEventListener('input', sbfSyncTopology);
+    $(id)?.addEventListener('change', sbfSyncTopology);
+  });
   sbfSyncTopology();
   $('sbfProbe')?.addEventListener('click', () => sbfProbe().catch(toastError));
   $('sbfRunAtoB')?.addEventListener('click', () => sbfRun('A_TO_B').catch(toastError));
