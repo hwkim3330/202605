@@ -26,7 +26,7 @@ const state = {
   },
   selectedStep: -1,
   localRole: localStorage.getItem('localRole') || 'sender',
-  locked: localStorage.getItem('autoLock') !== '0'
+  locked: false
 };
 
 function cloneJson(value) {
@@ -1094,6 +1094,8 @@ function renderInterfaceCheckboxes() { renderInterfacePickers(); }
 
 // Initial body-class state — Sender tab is active on load.
 document.body.classList.add('senderMode');
+// Clear any stale readOnly from removed lock-to-peer feature.
+setLockUi();
 
 function updateInterfaceInfo() {
   const selected = state.interfaces.find((iface) => iface.name === $('interfaceSelect').value);
@@ -2506,40 +2508,21 @@ function firstV4(iface) {
   return iface?.ipv4?.find((a) => a.local && !a.local.includes(':'))?.local || '';
 }
 
-function applyLock() {
-  if (!state.locked) return;
-  const local = localIface();
-  const peer = state.peer.iface;
-  const localIp = firstV4(local);
-  const peerIp = firstV4(peer);
-  // Sender form (always reflects the locked pair)
-  if (local) {
-    $('srcMac').value = local.mac;
-    if (localIp) $('srcIp').value = localIp;
-    $('srcMac').readOnly = true;
-    $('srcIp').readOnly = true;
-  }
-  if (peer) {
-    $('dstMac').value = peer.mac;
-    if (peerIp) $('dstIp').value = peerIp;
-    $('dstMac').readOnly = true;
-    $('dstIp').readOnly = true;
-  }
-  // Note: Capture page is now Wireshark-style (sniff all by default), so we
-  // intentionally do NOT auto-fill captureSrcMac / captureDstMac from the
-  // pinned pair. Pre-decode filters in the collapsed "Capture filters" panel
-  // remain manual so the user can explicitly narrow the sniff.
-}
-
+// Lock-to-peer was making srcMac/srcIp/dstMac/dstIp readOnly, which blocked
+// Send when the picker / form combo didn't match the peer-locked state.
+// Killed in favour of the new Sender interface picker (which auto-fills
+// srcMac/srcIp on toggle) and manual dstMac/dstIp entry.
+function applyLock() { /* no-op: lock feature removed */ }
 function setLockUi() {
-  const btn = $('lockToggle');
-  if (!btn) return;
-  btn.textContent = state.locked ? '🔒 Locked to peer' : '🔓 Manual';
-  btn.classList.toggle('locked', state.locked);
   ['srcMac','srcIp','dstMac','dstIp'].forEach((id) => {
     const el = $(id);
-    if (el) el.readOnly = state.locked;
+    if (el) { el.readOnly = false; el.removeAttribute('readonly'); }
   });
+  // Hide the legacy buttons — Lock to Peer / 🔒 Locked to peer.
+  for (const id of ['lockToggle', 'useMacBtn']) {
+    const el = $(id);
+    if (el) el.style.display = 'none';
+  }
 }
 
 function renderLinkStrip() {
