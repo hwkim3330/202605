@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:EthernetPacketGenerator.ViewModels"
         xmlns:views="clr-namespace:EthernetPacketGenerator.Views"
-        Title="Ethernet Packet Generator"
+        Title="Ethernet Packet Generator &amp; TSN Switch Inspector"
         Icon="Assets/app.ico"
         Width="1680" Height="1000"
         MinWidth="1200" MinHeight="800"
@@ -18,8 +18,44 @@
         <vm:MainViewModel/>
     </Window.DataContext>
 
+    <Window.Resources>
+        <!-- Tab item style: custom dark header -->
+        <Style x:Key="NavTabItem" TargetType="TabItem">
+            <Setter Property="Padding" Value="18,9"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Foreground" Value="#8899BB"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd"
+                                Background="Transparent"
+                                BorderThickness="0,0,0,2"
+                                BorderBrush="Transparent"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#12FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <DockPanel>
-        <!-- Menu Bar -->
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Packet" Command="{Binding PacketListVM.AddPacketCommand}"/>
@@ -34,140 +70,128 @@
             </MenuItem>
         </Menu>
 
-        <!-- Status Bar -->
         <StatusBar DockPanel.Dock="Bottom" Height="22">
             <StatusBarItem>
                 <TextBlock Text="{Binding SendVM.StartTime}" FontSize="11"/>
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock FontSize="11">
-                    <Run Text="Items: "/>
+                    <Run Text="Packets: "/>
                     <Run Text="{Binding PacketListVM.Sequence.Count, Mode=OneWay}"/>
                 </TextBlock>
             </StatusBarItem>
         </StatusBar>
 
-        <!-- Root TabControl -->
-        <TabControl x:Name="MainTabs">
-        <TabItem Header="Build &amp; Send">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"   MinWidth="900"/>
-                <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="180" MinWidth="150"/>
-            </Grid.ColumnDefinitions>
+        <!-- ══ Main Tab Navigation ══════════════════════════════════════════ -->
+        <TabControl SelectedIndex="{Binding SelectedTabIndex}"
+                    Background="{StaticResource BackgroundBrush}"
+                    BorderThickness="0">
 
-            <!-- ══════════════════════════════════════════
-                 Work area: top-half (fields) + bottom-half (list + send)
-                 ══════════════════════════════════════════ -->
-            <Grid Grid.Column="0">
-                <Grid.RowDefinitions>
-                    <!-- Top: Block Builder + Protocol Fields | HEX+Tree+Events -->
-                    <RowDefinition Height="*"   MinHeight="400"/>
-                    <RowDefinition Height="5"/>
-                    <!-- Bottom: Packet List -->
-                    <RowDefinition Height="200" MinHeight="120"/>
-                    <RowDefinition Height="5"/>
-                    <!-- Send bar -->
-                    <RowDefinition Height="Auto" MinHeight="110"/>
-                </Grid.RowDefinitions>
+            <TabControl.Resources>
+                <Style TargetType="TabPanel">
+                    <Setter Property="Background" Value="#0D1117"/>
+                </Style>
+            </TabControl.Resources>
 
-                <!-- ── Top section ── -->
-                <Grid Grid.Row="0">
+            <!-- ── Tab 0: Packet Generator ───────────────────────────── -->
+            <TabItem Header="  Packet Generator  " Style="{StaticResource NavTabItem}">
+                <Grid>
                     <Grid.ColumnDefinitions>
-                        <!-- Left: Block Builder + Protocol Fields -->
-                        <ColumnDefinition Width="*" MinWidth="350"/>
+                        <ColumnDefinition Width="*" MinWidth="900"/>
                         <ColumnDefinition Width="5"/>
-                        <!-- Right: HEX DUMP + Decode Tree + Event Palette -->
-                        <ColumnDefinition Width="*" MinWidth="300"/>
+                        <ColumnDefinition Width="180" MinWidth="150"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Left: Block Builder (top) + Protocol Fields (rest) -->
                     <Grid Grid.Column="0">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="90" MinHeight="70"/>  <!-- Block Builder -->
+                            <RowDefinition Height="*" MinHeight="400"/>
                             <RowDefinition Height="5"/>
-                            <RowDefinition Height="*" MinHeight="200"/>  <!-- Protocol Fields -->
+                            <RowDefinition Height="Auto" MinHeight="110"/>
                         </Grid.RowDefinitions>
 
-                        <views:BlockBuilderView Grid.Row="0"
-                            x:Name="BlockBuilder"
-                            DataContext="{Binding BlockBuilderVM}"/>
+                        <!-- BlockBuilder + HexDump / TreeDecode -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="350"/>
+                                <ColumnDefinition Width="5"/>
+                                <ColumnDefinition Width="*" MinWidth="300"/>
+                            </Grid.ColumnDefinitions>
 
-                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                                      Background="{StaticResource BorderBrush}"/>
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="90" MinHeight="70"/>
+                                    <RowDefinition Height="5"/>
+                                    <RowDefinition Height="*" MinHeight="200"/>
+                                </Grid.RowDefinitions>
 
-                        <views:ProtocolSettingsView Grid.Row="2"
-                            DataContext="{Binding BlockBuilderVM.SelectedBlock}"/>
+                                <views:BlockBuilderView Grid.Row="0" x:Name="BlockBuilder" DataContext="{Binding BlockBuilderVM}"/>
+                                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
+                                <views:ProtocolSettingsView Grid.Row="2" DataContext="{Binding BlockBuilderVM.SelectedBlock}"/>
+                            </Grid>
+
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
+
+                            <Grid Grid.Column="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="160" MinHeight="80"/>
+                                    <RowDefinition Height="5"/>
+                                    <RowDefinition Height="*" MinHeight="120"/>
+                                </Grid.RowDefinitions>
+
+                                <views:HexDumpView Grid.Row="0" DataContext="{Binding HexDumpVM}"/>
+                                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
+                                <views:TreeDecodeView Grid.Row="2" DataContext="{Binding TreeDecodeVM}"/>
+                            </Grid>
+                        </Grid>
+
+                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
+                        <views:SendControlView Grid.Row="2" DataContext="{Binding SendVM}"/>
                     </Grid>
 
-                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                                  Background="{StaticResource BorderBrush}"/>
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
 
-                    <!-- Right: HEX DUMP + Decode Tree -->
                     <Grid Grid.Column="2">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="160" MinHeight="80"/>  <!-- HEX DUMP -->
+                            <RowDefinition Height="*" MinHeight="200"/>
                             <RowDefinition Height="5"/>
-                            <RowDefinition Height="*"   MinHeight="120"/> <!-- Decode Tree -->
+                            <RowDefinition Height="298" MinHeight="100"/>
                         </Grid.RowDefinitions>
 
-                        <views:HexDumpView Grid.Row="0"
-                                           DataContext="{Binding HexDumpVM}"/>
-
-                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                                      Background="{StaticResource BorderBrush}"/>
-
-                        <views:TreeDecodeView Grid.Row="2"
-                                              DataContext="{Binding TreeDecodeVM}"/>
+                        <views:ProtocolPaletteView Grid.Row="0" x:Name="ProtocolPalette" DataContext="{Binding BlockBuilderVM}"/>
+                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
+                        <views:EventPaletteView Grid.Row="2" DataContext="{Binding PacketListVM}"/>
                     </Grid>
                 </Grid>
+            </TabItem>
 
-                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                              Background="{StaticResource BorderBrush}"/>
+            <!-- ── Tab 1: Capture (Wireshark-style) ─────────────────── -->
+            <TabItem Header="  Capture  " Style="{StaticResource NavTabItem}">
+                <views:CaptureView DataContext="{Binding CaptureVM}"/>
+            </TabItem>
 
-                <!-- ── Packet List (full width) ── -->
-                <views:PacketListView Grid.Row="2"
-                                      DataContext="{Binding PacketListVM}"/>
+            <!-- ── Tab 2: Automation ─────────────────────────────────── -->
+            <TabItem Header="  Automation  " Style="{StaticResource NavTabItem}">
+                <views:AutomationView DataContext="{Binding AutomationVM}"/>
+            </TabItem>
 
-                <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
-                              Background="{StaticResource BorderBrush}"/>
+            <!-- ── Tab 3: HyperTerminal ──────────────────────────────── -->
+            <TabItem Header="  HyperTerminal  " Style="{StaticResource NavTabItem}">
+                <views:HyperTerminalView DataContext="{Binding HyperTerminalVM}"/>
+            </TabItem>
 
-                <!-- ── Send bar (full width) ── -->
-                <views:SendControlView Grid.Row="4"
-                                       DataContext="{Binding SendVM}"/>
-            </Grid>
-
-            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                          Background="{StaticResource BorderBrush}"/>
-
-            <!-- Right column: Protocol Palette (top) + Event Palette (bottom)
-                 Event palette bottom edge aligns with Packet List top:
-                 PacketList=200 + splitter=5 + Send=56 + splitter=5 = 266px -->
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"   MinHeight="200"/>
-                    <RowDefinition Height="5"/>
-                    <RowDefinition Height="*" MinHeight="100"/>
-                </Grid.RowDefinitions>
-
-                <views:ProtocolPaletteView Grid.Row="0"
-                    x:Name="ProtocolPalette"
-                    DataContext="{Binding BlockBuilderVM}"/>
-
-                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                              Background="{StaticResource BorderBrush}"/>
-
-                <views:EventPaletteView Grid.Row="2"
-                                        DataContext="{Binding PacketListVM}"/>
-            </Grid>
-        </Grid>
-        </TabItem>
-
-        <!-- ═══ Live Capture ═══════════════════════════════════════════════════ -->
-        <TabItem Header="Live Capture">
-            <views:CaptureView DataContext="{Binding CaptureVM}"/>
-        </TabItem>
+            <!-- ── Tab 4: Settings (placeholder) ────────────────────── -->
+            <TabItem Header="  Settings  " Style="{StaticResource NavTabItem}">
+                <Border Background="{StaticResource BackgroundBrush}" Padding="24">
+                    <StackPanel>
+                        <TextBlock Text="Settings"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   FontSize="18" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                        <TextBlock Text="Configuration options will appear here in a future update."
+                                   Foreground="{StaticResource MutedForeground}"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </Border>
+            </TabItem>
 
         </TabControl>
     </DockPanel>

@@ -110,45 +110,64 @@
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
 
-                    <!-- Interface (패킷별 전송 인터페이스 선택) -->
-                    <GridViewColumn Header="Interface" Width="160">
+                    <!-- Interface (패킷별 전송 인터페이스 다중 선택) -->
+                    <GridViewColumn Header="Interface" Width="180">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <Grid>
-                                    <!-- Packet row: ComboBox -->
-                                    <ComboBox x:Name="IfaceCombo"
-                                              ItemsSource="{Binding DataContext.InterfaceOptions,
-                                                            RelativeSource={RelativeSource AncestorType=ListView}}"
-                                              SelectedValuePath="ShortName"
-                                              SelectedValue="{Binding Packet.OutgoingInterfaceName, Mode=TwoWay}"
-                                              FontSize="11" Height="20" Padding="3,1"
-                                              ToolTip="이 패킷을 전송할 인터페이스&#x0a;(Default) = 체크된 전체 인터페이스, 없으면 기본 인터페이스">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock FontSize="11" TextTrimming="CharacterEllipsis">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Text" Value="{Binding ShortName}"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsDefaultSentinel}" Value="True">
-                                                                    <Setter Property="Text"       Value="(Default)"/>
-                                                                    <Setter Property="FontStyle"  Value="Italic"/>
-                                                                    <Setter Property="Foreground" Value="#88CCFF"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
+                                    <!-- Packet row: 드롭다운 버튼 -->
+                                    <Grid x:Name="IfaceGrid">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="18"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- 선택된 인터페이스 표시 텍스트 -->
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding Packet.OutgoingInterfaceDisplay}"
+                                                   FontSize="11" VerticalAlignment="Center"
+                                                   Padding="3,0" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{StaticResource ForegroundBrush}"/>
+
+                                        <!-- 드롭다운 토글 버튼 -->
+                                        <ToggleButton Grid.Column="1"
+                                                      x:Name="IfaceToggle"
+                                                      Content="▾"
+                                                      FontSize="9"
+                                                      Padding="0"
+                                                      Height="18"
+                                                      Background="#2A2A40"
+                                                      BorderBrush="#3A3A5A"
+                                                      Foreground="#88CCFF"
+                                                      Click="InterfaceToggle_Click"/>
+
+                                        <!-- 팝업 체크박스 목록 -->
+                                        <Popup x:Name="IfacePopup"
+                                               PlacementTarget="{Binding ElementName=IfaceToggle}"
+                                               Placement="Bottom"
+                                               StaysOpen="False"
+                                               IsOpen="{Binding IsChecked, ElementName=IfaceToggle, Mode=TwoWay}"
+                                               AllowsTransparency="True"
+                                               PopupAnimation="Slide">
+                                            <Border Background="#1E1E2E"
+                                                    BorderBrush="#3A3A5A"
+                                                    BorderThickness="1"
+                                                    CornerRadius="3"
+                                                    Padding="4,4,4,4"
+                                                    MinWidth="160">
+                                                <StackPanel x:Name="IfaceCheckList"
+                                                            Tag="{Binding}"
+                                                            Loaded="IfaceCheckList_Loaded"/>
+                                            </Border>
+                                        </Popup>
+                                    </Grid>
                                     <!-- Event row: 빈 칸 -->
                                     <TextBlock x:Name="IfaceEventLabel" Text="" Visibility="Collapsed"/>
                                 </Grid>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding Kind}" Value="Event">
-                                        <Setter TargetName="IfaceCombo"       Property="Visibility" Value="Collapsed"/>
-                                        <Setter TargetName="IfaceEventLabel"  Property="Visibility" Value="Visible"/>
+                                        <Setter TargetName="IfaceGrid"       Property="Visibility" Value="Collapsed"/>
+                                        <Setter TargetName="IfaceEventLabel" Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>

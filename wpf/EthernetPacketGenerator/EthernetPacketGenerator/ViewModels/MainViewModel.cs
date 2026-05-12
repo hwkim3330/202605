@@ -8,14 +8,23 @@ namespace EthernetPacketGenerator.ViewModels;
 
 public class MainViewModel : ViewModelBase
 {
-    private ProtocolBlock? _selectedBlock;
+    private readonly Services.SerialPortService _serial = new();
 
-    public PacketListViewModel PacketListVM { get; } = new();
-    public BlockBuilderViewModel BlockBuilderVM { get; } = new();
-    public HexDumpViewModel HexDumpVM { get; } = new();
-    public TreeDecodeViewModel TreeDecodeVM { get; } = new();
-    public SendViewModel SendVM { get; } = new();
-    public CaptureViewModel CaptureVM { get; } = new();
+    private ProtocolBlock? _selectedBlock;
+    private int _selectedTabIndex;
+
+    // Tab indices: 0=PacketGenerator, 1=Capture, 2=Automation, 3=HyperTerminal, 4=Settings
+
+    public PacketListViewModel         PacketListVM         { get; } = new();
+    public BlockBuilderViewModel       BlockBuilderVM       { get; } = new();
+    public HexDumpViewModel            HexDumpVM            { get; } = new();
+    public TreeDecodeViewModel         TreeDecodeVM         { get; } = new();
+    public SendViewModel               SendVM               { get; }
+    public HyperTerminalViewModel      HyperTerminalVM      { get; }
+    public TestCaseManagerViewModel    TestCaseMgrVM        { get; }
+    public PacketFlowMonitorViewModel  PacketFlowMonitorVM  { get; } = new();
+    public CaptureViewModel            CaptureVM            { get; } = new();
+    public AutomationViewModel         AutomationVM         { get; }
 
     public ProtocolBlock? SelectedBlock
     {
@@ -28,11 +37,26 @@ public class MainViewModel : ViewModelBase
         }
     }
 
-    public ICommand SaveCommand { get; }
-    public ICommand LoadCommand { get; }
+    public int SelectedTabIndex
+    {
+        get => _selectedTabIndex;
+        set => SetProperty(ref _selectedTabIndex, value);
+    }
+
+    public ICommand SaveCommand  { get; }
+    public ICommand LoadCommand  { get; }
 
     public MainViewModel()
     {
+        HyperTerminalVM = new HyperTerminalViewModel(_serial);
+        SendVM          = new SendViewModel(_serial);
+        TestCaseMgrVM   = new TestCaseManagerViewModel(PacketListVM);
+        AutomationVM    = new AutomationViewModel(PacketListVM, TestCaseMgrVM, PacketFlowMonitorVM);
+
+        SendVM.SetLogCallback(line =>
+            System.Windows.Application.Current.Dispatcher.Invoke(
+                () => HyperTerminalVM.AppendTerminal(line)));
+
         SaveCommand = new RelayCommand(Save, () => PacketListVM.Packets.Any());
         LoadCommand = new RelayCommand(Load);
 
@@ -42,19 +66,8 @@ public class MainViewModel : ViewModelBase
                 OnSelectedPacketChanged(PacketListVM.SelectedPacket);
         };
 
-        // Pass sequence to SendVM so it can iterate packets+events
         SendVM.SetSequence(PacketListVM.Sequence);
-
-        // Share interface entries with PacketListVM for per-packet interface dropdown
         PacketListVM.InterfaceEntries = SendVM.InterfaceEntries;
-
-        // CaptureVM follows selected interface
-        SendVM.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(SendViewModel.SelectedInterface))
-                CaptureVM.SetDevice(SendVM.SelectedInterface);
-        };
-        CaptureVM.SetDevice(SendVM.SelectedInterface);
 
         if (PacketListVM.SelectedPacket != null)
             OnSelectedPacketChanged(PacketListVM.SelectedPacket);

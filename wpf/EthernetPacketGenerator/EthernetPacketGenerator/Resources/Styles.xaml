@@ -9,7 +9,9 @@
     <conv:BoolToHighlightConverter x:Key="BoolToHighlight"/>
     <conv:BoolToSelectedHighlightConverter x:Key="BoolToSelectedHighlight"/>
     <conv:InverseBoolConverter x:Key="InverseBool"/>
+    <conv:InverseBoolConverter x:Key="InverseBoolConverter"/>
     <conv:NullToVisibilityConverter x:Key="NullToVisibility"/>
+    <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     <conv:ProtocolTypeToColorConverter x:Key="ProtoToColor"/>
     <conv:ProtocolTypeToAbbrevConverter x:Key="ProtoToAbbrev"/>
 

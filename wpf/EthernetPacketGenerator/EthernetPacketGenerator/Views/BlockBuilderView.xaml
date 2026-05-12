@@ -8,8 +8,7 @@
              DragOver="OnDragOver"
              DragLeave="OnDragLeave"
              MouseMove="Root_MouseMove"
-             MouseLeftButtonUp="Root_MouseLeftButtonUp"
-             PreviewMouseLeftButtonUp="Root_PreviewMouseLeftButtonUp">
+             MouseLeftButtonUp="Root_MouseLeftButtonUp">
     <DockPanel Background="{StaticResource SurfaceBrush}">
         <TextBlock DockPanel.Dock="Top" Text="PACKET STRUCTURE" Style="{StaticResource PanelHeader}"/>
 

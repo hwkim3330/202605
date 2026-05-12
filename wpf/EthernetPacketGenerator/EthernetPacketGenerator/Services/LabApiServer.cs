@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
+using EthernetPacketGenerator.ViewModels;
 using SharpPcap;
 
 namespace EthernetPacketGenerator.Services;
@@ -33,10 +35,42 @@ public sealed class LabApiServer : IDisposable
     /// <summary>SendViewModel이 갱신 — /api/interfaces 응답의 activeInterfaces 목록에 사용</summary>
     public List<EthernetPacketGenerator.Models.InterfaceEntry> ActiveInterfaceEntries { get; set; } = new();
 
+    /// <summary>App.xaml.cs 에서 주입 — /api/auto/* 엔드포인트에서 사용</summary>
+    public AutomationViewModel? AutomationVm { get; set; }
+
+    // ── Packet Flow Monitor 상태 ──────────────────────────────────────────────
+    private readonly PacketFlowMonitorService _pfm = new();
+    private volatile bool    _pfmRunning;
+    private string           _pfmSessionId = string.Empty;
+    private FlowInterfaceState? _pfmTxSt;
+    private FlowInterfaceState? _pfmP1St;
+    private FlowInterfaceState? _pfmP2St;
+    private FlowInterfaceState? _pfmP3St;
+    private string           _pfmFinalResult = string.Empty;
+    private string           _pfmFinalReason = string.Empty;
+    private string           _pfmMode        = string.Empty;
+    private int              _pfmExpPort;
+    private bool             _pfmChkTx  = true;
+    private bool             _pfmChkUnx = true;
+    private bool             _pfmExP1 = true, _pfmExP2 = true, _pfmExP3 = true;
+
+    // ── Log persistence (3100 기능 통합) ─────────────────────────────────────
+    private readonly Dictionary<string, JsonObject> _runningTests  = new();
+    private readonly Dictionary<string, JsonObject> _runningMacros = new();
+    private readonly string _testsDir;
+    private readonly string _macrosDir;
+
     public LabApiServer(int port = 8080)
     {
         Port = port;
         _listener = new TcpListener(IPAddress.Any, port);
+
+        // 로그 폴더: exe 옆 logs/tests, logs/macros
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        _testsDir  = Path.Combine(baseDir, "logs", "tests");
+        _macrosDir = Path.Combine(baseDir, "logs", "macros");
+        Directory.CreateDirectory(_testsDir);
+        Directory.CreateDirectory(_macrosDir);
     }
 
     public void Start()
@@ -127,6 +161,16 @@ public sealed class LabApiServer : IDisposable
                 string responseBody;
                 int    status;
 
+                // ── Static file serving (non-API GET) ────────────────────────────
+                var urlPath = requestLine.Split(' ').Length > 1 ? requestLine.Split(' ')[1] : "/";
+                bool isApiRequest = urlPath.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
+
+                if (!isApiRequest && requestLine.StartsWith("GET /", StringComparison.OrdinalIgnoreCase))
+                {
+                    await ServeStaticAsync(stream, urlPath).ConfigureAwait(false);
+                    return;
+                }
+
                 // CORS preflight
                 if (requestLine.StartsWith("OPTIONS", StringComparison.OrdinalIgnoreCase))
                 {
@@ -171,9 +215,72 @@ public sealed class LabApiServer : IDisposable
                 {
                     (responseBody, status) = await HandleSendAsync(body).ConfigureAwait(false);
                 }
-                else if (requestLine.StartsWith("POST /api/capture", StringComparison.OrdinalIgnoreCase))
+                else if (requestLine.StartsWith("POST /api/packet-flow/start", StringComparison.OrdinalIgnoreCase))
                 {
-                    (responseBody, status) = await HandleCaptureAsync(body).ConfigureAwait(false);
+                    (responseBody, status) = await HandlePfmStartAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("GET /api/packet-flow/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandlePfmStatus();
+                }
+                else if (requestLine.StartsWith("POST /api/packet-flow/stop", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandlePfmStop();
+                }
+                else if (requestLine.StartsWith("GET /api/health", StringComparison.OrdinalIgnoreCase))
+                {
+                    var h = new JsonObject
+                    {
+                        ["ok"]      = true,
+                        ["service"] = "LabApiServer",
+                        ["port"]    = Port,
+                        ["time"]    = DateTime.UtcNow.ToString("o")
+                    };
+                    responseBody = h.ToJsonString();
+                    status       = 200;
+                }
+                // ── Log tracking (3100 통합) ───────────────────────────────────
+                else if (requestLine.StartsWith("POST /api/log/macro/", StringComparison.OrdinalIgnoreCase)
+                         && requestLine.Contains("/step", StringComparison.OrdinalIgnoreCase))
+                {
+                    // POST /api/log/macro/:macroId/step  (더 구체적인 것 먼저)
+                    var parts   = requestLine.Split(' ')[1].Split('/');
+                    var macroId = parts.Length >= 5 ? parts[4] : string.Empty;
+                    (responseBody, status) = HandleLogMacroStep(macroId, body);
+                }
+                else if (requestLine.StartsWith("POST /api/log/macro/start", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleLogMacroStart(body);
+                }
+                else if (requestLine.StartsWith("POST /api/log/start", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleLogStart(body);
+                }
+                else if (requestLine.StartsWith("POST /api/log/result", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleLogResult(body);
+                }
+                else if (requestLine.StartsWith("GET /api/logs", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleLogList();
+                }
+                else if (requestLine.StartsWith("GET /api/log/", StringComparison.OrdinalIgnoreCase))
+                {
+                    var testId = requestLine.Split(' ')[1].Split('/').LastOrDefault() ?? string.Empty;
+                    (responseBody, status) = HandleLogGet(testId);
+                }
+                // ── Automation API ─────────────────────────────────────────────────
+                else if (requestLine.StartsWith("POST /api/auto/run", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleAutoRunAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("GET /api/auto/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleAutoStatus();
+                }
+                else if (requestLine.StartsWith("GET /api/auto/results", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleAutoResults();
                 }
                 else
                 {
@@ -289,90 +396,6 @@ public sealed class LabApiServer : IDisposable
                     ["elapsedSec"]      = sw.Elapsed.TotalSeconds,
                     ["decoded"]         = lastDecoded,
                     ["txRecords"]       = txRecords
-                }
-            };
-            return (result.ToJsonString(), 200);
-        }
-        catch (Exception ex)
-        {
-            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
-        }
-    }
-
-    // ── POST /api/capture ─────────────────────────────────────────────────────
-    // {interface?, filter?, count, timeoutMs?}
-
-    private async Task<(string body, int status)> HandleCaptureAsync(string jsonBody)
-    {
-        try
-        {
-            var req = JsonNode.Parse(jsonBody) as JsonObject
-                      ?? throw new ArgumentException("invalid JSON");
-
-            var ifName    = req["interface"]?.GetValue<string>();
-            var filter    = req["filter"]?.GetValue<string>()    ?? string.Empty;
-            var count     = Math.Clamp(req["count"]?.GetValue<int>()     ?? 10, 1, 1000);
-            var timeoutMs = req["timeoutMs"]?.GetValue<int>()             ?? 5000;
-
-            var dev = (ifName != null ? ResolveDevice(ifName) : null)
-                      ?? ActiveDevice
-                      ?? throw new InvalidOperationException("인터페이스가 선택되지 않았습니다.");
-
-            var packets = new System.Collections.Concurrent.ConcurrentQueue<JsonObject>();
-            using var cts    = new CancellationTokenSource(timeoutMs);
-            using var signal = new SemaphoreSlim(0, count + 1);
-            int seq = 0;
-
-            void OnArrival(object _, PacketCapture e)
-            {
-                try
-                {
-                    var raw  = e.GetPacket();
-                    var data = raw.Data.ToArray();
-                    int s    = System.Threading.Interlocked.Increment(ref seq);
-                    packets.Enqueue(new JsonObject
-                    {
-                        ["seq"]         = s,
-                        ["timestampNs"] = LabPacketService.HighResNs(),
-                        ["length"]      = data.Length,
-                        ["hex"]         = Convert.ToHexString(data).ToLower()
-                    });
-                    signal.Release();
-                    if (s >= count) cts.Cancel();
-                }
-                catch { }
-            }
-
-            try
-            {
-                dev.Open(DeviceModes.None, timeoutMs);
-                if (!string.IsNullOrWhiteSpace(filter))
-                    try { dev.Filter = filter; } catch { }
-                dev.OnPacketArrival += OnArrival;
-                dev.StartCapture();
-
-                for (int i = 0; i < count && !cts.Token.IsCancellationRequested; i++)
-                {
-                    try { await signal.WaitAsync(cts.Token).ConfigureAwait(false); }
-                    catch (OperationCanceledException) { break; }
-                }
-            }
-            finally
-            {
-                dev.OnPacketArrival -= OnArrival;
-                try { dev.StopCapture(); dev.Close(); } catch { }
-            }
-
-            var pktArr = new JsonArray();
-            while (packets.TryDequeue(out var p)) pktArr.Add(p);
-
-            var result = new JsonObject
-            {
-                ["ok"]     = true,
-                ["stdout"] = new JsonObject
-                {
-                    ["captured"] = pktArr.Count,
-                    ["packets"]  = pktArr
                 }
             };
             return (result.ToJsonString(), 200);
@@ -513,6 +536,466 @@ public sealed class LabApiServer : IDisposable
         }
         return arr;
     }
+
+    // ── POST /api/packet-flow/start ──────────────────────────────────────────
+
+#pragma warning disable CS1998
+    private async Task<(string body, int status)> HandlePfmStartAsync(string jsonBody)
+    {
+        if (_pfmRunning)
+            return ("{\"ok\":false,\"error\":\"already running\"}", 400);
+
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject
+                      ?? throw new ArgumentException("invalid JSON");
+
+            _pfmMode   = req["flowMode"]?.GetValue<string>()           ?? "TX Only";
+            _pfmExpPort= req["expectedOutputPort"]?.GetValue<int>()    ?? 1;
+            _pfmChkTx  = req["checkTxObserved"]?.GetValue<bool>()      ?? true;
+            _pfmChkUnx = req["checkUnexpectedPorts"]?.GetValue<bool>() ?? true;
+            var exPorts= req["expectedPorts"]?.AsArray();
+            _pfmExP1   = exPorts?.Any(n => n?.GetValue<int>() == 1) ?? true;
+            _pfmExP2   = exPorts?.Any(n => n?.GetValue<int>() == 2) ?? true;
+            _pfmExP3   = exPorts?.Any(n => n?.GetValue<int>() == 3) ?? true;
+
+            var ifaces     = req["interfaces"] as JsonObject;
+            var txName     = ifaces?["tx"]?.GetValue<string>()    ?? string.Empty;
+            var p1Name     = ifaces?["port1"]?.GetValue<string>() ?? string.Empty;
+            var p2Name     = ifaces?["port2"]?.GetValue<string>() ?? string.Empty;
+            var p3Name     = ifaces?["port3"]?.GetValue<string>() ?? string.Empty;
+            int timeoutSec = req["captureTimeoutSec"]?.GetValue<int>() ?? 5;
+
+            // Filter fields
+            var dstMac    = req["dstMac"]?.GetValue<string>()    ?? string.Empty;
+            var srcMac    = req["srcMac"]?.GetValue<string>()    ?? string.Empty;
+            var etherType = req["etherType"]?.GetValue<string>() ?? string.Empty;
+            var signature = req["signature"]?.GetValue<string>() ?? string.Empty;
+            var udpSrc    = req["udpSrcPort"]?.GetValue<string>() ?? string.Empty;
+            var udpDst    = req["udpDstPort"]?.GetValue<string>() ?? string.Empty;
+
+            var config = new PacketFlowMonitorConfig
+            {
+                TxDevice           = string.IsNullOrEmpty(txName) ? null : ResolveDevice(txName),
+                Port1Device        = string.IsNullOrEmpty(p1Name) ? null : ResolveDevice(p1Name),
+                Port2Device        = string.IsNullOrEmpty(p2Name) ? null : ResolveDevice(p2Name),
+                Port3Device        = string.IsNullOrEmpty(p3Name) ? null : ResolveDevice(p3Name),
+                TxInterfaceName    = txName,
+                Port1InterfaceName = p1Name,
+                Port2InterfaceName = p2Name,
+                Port3InterfaceName = p3Name,
+                DstMac            = dstMac,
+                SrcMac            = srcMac,
+                EtherType         = etherType,
+                Signature         = signature,
+                UdpSrcPort        = udpSrc,
+                UdpDstPort        = udpDst,
+                CaptureTimeoutSec = timeoutSec,
+                MaxDetailPackets  = 0
+            };
+
+            _pfmSessionId   = Guid.NewGuid().ToString("N")[..8];
+            _pfmFinalResult = string.Empty;
+            _pfmFinalReason = string.Empty;
+            _pfmRunning     = true;
+            _pfmTxSt = _pfmP1St = _pfmP2St = _pfmP3St = null;
+
+            // Run capture in background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var result = await _pfm.RunAsync(config, (_, st) =>
+                    {
+                        _pfmTxSt = st.Role == "TX" ? st : _pfmTxSt;
+                        if (st.Role == "RX")
+                        {
+                            if (st.SwitchPort == 1) _pfmP1St = st;
+                            else if (st.SwitchPort == 2) _pfmP2St = st;
+                            else if (st.SwitchPort == 3) _pfmP3St = st;
+                        }
+                    }, CancellationToken.None);
+
+                    _pfmTxSt = result.TxState;
+                    _pfmP1St = result.Port1State;
+                    _pfmP2St = result.Port2State;
+                    _pfmP3St = result.Port3State;
+                    (_pfmFinalResult, _pfmFinalReason) = JudgePfm();
+                }
+                finally { _pfmRunning = false; }
+            });
+
+            var resp = new JsonObject
+            {
+                ["ok"]       = true,
+                ["sessionId"]= _pfmSessionId,
+                ["status"]   = "running"
+            };
+            return (resp.ToJsonString(), 200);
+        }
+        catch (Exception ex)
+        {
+            _pfmRunning = false;
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+#pragma warning restore CS1998
+
+    // ── GET /api/packet-flow/status ───────────────────────────────────────────
+
+    private (string body, int status) HandlePfmStatus()
+    {
+        var payload = new JsonObject
+        {
+            ["ok"]        = true,
+            ["sessionId"] = _pfmSessionId,
+            ["running"]   = _pfmRunning,
+            ["result"]    = _pfmFinalResult,
+            ["reason"]    = _pfmFinalReason,
+            ["tx"]        = StateToJson(_pfmTxSt),
+            ["port1"]     = StateToJson(_pfmP1St),
+            ["port2"]     = StateToJson(_pfmP2St),
+            ["port3"]     = StateToJson(_pfmP3St),
+        };
+        return (payload.ToJsonString(), 200);
+    }
+
+    // ── POST /api/packet-flow/stop ────────────────────────────────────────────
+
+    private (string body, int status) HandlePfmStop()
+    {
+        _pfm.Stop();
+        _pfmRunning = false;
+        return ("{\"ok\":true,\"status\":\"stopped\"}", 200);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private (string result, string reason) JudgePfm()
+    {
+        int txM = _pfmTxSt?.MatchedCount    ?? 0;
+        int p1M = _pfmP1St?.MatchedCount    ?? 0;
+        int p2M = _pfmP2St?.MatchedCount    ?? 0;
+        int p3M = _pfmP3St?.MatchedCount    ?? 0;
+        int expM = _pfmExpPort == 1 ? p1M : _pfmExpPort == 2 ? p2M : p3M;
+
+        switch (_pfmMode)
+        {
+            case "TX Only":
+                return txM > 0 ? ("PASS", "") : ("FAIL", "TX not observed");
+
+            case "FDB Static Unicast":
+            case "Forwarding Check":
+                if (_pfmChkTx && txM == 0) return ("FAIL", "TX not observed");
+                if (expM == 0) return ("FAIL", $"Expected port {_pfmExpPort} got 0 matched packets");
+                if (_pfmChkUnx)
+                {
+                    if (_pfmExpPort != 1 && p1M > 0) return ("FAIL", "Unexpected forwarding on Port 1");
+                    if (_pfmExpPort != 2 && p2M > 0) return ("FAIL", "Unexpected forwarding on Port 2");
+                    if (_pfmExpPort != 3 && p3M > 0) return ("FAIL", "Unexpected forwarding on Port 3");
+                }
+                return ("PASS", "");
+
+            case "Flooding Check":
+                if (_pfmChkTx && txM == 0) return ("FAIL", "TX not observed");
+                if (_pfmExP1 && p1M == 0) return ("FAIL", "Port 1 got 0 matched packets");
+                if (_pfmExP2 && p2M == 0) return ("FAIL", "Port 2 got 0 matched packets");
+                if (_pfmExP3 && p3M == 0) return ("FAIL", "Port 3 got 0 matched packets");
+                return ("PASS", "");
+
+            default:
+                return ("PASS", "");
+        }
+    }
+
+    private static JsonNode? StateToJson(FlowInterfaceState? st)
+    {
+        if (st == null) return null;
+        return new JsonObject
+        {
+            ["matched"] = st.MatchedCount,
+            ["total"]   = st.TotalCapturedCount,
+            ["iface"]   = st.InterfaceName
+        };
+    }
+
+    // ── POST /api/log/start ───────────────────────────────────────────────────
+    private (string body, int status) HandleLogStart(string jsonBody)
+    {
+        try
+        {
+            var req    = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var testId = $"packet-flow-{DateTime.Now:yyyyMMddHHmmss}-{Random.Shared.Next(100000, 999999)}";
+            var record = new JsonObject { ["testId"] = testId, ["startedAt"] = DateTime.UtcNow.ToString("o"), ["status"] = "running" };
+            foreach (var kv in req) record[kv.Key] = kv.Value?.DeepClone();
+            lock (_runningTests) _runningTests[testId] = record;
+            return (new JsonObject { ["ok"] = true, ["testId"] = testId, ["status"] = "running" }.ToJsonString(), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    // ── POST /api/log/result ──────────────────────────────────────────────────
+    private (string body, int status) HandleLogResult(string jsonBody)
+    {
+        try
+        {
+            var req    = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var testId = req["testId"]?.GetValue<string>() ?? $"packet-flow-{DateTime.Now:yyyyMMddHHmmss}-{Random.Shared.Next(100000, 999999)}";
+            var record = new JsonObject { ["savedAt"] = DateTime.UtcNow.ToString("o") };
+            foreach (var kv in req) record[kv.Key] = kv.Value?.DeepClone();
+            var filename = Path.Combine(_testsDir, $"{testId}.json");
+            File.WriteAllText(filename, record.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            lock (_runningTests) _runningTests.Remove(testId);
+            return (new JsonObject { ["ok"] = true, ["saved"] = true, ["filename"] = Path.GetFileName(filename) }.ToJsonString(), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    // ── GET /api/log/:testId ──────────────────────────────────────────────────
+    private (string body, int status) HandleLogGet(string testId)
+    {
+        try
+        {
+            var filePath = Path.Combine(_testsDir, $"{testId}.json");
+            if (File.Exists(filePath))
+            {
+                var data = JsonNode.Parse(File.ReadAllText(filePath)) as JsonObject ?? new JsonObject();
+                data["ok"] = true;
+                return (data.ToJsonString(), 200);
+            }
+            lock (_runningTests)
+            {
+                if (_runningTests.TryGetValue(testId, out var running))
+                {
+                    var r = running.DeepClone() as JsonObject ?? new JsonObject();
+                    r["ok"] = true;
+                    return (r.ToJsonString(), 200);
+                }
+            }
+            return ("{\"ok\":false,\"error\":\"not found\"}", 404);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    // ── POST /api/log/macro/start ─────────────────────────────────────────────
+    private (string body, int status) HandleLogMacroStart(string jsonBody)
+    {
+        try
+        {
+            var req     = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var macroId = $"packet-flow-macro-{DateTime.Now:yyyyMMddHHmmss}-{Random.Shared.Next(100000, 999999)}";
+            var ports   = req["ports"]?.AsArray()?.Select(n => n?.GetValue<int>() ?? 0).ToList() ?? new List<int> { 1, 2, 3 };
+            var steps   = new JsonArray();
+            for (int i = 0; i < ports.Count; i++)
+                steps.Add(new JsonObject { ["step"] = i + 1, ["flowMode"] = "FDB_STATIC_UNICAST", ["expectedOutputPort"] = ports[i], ["status"] = "pending" });
+            var macro = new JsonObject { ["macroId"] = macroId, ["startedAt"] = DateTime.UtcNow.ToString("o"), ["steps"] = steps };
+            foreach (var kv in req) if (kv.Key != "ports") macro[kv.Key] = kv.Value?.DeepClone();
+            lock (_runningMacros) _runningMacros[macroId] = macro;
+            return (new JsonObject { ["ok"] = true, ["macroId"] = macroId, ["steps"] = steps.DeepClone() }.ToJsonString(), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    // ── POST /api/log/macro/:macroId/step ────────────────────────────────────
+    private (string body, int status) HandleLogMacroStep(string macroId, string jsonBody)
+    {
+        try
+        {
+            var req     = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            JsonObject? macro;
+            lock (_runningMacros)
+                _runningMacros.TryGetValue(macroId, out macro);
+            macro ??= new JsonObject { ["macroId"] = macroId };
+
+            // Update step in macro
+            var steps = macro["steps"]?.AsArray();
+            int stepNum = req["step"]?.GetValue<int>() ?? 0;
+            var stepNode = steps?.FirstOrDefault(s => s?["step"]?.GetValue<int>() == stepNum) as JsonObject;
+            if (stepNode != null)
+            {
+                stepNode["status"] = req["result"]?.GetValue<string>() == "PASS" ? "pass" : "fail";
+                stepNode["result"] = req.DeepClone();
+            }
+
+            var filename = Path.Combine(_macrosDir, $"{macroId}.json");
+            File.WriteAllText(filename, macro.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            return (new JsonObject { ["ok"] = true, ["saved"] = true }.ToJsonString(), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    // ── GET /api/logs ─────────────────────────────────────────────────────────
+    private (string body, int status) HandleLogList()
+    {
+        try
+        {
+            JsonArray ReadDir(string dir)
+            {
+                var arr = new JsonArray();
+                if (!Directory.Exists(dir)) return arr;
+                foreach (var f in Directory.GetFiles(dir, "*.json").OrderByDescending(f => f).Take(50))
+                {
+                    try { arr.Add(JsonNode.Parse(File.ReadAllText(f))); }
+                    catch { arr.Add(new JsonObject { ["file"] = Path.GetFileName(f), ["error"] = "parse error" }); }
+                }
+                return arr;
+            }
+            var payload = new JsonObject { ["ok"] = true, ["tests"] = ReadDir(_testsDir), ["macros"] = ReadDir(_macrosDir) };
+            return (payload.ToJsonString(), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    // ── POST /api/auto/run ────────────────────────────────────────────────────
+    // body: {"test":"tx-sanity"|"fdb-test"|"flood-check"}
+    // 즉시 반환, 실행은 UI 스레드에서 비동기 실행됨 → GET /api/auto/status 로 폴링
+#pragma warning disable CS1998
+    private async Task<(string body, int status)> HandleAutoRunAsync(string jsonBody)
+    {
+        if (AutomationVm == null)
+            return ("{\"ok\":false,\"error\":\"Automation not available — app not fully loaded\"}", 503);
+        try
+        {
+            var req  = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var test = req["test"]?.GetValue<string>() ?? string.Empty;
+            if (test is not ("tx-sanity" or "fdb-test" or "flood-check"))
+                return ("{\"ok\":false,\"error\":\"test must be one of: tx-sanity, fdb-test, flood-check\"}", 400);
+            if (AutomationVm.IsRunning)
+                return ("{\"ok\":false,\"error\":\"already running\"}", 409);
+
+            var vm = AutomationVm;
+            _ = System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await vm.RunTestAsync(test);
+            });
+
+            var resp = new JsonObject { ["ok"] = true, ["test"] = test, ["status"] = "started" };
+            return (resp.ToJsonString(), 200);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+#pragma warning restore CS1998
+
+    // ── GET /api/auto/status ──────────────────────────────────────────────────
+    private (string body, int status) HandleAutoStatus()
+    {
+        if (AutomationVm == null)
+            return ("{\"ok\":false,\"error\":\"Automation not available\"}", 503);
+
+        bool   running    = false;
+        string result     = string.Empty;
+        string reason     = string.Empty;
+        string statusText = string.Empty;
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            running    = AutomationVm.IsRunning;
+            result     = AutomationVm.FinalResult;
+            reason     = AutomationVm.FinalReason;
+            statusText = AutomationVm.StatusText;
+        });
+
+        var payload = new JsonObject
+        {
+            ["ok"]        = true,
+            ["running"]   = running,
+            ["result"]    = result,
+            ["reason"]    = reason,
+            ["statusText"] = statusText
+        };
+        return (payload.ToJsonString(), 200);
+    }
+
+    // ── GET /api/auto/results ─────────────────────────────────────────────────
+    private (string body, int status) HandleAutoResults()
+    {
+        if (AutomationVm == null)
+            return ("{\"ok\":false,\"error\":\"Automation not available\"}", 503);
+
+        List<EthernetPacketGenerator.Models.PacketFlowAutoTestRow> rows = new();
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            rows = AutomationVm.GetResultsSnapshot();
+        });
+
+        var arr = new JsonArray();
+        foreach (var r in rows)
+        {
+            arr.Add(new JsonObject
+            {
+                ["step"]         = r.Step,
+                ["testType"]     = r.TestType,
+                ["expectedMode"] = r.ExpectedMode,
+                ["expectedPort"] = r.ExpectedPort,
+                ["txMatch"]      = r.TxMatch,
+                ["port1Match"]   = r.Port1Match,
+                ["port2Match"]   = r.Port2Match,
+                ["port3Match"]   = r.Port3Match,
+                ["result"]       = r.Result,
+                ["uploaded"]     = r.Uploaded,
+                ["reason"]       = r.Reason
+            });
+        }
+        return (new JsonObject { ["ok"] = true, ["rows"] = arr }.ToJsonString(), 200);
+    }
+
+    // ── Static file serving ───────────────────────────────────────────────────
+    private async Task ServeStaticAsync(NetworkStream stream, string urlPath)
+    {
+        string filePath;
+        if (urlPath == "/" || urlPath == "" || urlPath.Equals("/index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "index.html");
+        }
+        else
+        {
+            var safe = urlPath.TrimStart('/')
+                               .Replace('/', Path.DirectorySeparatorChar)
+                               .Replace("..", string.Empty); // 경로 탐색 방지
+            filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", safe);
+        }
+
+        byte[] content;
+        int    status;
+        string contentType;
+
+        if (File.Exists(filePath))
+        {
+            content     = await File.ReadAllBytesAsync(filePath).ConfigureAwait(false);
+            contentType = GetContentType(Path.GetExtension(filePath));
+            status      = 200;
+        }
+        else
+        {
+            content     = Encoding.UTF8.GetBytes("404 Not Found");
+            contentType = "text/plain; charset=utf-8";
+            status      = 404;
+        }
+
+        var header = $"HTTP/1.1 {status} {(status == 200 ? "OK" : "Not Found")}\r\n" +
+                     $"Content-Type: {contentType}\r\n" +
+                     $"Content-Length: {content.Length}\r\n" +
+                     $"Access-Control-Allow-Origin: *\r\n" +
+                     $"Connection: close\r\n\r\n";
+
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(header)).ConfigureAwait(false);
+        await stream.WriteAsync(content).ConfigureAwait(false);
+    }
+
+    private static string GetContentType(string ext) => ext.ToLowerInvariant() switch
+    {
+        ".html" => "text/html; charset=utf-8",
+        ".js"   => "application/javascript; charset=utf-8",
+        ".css"  => "text/css; charset=utf-8",
+        ".json" => "application/json; charset=utf-8",
+        ".ico"  => "image/x-icon",
+        ".png"  => "image/png",
+        ".svg"  => "image/svg+xml",
+        _       => "application/octet-stream"
+    };
 
     public void Dispose()
     {

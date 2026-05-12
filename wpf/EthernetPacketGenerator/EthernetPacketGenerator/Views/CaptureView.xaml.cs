@@ -4,8 +4,5 @@ namespace EthernetPacketGenerator.Views;
 
 public partial class CaptureView : UserControl
 {
-    public CaptureView()
-    {
-        InitializeComponent();
-    }
+    public CaptureView() { InitializeComponent(); }
 }

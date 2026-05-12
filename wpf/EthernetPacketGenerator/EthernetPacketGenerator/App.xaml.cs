@@ -14,16 +14,43 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // Keep hardware acceleration (Default) but allow the DWM to manage vsync timing
         RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.Default;
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
 
-        EnsureFirewallRule("EthernetPacketGenerator API", 8080);
+        // 방화벽 규칙 확인은 백그라운드에서 — UI 블로킹 방지
+        Task.Run(() => EnsureFirewallRule("EthernetPacketGenerator API", 8080));
 
         try { LabServer.Start(); }
-        catch { /* 포트 충돌 등 — 무시하고 계속 실행 */ }
+        catch (Exception ex)
+        {
+            // 포트 충돌이면 기존 프로세스가 이미 8080을 점유 중
+            MessageBox.Show(
+                $"포트 8080을 바인드할 수 없습니다:\n{ex.Message}\n\n이전 EthernetPacketGenerator 인스턴스가 실행 중일 수 있습니다.",
+                "서버 시작 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        // MainWindow 직접 생성 (StartupUri 제거)
+        MainWindow mainWindow;
+        try
+        {
+            mainWindow = new MainWindow();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"앱 초기화 오류:\n{ex.Message}\n\n{ex.StackTrace}",
+                "시작 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
+        MainWindow = mainWindow;
+        mainWindow.Show();
+
+        if (mainWindow.DataContext is ViewModels.MainViewModel vm)
+            LabServer.AutomationVm = vm.AutomationVM;
     }
 
     // 방화벽 인바운드 규칙이 없을 때만 UAC 프롬프트를 띄워 한 번 추가한다.

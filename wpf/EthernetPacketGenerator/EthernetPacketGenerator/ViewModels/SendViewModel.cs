@@ -12,7 +12,11 @@ namespace EthernetPacketGenerator.ViewModels;
 
 public class SendViewModel : ViewModelBase
 {
-    private readonly PacketSendService _sendService;
+    private readonly PacketSendService  _sendService;
+    private readonly SerialPortService  _serial;
+    private readonly RegisterService    _reg;
+    private readonly FdbService         _fdb;
+    private Action<string>?             _logCallback;
     private ILiveDevice? _selectedInterface;
     private ObservableCollection<SequenceItem>? _sequence;
 
@@ -71,23 +75,29 @@ public class SendViewModel : ViewModelBase
 
     /// <summary>
     /// 패킷을 전송할 대상 인터페이스 목록을 반환한다.
-    /// - shortName null/empty : 체크(IsActive)된 전체 인터페이스. 없으면 Default 하나만.
-    /// - shortName 지정       : 해당 인터페이스만. 없으면 Default.
+    /// - names 비어있음 : 체크(IsActive)된 전체 인터페이스. 없으면 Default 하나만.
+    /// - names 지정     : 해당 이름들의 인터페이스. 찾지 못한 이름은 Default로 폴백.
     /// </summary>
-    private IReadOnlyList<InterfaceEntry> GetSendTargets(string? shortName)
+    private IReadOnlyList<InterfaceEntry> GetSendTargets(HashSet<string> names)
     {
-        if (!string.IsNullOrEmpty(shortName))
+        if (names.Count > 0)
         {
-            var specific = InterfaceEntries.FirstOrDefault(e => e.ShortName == shortName)
-                        ?? InterfaceEntries.FirstOrDefault(e => e.IsDefault);
-            return specific != null ? new[] { specific } : Array.Empty<InterfaceEntry>();
+            var result = names
+                .Select(n => InterfaceEntries.FirstOrDefault(e => e.ShortName == n))
+                .Where(e => e != null)
+                .Cast<InterfaceEntry>()
+                .ToList();
+            if (result.Count > 0) return result;
+            // 이름이 있지만 매칭 실패 → Default
+            var def2 = InterfaceEntries.FirstOrDefault(e => e.IsDefault);
+            return def2 != null ? new[] { def2 } : Array.Empty<InterfaceEntry>();
         }
 
-        // 체크된 전체 인터페이스
+        // 비어있으면 IsActive 전체
         var active = InterfaceEntries.Where(e => e.IsActive).ToList();
         if (active.Count > 0) return active;
 
-        // 체크된 것이 없으면 Default 하나
+        // IsActive 없으면 Default 하나
         var def = InterfaceEntries.FirstOrDefault(e => e.IsDefault);
         return def != null ? new[] { def } : Array.Empty<InterfaceEntry>();
     }
@@ -205,8 +215,13 @@ public class SendViewModel : ViewModelBase
     public ICommand SendListCommand          { get; }
     public ICommand RefreshInterfacesCommand { get; }
 
-    public SendViewModel()
+    public void SetLogCallback(Action<string> log) => _logCallback = log;
+
+    public SendViewModel(SerialPortService serial)
     {
+        _serial      = serial;
+        _reg         = new RegisterService(serial) { BaseAddress = 0x44A0_0000 };
+        _fdb         = new FdbService(_reg);
         _sendService = new PacketSendService();
         _sendService.PacketSent += (_, len) =>
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
@@ -330,16 +345,13 @@ public class SendViewModel : ViewModelBase
                     if (item.Kind == SequenceItemKind.Packet && item.Packet != null)
                     {
                         var targets = await System.Windows.Application.Current.Dispatcher
-                            .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceName));
+                            .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceNames));
                         foreach (var entry in targets)
                             if (entry.Device != null)
                                 _sendService.SendOnce(item.Packet.FullBytes, entry.Device);
                     }
                     else if (item.Kind == SequenceItemKind.Event && item.Event != null)
-                    {
-                        try { await Task.Delay(item.Event.DelayMs, token).ConfigureAwait(false); }
-                        catch (OperationCanceledException) { cancelled = true; break; }
-                    }
+                        cancelled = !await ExecuteEventAsync(item.Event, token);
                 }
 
             } while (!cancelled && RepeatEnabled && !token.IsCancellationRequested);
@@ -395,7 +407,7 @@ public class SendViewModel : ViewModelBase
                 if (item.Kind == SequenceItemKind.Packet && item.Packet != null)
                 {
                     var targets = await System.Windows.Application.Current.Dispatcher
-                        .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceName));
+                        .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceNames));
                     foreach (var entry in targets)
                         if (entry.Device != null)
                             _sendService.SendOnce(item.Packet.FullBytes, entry.Device);
@@ -453,6 +465,147 @@ public class SendViewModel : ViewModelBase
             EndSendStats();
         });
     }
+
+    /// <summary>이벤트 실행. 정상완료=true, 취소/타임아웃중단=false</summary>
+    private async Task<bool> ExecuteEventAsync(SequenceEvent ev, CancellationToken token)
+    {
+        switch (ev.EventType)
+        {
+            // ── Delay ──────────────────────────────────────────────────────
+            case SequenceEventType.Delay:
+                try   { await Task.Delay(ev.DelayMs, token).ConfigureAwait(false); return true; }
+                catch (OperationCanceledException)                                 { return false; }
+
+            // ── RegWrite ───────────────────────────────────────────────────
+            case SequenceEventType.RegWrite:
+                if (!CheckPort("RegWrite")) return true;
+                try
+                {
+                    var r = await _serial.SendCommandAsync($"write 0x{ev.Address:X} 0x{ev.Value:X8}");
+                    Log($"[RegWrite] 0x{ev.Address:X8} = 0x{ev.Value:X8}  →  {r}");
+                }
+                catch (Exception ex) { Log($"[RegWrite 실패] {ex.Message}"); }
+                return true;
+
+            // ── RegRead ────────────────────────────────────────────────────
+            case SequenceEventType.RegRead:
+                if (!CheckPort("RegRead")) return true;
+                try
+                {
+                    var r = await _serial.SendCommandAsync($"read 0x{ev.Address:X}");
+                    Log($"[RegRead]  0x{ev.Address:X8}  →  {r}");
+                }
+                catch (Exception ex) { Log($"[RegRead 실패] {ex.Message}"); }
+                return true;
+
+            // ── RegWaitFor ─────────────────────────────────────────────────
+            case SequenceEventType.RegWaitFor:
+                if (!CheckPort("RegWaitFor")) return true;
+                {
+                    var deadline = DateTime.Now.AddMilliseconds(ev.TimeoutMs);
+                    while (DateTime.Now < deadline)
+                    {
+                        if (token.IsCancellationRequested) return false;
+                        try
+                        {
+                            var r = await _serial.SendCommandAsync($"read 0x{ev.Address:X}");
+                            if (r.StartsWith("OK "))
+                            {
+                                var val = Convert.ToUInt32(r[3..].Trim(), 16);
+                                if ((val & ev.Mask) == ev.Expected)
+                                {
+                                    Log($"[RegWait ✓] 0x{ev.Address:X8} = 0x{val:X8}  (조건 충족)");
+                                    return true;
+                                }
+                            }
+                        }
+                        catch { }
+                        try { await Task.Delay(200, token); } catch (OperationCanceledException) { return false; }
+                    }
+                    Log($"[RegWait ✗] 0x{ev.Address:X8}  타임아웃 ({ev.TimeoutMs}ms) — 시나리오 중단");
+                    return false;
+                }
+
+            // ── FdbWrite ───────────────────────────────────────────────────
+            case SequenceEventType.FdbWrite:
+                if (!CheckPort("FdbWrite")) return true;
+                try
+                {
+                    await _fdb.WriteEntryByHashAsync(ev.MacAddress, ev.VlanValid, ev.VlanId, ev.Port, token);
+                    Log($"[FdbWrite ✓] {ev.MacAddress}  Port:{ev.Port}");
+                }
+                catch (OperationCanceledException) { return false; }
+                catch (Exception ex) { Log($"[FdbWrite 실패] {ex.Message}"); }
+                return true;
+
+            // ── FdbRead ────────────────────────────────────────────────────
+            case SequenceEventType.FdbRead:
+                if (!CheckPort("FdbRead")) return true;
+                try
+                {
+                    var entry = await _fdb.ReadEntryByMacAsync(ev.MacAddress, ev.VlanValid, ev.VlanId, token);
+                    if (entry != null)
+                        Log($"[FdbRead ✓] {ev.MacAddress}  Port:{entry.Port}  {entry.StaticDisplay}");
+                    else
+                        Log($"[FdbRead]   {ev.MacAddress}  → 미학습 (테이블에 없음)");
+                }
+                catch (OperationCanceledException) { return false; }
+                catch (Exception ex) { Log($"[FdbRead 실패] {ex.Message}"); }
+                return true;
+
+            // ── FdbWaitFor ─────────────────────────────────────────────────
+            case SequenceEventType.FdbWaitFor:
+                if (!CheckPort("FdbWaitFor")) return true;
+                {
+                    var deadline = DateTime.Now.AddMilliseconds(ev.TimeoutMs);
+                    while (DateTime.Now < deadline)
+                    {
+                        if (token.IsCancellationRequested) return false;
+                        try
+                        {
+                            var r = await _serial.SendCommandAsync($"read 0x{ev.Address:X}");
+                            if (r.StartsWith("OK "))
+                            {
+                                var val = Convert.ToUInt32(r[3..].Trim(), 16);
+                                if ((val & ev.Mask) == ev.Expected)
+                                {
+                                    Log($"[FdbWait ✓] 0x{ev.Address:X8} = 0x{val:X8}  (조건 충족)");
+                                    return true;
+                                }
+                            }
+                        }
+                        catch { /* 일시적 오류는 무시하고 재시도 */ }
+                        try { await Task.Delay(200, token); } catch (OperationCanceledException) { return false; }
+                    }
+                    Log($"[FdbWait ✗] 0x{ev.Address:X8}  타임아웃 ({ev.TimeoutMs}ms) — 시나리오 중단");
+                    return false;
+                }
+
+            // ── FdbFlush ───────────────────────────────────────────────────
+            case SequenceEventType.FdbFlush:
+                if (!CheckPort("FdbFlush")) return true;
+                try
+                {
+                    await _fdb.FlushAllAsync(token);
+                    Log("[FdbFlush ✓] 전체 MAC 테이블 초기화 완료");
+                }
+                catch (OperationCanceledException) { return false; }
+                catch (Exception ex) { Log($"[FdbFlush 실패] {ex.Message}"); }
+                return true;
+
+            default:
+                return true;
+        }
+    }
+
+    private bool CheckPort(string tag)
+    {
+        if (_serial.IsOpen) return true;
+        Log($"[{tag} 실패] 포트가 열려있지 않습니다.");
+        return false;
+    }
+
+    private void Log(string msg) => _logCallback?.Invoke(msg);
 
     private void StopList()
     {

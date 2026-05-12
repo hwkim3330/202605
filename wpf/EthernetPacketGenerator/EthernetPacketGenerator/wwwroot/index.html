@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ethernet Packet Lab</title>
+    <link rel="icon" type="image/png" href="/keti.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div id="toastTray" class="toastTray" aria-live="polite"></div>
+    <div id="helpOverlay" class="helpOverlay hidden" role="dialog" aria-label="Keyboard shortcuts and help">
+      <div class="helpCard">
+        <div class="helpHead">
+          <h2>Keyboard shortcuts &amp; quick reference</h2>
+          <button id="helpClose" class="ghostBtn small" aria-label="Close help">✕</button>
+        </div>
+        <div class="helpGrid">
+          <section>
+            <h3>Tabs</h3>
+            <ul>
+              <li><kbd>1</kbd>  Sender</li>
+              <li><kbd>2</kbd>  Capture</li>
+              <li><kbd>3</kbd>  Control</li>
+              <li><kbd>4</kbd>  Serial</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Sender</h3>
+            <ul>
+              <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd>  Send packet</li>
+            </ul>
+          </section>
+          <section>
+            <h3>Control (Automation)</h3>
+            <ul>
+              <li>TX Sanity — 기본 송신 확인</li>
+              <li>FDB Auto Test — 3단계 FDB 검증</li>
+              <li>Flooding Check — 브로드캐스트 플러딩</li>
+            </ul>
+          </section>
+          <section>
+            <h3>API</h3>
+            <p><code>GET /api/interfaces</code> · <code>POST /api/build</code> · <code>POST /api/send</code></p>
+            <p><code>POST /api/auto/run</code> · <code>GET /api/auto/status</code> · <code>GET /api/auto/results</code></p>
+          </section>
+        </div>
+      </div>
+    </div>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <img src="/keti.png" alt="KETI">
+          <div>
+            <h1>Ethernet Packet Lab</h1>
+            <p>Packet sender and receiver for Ethernet lab links</p>
+          </div>
+        </div>
+        <div class="topActions">
+          <div id="status" class="status">Ready</div>
+          <button id="refreshInterfaces">Refresh</button>
+          <button id="helpButton" class="ghostBtn small" title="Keyboard shortcuts (?)">?</button>
+        </div>
+      </header>
+
+      <section class="toolbar">
+        <div class="modeTabs">
+          <button class="modeTab active" data-view="senderView">Sender</button>
+          <button class="modeTab" data-view="captureView">Capture</button>
+          <button class="modeTab" data-view="controlView">Control</button>
+          <button class="modeTab" data-view="serialView">Serial</button>
+        </div>
+        <select id="interfaceSelect" hidden multiple></select>
+        <div id="interfaceInfo" class="muted"></div>
+      </section>
+
+      <section class="workspace">
+
+        <!-- ── Sender ──────────────────────────────────────────────────────── -->
+        <section id="senderView" class="roleView active">
+          <div class="ifacePicker ifacePickerHoriz senderIfaceTopRow" id="senderIfacePicker">
+            <div class="ifacePickerHead">
+              <strong>Send via</strong>
+              <span class="ifacePickerCount" id="senderIfaceCount">0 selected</span>
+            </div>
+            <div class="ifacePickerList ifacePickerListHoriz" id="senderIfaceList">— refreshing… —</div>
+          </div>
+          <aside class="sidebar">
+            <details class="senderTemplates">
+              <summary>Templates</summary>
+              <div class="buttonRow">
+                <button data-example="udp">UDP</button>
+                <button data-example="icmp">ICMP</button>
+                <button data-example="arp">ARP</button>
+              </div>
+            </details>
+            <label>
+              Protocol
+              <select id="protocol">
+                <option value="udp">UDP over IPv4</option>
+                <option value="icmp">ICMP Echo</option>
+                <option value="arp">ARP</option>
+                <option value="raw">Raw EtherType</option>
+              </select>
+            </label>
+            <label>Destination MAC<input id="dstMac" autocomplete="off" placeholder="ff:ff:ff:ff:ff:ff"></label>
+            <label>Source MAC<input id="srcMac" autocomplete="off" placeholder="auto"></label>
+            <label>Source IP<input id="srcIp" autocomplete="off" placeholder="192.168.1.1"></label>
+            <label>Destination IP<input id="dstIp" autocomplete="off" placeholder="192.168.1.2"></label>
+            <div class="grid2">
+              <label>Source Port<input id="srcPort" type="number" min="1" max="65535" value="12345"></label>
+              <label>Dest Port<input id="dstPort" type="number" min="1" max="65535" value="50000"></label>
+            </div>
+            <label class="check">
+              <input id="vlanEnabled" type="checkbox">
+              <span>802.1Q VLAN</span>
+            </label>
+            <div class="grid2">
+              <label>VLAN ID<input id="vlanId" type="number" min="0" max="4095" value="100"></label>
+              <label>Priority<input id="vlanPriority" type="number" min="0" max="7" value="0"></label>
+            </div>
+            <label>Payload<textarea id="payload" rows="4">Hello KETI</textarea></label>
+            <div class="grid2">
+              <label>Count<input id="count" type="number" min="1" value="1"></label>
+              <label>Interval ms<input id="intervalMs" type="number" min="0" value="0"></label>
+            </div>
+          </aside>
+
+          <section class="workPane senderWorkPane">
+            <div class="heroStrip senderStrip">
+              <div>
+                <strong>Sender</strong>
+                <span>Transmit crafted frames from this PC's selected interface.</span>
+              </div>
+              <div class="heroActions">
+                <button id="send" class="primaryAction">Send Packet</button>
+                <button id="build" class="ghostBtn small">↻ Preview</button>
+              </div>
+            </div>
+
+            <section class="detailGrid senderDetail">
+              <div class="detailPane">
+                <div class="sectionTitle">Frame Details</div>
+                <pre id="decoded">—</pre>
+              </div>
+              <div class="detailPane">
+                <div class="sectionTitle">Frame Bytes</div>
+                <pre id="hexdump">—</pre>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <!-- ── Capture ─────────────────────────────────────────────────────── -->
+        <section id="captureView" class="roleView captureViewWS">
+          <section class="workPane wiresharkPane">
+            <div class="heroStrip" style="margin:24px 0 16px">
+              <div>
+                <strong>Packet Capture</strong>
+                <span>Live capture is handled by the WPF desktop app's <em>Capture</em> tab (Wireshark-style). Open the app and switch to the Capture tab to start capturing.</span>
+              </div>
+            </div>
+            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+              <p style="font-size:32px;margin-bottom:8px">📡</p>
+              <p><strong>WPF App → Capture Tab</strong></p>
+              <p style="margin-top:8px">Use the desktop application for real-time Wireshark-style packet capture with interface selection, live packet list, and protocol decode.</p>
+            </div>
+          </section>
+        </section>
+
+        <!-- ── Control (Automation) ────────────────────────────────────────── -->
+        <section id="controlView" class="roleView controlView">
+          <section class="workPane controlPane controlPaneFull">
+
+            <div class="heroStrip" style="margin-bottom:16px">
+              <div>
+                <strong>Automation Tests</strong>
+                <span>Run pre-defined TSN/Ethernet validation tests against the WPF automation engine. Results stream back in real time.</span>
+              </div>
+              <div class="heroActions">
+                <span class="actionStatus" id="autoOverallStatus">idle</span>
+                <button id="autoStopBtn" class="ghostBtn wsStop" disabled>■ Stop</button>
+              </div>
+            </div>
+
+            <div class="actionsGrid">
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>TX Sanity Check</h3>
+                  <span class="actionDesc">기본 송신 확인 — 선택된 TX 인터페이스에서 패킷이 실제로 전송되는지 검증합니다.</span>
+                </div>
+                <div class="progressTrack" id="progTxSanity"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusTxSanity">idle</span>
+                  <button class="primaryAction autoRunBtn" data-test="tx-sanity">Run</button>
+                </div>
+              </div>
+
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>FDB Auto Test <span class="badge wire">3 steps</span></h3>
+                  <span class="actionDesc">FDB 자동 검증 — 3단계 순서로 포트 1→2→3 forwarding을 자동으로 검증합니다.</span>
+                </div>
+                <div class="progressTrack" id="progFdbTest"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusFdbTest">idle</span>
+                  <button class="primaryAction autoRunBtn" data-test="fdb-test">Run</button>
+                </div>
+              </div>
+
+              <div class="actionCard">
+                <div class="actionHeader">
+                  <h3>Flooding Check <span class="badge wire">broadcast</span></h3>
+                  <span class="actionDesc">브로드캐스트 플러딩 — 알 수 없는 유니캐스트/브로드캐스트가 모든 포트로 flood 되는지 확인합니다.</span>
+                </div>
+                <div class="progressTrack" id="progFloodCheck"><div class="progressFill"></div><span class="progressLabel">0%</span></div>
+                <div class="actionFooter">
+                  <span class="actionStatus" id="statusFloodCheck">idle</span>
+                  <button class="primaryAction autoRunBtn" data-test="flood-check">Run</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="autoResultsPanel" style="margin-top:24px">
+              <div class="controlRunHead" style="margin-bottom:8px">
+                <strong>Test Results</strong>
+                <span id="autoResultSummary" class="muted">No results yet</span>
+              </div>
+              <div class="controlPacketScroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Step</th>
+                      <th>Test</th>
+                      <th>Mode</th>
+                      <th>ExpPort</th>
+                      <th>TX</th>
+                      <th>P1</th>
+                      <th>P2</th>
+                      <th>P3</th>
+                      <th>Result</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody id="autoResultRows">
+                    <tr><td colspan="10" class="empty">No results yet</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </section>
+        </section>
+
+        <!-- ── Serial ──────────────────────────────────────────────────────── -->
+        <section id="serialView" class="roleView serialViewTT">
+          <section class="workPane serialPane">
+            <div class="heroStrip" style="margin:24px 0 16px">
+              <div>
+                <strong>HyperTerminal / Serial</strong>
+                <span>Serial port communication is available in the WPF desktop app's <em>HyperTerminal</em> tab.</span>
+              </div>
+            </div>
+            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+              <p style="font-size:32px;margin-bottom:8px">🖥️</p>
+              <p><strong>WPF App → HyperTerminal Tab</strong></p>
+              <p style="margin-top:8px">Use the desktop application for COM port selection, baud rate configuration, and serial terminal with TX/RX logging.</p>
+            </div>
+          </section>
+        </section>
+
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

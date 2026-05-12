@@ -1,9 +1,44 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using EthernetPacketGenerator.Commands;
 using EthernetPacketGenerator.Models;
 
 namespace EthernetPacketGenerator.ViewModels;
+
+/// <summary>PacketList Interface 팝업의 체크박스 항목 — 특정 패킷+인터페이스 조합</summary>
+public class PacketInterfaceCheckItem : INotifyPropertyChanged
+{
+    private bool _isChecked;
+    public string ShortName { get; }
+    public PacketItem Packet { get; }
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (_isChecked == value) return;
+            _isChecked = value;
+            OnPropertyChanged();
+            if (value) Packet.OutgoingInterfaceNames.Add(ShortName);
+            else       Packet.OutgoingInterfaceNames.Remove(ShortName);
+            Packet.OnOutgoingInterfaceChanged();
+        }
+    }
+
+    public PacketInterfaceCheckItem(PacketItem packet, string shortName)
+    {
+        Packet    = packet;
+        ShortName = shortName;
+        _isChecked = packet.OutgoingInterfaceNames.Contains(shortName);
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? n = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+}
 
 public class PacketListViewModel : ViewModelBase
 {
@@ -20,11 +55,9 @@ public class PacketListViewModel : ViewModelBase
         get => _interfaceEntries;
         set
         {
-            if (_interfaceEntries != null)
-                _interfaceEntries.CollectionChanged -= OnInterfaceEntriesChanged;
-            SetProperty(ref _interfaceEntries, value);
-            if (_interfaceEntries != null)
-                _interfaceEntries.CollectionChanged += OnInterfaceEntriesChanged;
+            _interfaceEntries.CollectionChanged -= OnInterfaceEntriesChanged;
+            SetProperty(ref _interfaceEntries, value ?? new());
+            _interfaceEntries.CollectionChanged += OnInterfaceEntriesChanged;
             OnPropertyChanged(nameof(InterfaceOptions));
         }
     }
@@ -33,10 +66,6 @@ public class PacketListViewModel : ViewModelBase
         System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         => OnPropertyChanged(nameof(InterfaceOptions));
 
-    /// <summary>
-    /// PacketList ComboBox용 목록: 맨 앞에 "(Default)" sentinel 항목 포함.
-    /// ShortName = "" → OutgoingInterfaceName = null (Default 동작)
-    /// </summary>
     public IEnumerable<InterfaceEntry> InterfaceOptions =>
         Enumerable.Repeat(
             new InterfaceEntry(null!, "") { IsDefaultSentinel = true }, 1)
@@ -68,7 +97,14 @@ public class PacketListViewModel : ViewModelBase
     public ICommand DuplicatePacketCommand { get; }
     public ICommand MoveUpCommand          { get; }
     public ICommand MoveDownCommand        { get; }
-    public ICommand AddDelayEventCommand   { get; }
+    public ICommand AddDelayEventCommand    { get; }
+    public ICommand AddRegWriteCommand      { get; }
+    public ICommand AddRegReadCommand       { get; }
+    public ICommand AddRegWaitForCommand    { get; }
+    public ICommand AddFdbWriteCommand      { get; }
+    public ICommand AddFdbReadCommand       { get; }
+    public ICommand AddFdbWaitForCommand    { get; }
+    public ICommand AddFdbFlushCommand      { get; }
 
     public PacketListViewModel()
     {
@@ -77,7 +113,14 @@ public class PacketListViewModel : ViewModelBase
         DuplicatePacketCommand = new RelayCommand(DuplicatePacket, () => SelectedPacket != null);
         MoveUpCommand          = new RelayCommand(MoveUp,          CanMoveUp);
         MoveDownCommand        = new RelayCommand(MoveDown,        CanMoveDown);
-        AddDelayEventCommand   = new RelayCommand(AddDelayEvent);
+        AddDelayEventCommand    = new RelayCommand(AddDelayEvent);
+        AddRegWriteCommand      = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.RegWrite    }));
+        AddRegReadCommand       = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.RegRead     }));
+        AddRegWaitForCommand    = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.RegWaitFor  }));
+        AddFdbWriteCommand      = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.FdbWrite    }));
+        AddFdbReadCommand       = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.FdbRead     }));
+        AddFdbWaitForCommand    = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.FdbWaitFor  }));
+        AddFdbFlushCommand      = new RelayCommand(() => InsertEvent(new SequenceEvent { EventType = SequenceEventType.FdbFlush    }));
 
         Sequence.CollectionChanged += (_, _) => ReIndex();
 
@@ -103,11 +146,12 @@ public class PacketListViewModel : ViewModelBase
         SelectedSequenceItem = item;
     }
 
-    private void AddDelayEvent()
-    {
-        var ev   = new SequenceEvent { DelayMs = 100 };
-        var item = new SequenceItem(ev);
+    private void AddDelayEvent() =>
+        InsertEvent(new SequenceEvent { DelayMs = 100 });
 
+    private void InsertEvent(SequenceEvent ev)
+    {
+        var item     = new SequenceItem(ev);
         int insertAt = SelectedSequenceItem != null
             ? Sequence.IndexOf(SelectedSequenceItem) + 1
             : Sequence.Count;
@@ -161,4 +205,12 @@ public class PacketListViewModel : ViewModelBase
 
     private bool CanMoveUp()   => SelectedSequenceItem != null && Sequence.IndexOf(SelectedSequenceItem) > 0;
     private bool CanMoveDown() => SelectedSequenceItem != null && Sequence.IndexOf(SelectedSequenceItem) < Sequence.Count - 1;
+
+    public void LoadSequence(IEnumerable<SequenceItem> items)
+    {
+        Sequence.Clear();
+        foreach (var item in items)
+            Sequence.Add(item);
+        SelectedSequenceItem = Sequence.FirstOrDefault(s => s.Kind == SequenceItemKind.Packet);
+    }
 }

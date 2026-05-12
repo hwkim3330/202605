@@ -1,215 +1,214 @@
 using System.Collections.ObjectModel;
-using System.Text;
+using System.Threading;
 using System.Windows.Input;
+using System.Windows.Threading;
 using EthernetPacketGenerator.Commands;
-using EthernetPacketGenerator.Services;
-using Microsoft.Win32;
+using EthernetPacketGenerator.Models;
+using PacketDotNet;
 using SharpPcap;
 
 namespace EthernetPacketGenerator.ViewModels;
 
-public class CaptureRowViewModel : ViewModelBase
-{
-    public int    No          { get; init; }
-    public string Time        { get; init; } = string.Empty;
-    public string Source      { get; init; } = string.Empty;
-    public string Destination { get; init; } = string.Empty;
-    public string Protocol    { get; init; } = string.Empty;
-    public int    Length      { get; init; }
-    public string Info        { get; init; } = string.Empty;
-    public byte[] Data        { get; init; } = Array.Empty<byte>();
-}
-
 public class CaptureViewModel : ViewModelBase
 {
-    private readonly PacketCaptureService _service = new();
-    private bool _isCapturing;
-    private string _statusMessage = "Ready";
-    private string _filterText = string.Empty;
-    private ILiveDevice? _device;
-    private int _counter;
-    private string _selectedHex = string.Empty;
+    public ObservableCollection<ILiveDevice> Interfaces { get; } = new();
 
-    public ObservableCollection<CaptureRowViewModel> CapturedPackets { get; } = new();
-    public ObservableCollection<TreeNode> DecodeRoots { get; } = new();
-
-    public string SelectedHex
+    private ILiveDevice? _selectedInterface;
+    public ILiveDevice? SelectedInterface
     {
-        get => _selectedHex;
-        private set => SetProperty(ref _selectedHex, value);
-    }
-
-    private CaptureRowViewModel? _selectedPacket;
-    public CaptureRowViewModel? SelectedPacket
-    {
-        get => _selectedPacket;
+        get => _selectedInterface;
         set
         {
-            SetProperty(ref _selectedPacket, value);
-            var data = value?.Data ?? Array.Empty<byte>();
-            UpdateDecodeAndHex(data);
-            SelectedPacketChanged?.Invoke(this, data);
+            SetProperty(ref _selectedInterface, value);
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested,
+                DispatcherPriority.Background);
         }
     }
 
-    // 캡처 행 선택 시 디코드 트리에 바이트 전달
-    public event EventHandler<byte[]>? SelectedPacketChanged;
+    public ObservableCollection<CaptureRow> Packets { get; } = new();
 
+    private bool _isCapturing;
     public bool IsCapturing
     {
         get => _isCapturing;
-        set => SetProperty(ref _isCapturing, value);
+        private set
+        {
+            SetProperty(ref _isCapturing, value);
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested,
+                DispatcherPriority.Background);
+        }
     }
 
-    public string StatusMessage
+    private int _totalPackets;
+    public int TotalPackets
     {
-        get => _statusMessage;
-        set => SetProperty(ref _statusMessage, value);
+        get => _totalPackets;
+        private set => SetProperty(ref _totalPackets, value);
     }
 
-    public string FilterText
+    private string _statusText = "Ready — select an interface and press Start.";
+    public string StatusText
     {
-        get => _filterText;
-        set => SetProperty(ref _filterText, value);
+        get => _statusText;
+        set => SetProperty(ref _statusText, value);
     }
 
-    public ICommand StartCaptureCommand { get; }
-    public ICommand StopCaptureCommand { get; }
+    public ICommand StartCommand { get; }
+    public ICommand StopCommand  { get; }
     public ICommand ClearCommand { get; }
-    public ICommand SavePcapngCommand { get; }
+
+    private ILiveDevice? _activeDevice;
+    private int          _seqNo;
+    private DateTime     _captureStart;
 
     public CaptureViewModel()
     {
-        StartCaptureCommand  = new RelayCommand(StartCapture,  () => !IsCapturing && _device != null);
-        StopCaptureCommand   = new RelayCommand(StopCapture,   () => IsCapturing);
-        ClearCommand         = new RelayCommand(Clear);
-        SavePcapngCommand    = new RelayCommand(SavePcapng,    () => CapturedPackets.Count > 0);
-
-        _service.PacketCaptured += OnPacketCaptured;
+        LoadInterfaces();
+        StartCommand = new RelayCommand(Start, () => !IsCapturing && SelectedInterface != null);
+        StopCommand  = new RelayCommand(Stop,  () => IsCapturing);
+        ClearCommand = new RelayCommand(Clear);
     }
 
-    public void SetDevice(ILiveDevice? device)
+    private void LoadInterfaces()
     {
-        if (IsCapturing) StopCapture();
-        _device = device;
-    }
-
-    private void StartCapture()
-    {
-        if (_device == null) return;
         try
         {
-            _service.StartCapture(_device, FilterText);
+            foreach (var dev in CaptureDeviceList.Instance)
+                Interfaces.Add(dev);
+            if (Interfaces.Count > 0)
+                SelectedInterface = Interfaces[0];
+        }
+        catch { }
+    }
+
+    private void Start()
+    {
+        if (SelectedInterface == null) return;
+        try
+        {
+            _seqNo        = 0;
+            _captureStart = DateTime.Now;
+            _activeDevice = SelectedInterface;
+            _activeDevice.OnPacketArrival += OnPacketArrival;
+            _activeDevice.Open(DeviceModes.Promiscuous, 1000);
+            _activeDevice.StartCapture();
             IsCapturing = true;
-            StatusMessage = $"Capturing on {_device.Description}...";
+            StatusText  = $"Capturing on {_activeDevice.Description ?? _activeDevice.Name}…";
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Capture error: {ex.Message}";
+            StatusText    = $"Error: {ex.Message}";
+            _activeDevice = null;
         }
     }
 
-    private void StopCapture()
+    private void Stop()
     {
-        _service.StopCapture();
-        IsCapturing = false;
-        StatusMessage = $"Stopped. {CapturedPackets.Count} packet(s) captured.";
+        try { _activeDevice?.StopCapture(); } catch { }
+        try { _activeDevice?.Close(); }       catch { }
+        if (_activeDevice != null)
+            _activeDevice.OnPacketArrival -= OnPacketArrival;
+        _activeDevice = null;
+        IsCapturing   = false;
+        StatusText    = $"Stopped. {TotalPackets} packets captured.";
     }
 
     private void Clear()
     {
-        CapturedPackets.Clear();
-        _counter = 0;
-        StatusMessage = "Cleared.";
+        Packets.Clear();
+        TotalPackets = 0;
+        _seqNo       = 0;
+        StatusText   = "Cleared.";
     }
 
-    private void SavePcapng()
+    private void OnPacketArrival(object sender, PacketCapture e)
     {
-        var dlg = new SaveFileDialog
+        var raw = e.GetPacket();
+        var row = ParseRow(raw);
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            Filter = "Pcapng Files (*.pcapng)|*.pcapng|All Files (*.*)|*.*",
-            DefaultExt = "pcapng",
-            FileName = $"capture_{DateTime.Now:yyyyMMdd_HHmmss}.pcapng"
-        };
-        if (dlg.ShowDialog() != true) return;
+            if (Packets.Count >= 5000) Packets.RemoveAt(0);
+            Packets.Add(row);
+            TotalPackets++;
+        }, DispatcherPriority.Background);
+    }
+
+    private CaptureRow ParseRow(RawCapture raw)
+    {
+        int    no       = Interlocked.Increment(ref _seqNo);
+        double elapsed  = (DateTime.Now - _captureStart).TotalSeconds;
+        string srcMac   = string.Empty;
+        string dstMac   = string.Empty;
+        string protocol = "Ethernet";
+        string info     = string.Empty;
+        int    length   = raw.Data.Length;
 
         try
         {
-            var infos = CapturedPackets.Select(r => new CapturedPacketInfo
+            var packet = Packet.ParsePacket(raw.LinkLayerType, raw.Data);
+            if (packet is EthernetPacket eth)
             {
-                Timestamp   = DateTime.Parse(r.Time),
-                Length      = r.Length,
-                Data        = r.Data,
-                Protocol    = r.Protocol,
-                Source      = r.Source,
-                Destination = r.Destination,
-                Info        = r.Info
-            });
-            PacketCaptureService.SavePcapng(infos, dlg.FileName);
-            StatusMessage = $"Saved: {dlg.FileName}";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"Save error: {ex.Message}";
-        }
-    }
+                srcMac = eth.SourceHardwareAddress?.ToString() ?? string.Empty;
+                dstMac = eth.DestinationHardwareAddress?.ToString() ?? string.Empty;
 
-    private void OnPacketCaptured(object? sender, CapturedPacketInfo info)
-    {
-        System.Windows.Application.Current.Dispatcher.Invoke(() =>
-        {
-            _counter++;
-            CapturedPackets.Add(new CaptureRowViewModel
-            {
-                No          = _counter,
-                Time        = info.Timestamp.ToString("HH:mm:ss.ffffff"),
-                Source      = info.Source,
-                Destination = info.Destination,
-                Protocol    = info.Protocol,
-                Length      = info.Length,
-                Info        = info.Info,
-                Data        = info.Data
-            });
-            // 최대 5000개 유지
-            if (CapturedPackets.Count > 5000)
-                CapturedPackets.RemoveAt(0);
-        });
-    }
+                if (eth.PayloadPacket is ArpPacket arp)
+                {
+                    protocol = "ARP";
+                    info     = $"Who has {arp.TargetProtocolAddress}? Tell {arp.SenderProtocolAddress}";
+                }
+                else if (eth.PayloadPacket is IPv4Packet ipv4)
+                {
+                    var src = ipv4.SourceAddress?.ToString() ?? "?";
+                    var dst = ipv4.DestinationAddress?.ToString() ?? "?";
+                    protocol = "IPv4";
+                    info     = $"{src} → {dst}";
 
-    private void UpdateDecodeAndHex(byte[] data)
-    {
-        DecodeRoots.Clear();
-        if (data.Length > 0)
-        {
-            var nodes = ProtocolDecoder.Decode(data);
-            foreach (var n in nodes)
-                DecodeRoots.Add(n);
-        }
-        SelectedHex = data.Length > 0 ? BuildHexDump(data) : string.Empty;
-    }
-
-    private static string BuildHexDump(byte[] data)
-    {
-        const int bytesPerRow = 16;
-        var sb = new StringBuilder();
-        for (int i = 0; i < data.Length; i += bytesPerRow)
-        {
-            sb.Append($"{i:X4}  ");
-            int count = Math.Min(bytesPerRow, data.Length - i);
-            for (int j = 0; j < bytesPerRow; j++)
-            {
-                if (j < count) sb.Append($"{data[i + j]:X2} ");
-                else           sb.Append("   ");
-                if (j == 7)    sb.Append(' ');
+                    if (ipv4.PayloadPacket is UdpPacket udp)
+                    {
+                        protocol = "UDP";
+                        info     = $"{src}:{udp.SourcePort} → {dst}:{udp.DestinationPort}  len={udp.Length}";
+                    }
+                    else if (ipv4.PayloadPacket is TcpPacket tcp)
+                    {
+                        protocol = "TCP";
+                        string flags = string.Empty;
+                        try
+                        {
+                            if (tcp.Synchronize)    flags += "S";
+                            if (tcp.Acknowledgment) flags += "A";
+                            if (tcp.Finished)       flags += "F";
+                            if (tcp.Reset)          flags += "R";
+                            if (tcp.Push)           flags += "P";
+                        }
+                        catch { }
+                        info = $"{src}:{tcp.SourcePort} → {dst}:{tcp.DestinationPort}" +
+                               (flags.Length > 0 ? $" [{flags}]" : string.Empty);
+                    }
+                    else if (ipv4.PayloadPacket != null)
+                    {
+                        protocol = $"IP/{(int)ipv4.Protocol}";
+                    }
+                }
+                else if (eth.PayloadPacket is IPv6Packet ipv6)
+                {
+                    protocol = "IPv6";
+                    info     = $"{ipv6.SourceAddress} → {ipv6.DestinationAddress}";
+                }
             }
-            sb.Append("  ");
-            for (int j = 0; j < count; j++)
-            {
-                char c = (char)data[i + j];
-                sb.Append(c >= 0x20 && c < 0x7F ? c : '.');
-            }
-            sb.AppendLine();
         }
-        return sb.ToString();
+        catch { /* 파싱 실패 — 기본값 유지 */ }
+
+        return new CaptureRow
+        {
+            No       = no,
+            Time     = elapsed.ToString("F4"),
+            SrcMac   = srcMac,
+            DstMac   = dstMac,
+            Protocol = protocol,
+            Length   = length,
+            Info     = info
+        };
     }
 }

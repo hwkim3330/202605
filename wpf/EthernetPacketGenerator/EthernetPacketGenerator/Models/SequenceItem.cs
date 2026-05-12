@@ -33,7 +33,7 @@ public class SequenceItem : INotifyPropertyChanged
     public string DisplayDstMac      => Packet?.DstMac          ?? "";
     public string DisplayProtocol    => Packet?.ProtocolSummary ?? "";
     public string DisplayDescription => Packet?.PacketDescription ?? (Event?.DisplayLabel ?? "");
-    public string DisplayInterface   => Packet?.OutgoingInterfaceName ?? "Default";
+    public string DisplayInterface   => Packet?.OutgoingInterfaceDisplay ?? "";
 
     public SequenceItem(PacketItem packet)
     {

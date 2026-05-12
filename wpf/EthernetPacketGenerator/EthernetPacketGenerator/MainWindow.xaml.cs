@@ -11,7 +11,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Loaded += OnLoaded;
+        Loaded  += OnLoaded;
+        Closing += (_, _) => ViewModel.TestCaseMgrVM.AutoSave();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

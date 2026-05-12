@@ -7,7 +7,7 @@ namespace EthernetPacketGenerator.Models;
 public class PacketItem : INotifyPropertyChanged
 {
     private string _name = "Packet";
-    private string? _outgoingInterfaceName;  // null = use default interface
+    private HashSet<string> _outgoingInterfaceNames = new();  // empty = use default (all IsActive)
     private byte[]? _cachedBytes;
     private List<ValidationResult> _validationResults = new();
     private bool _isComputing;
@@ -19,11 +19,33 @@ public class PacketItem : INotifyPropertyChanged
         set { _name = value; OnPropertyChanged(); }
     }
 
-    /// <summary>null = Default 인터페이스 사용. SendViewModel.ActiveInterfaces 중 하나의 ShortName.</summary>
-    public string? OutgoingInterfaceName
+    /// <summary>
+    /// 이 패킷을 전송할 인터페이스 이름 집합.
+    /// 비어있으면 Default 동작 (IsActive 전체, 없으면 IsDefault 하나).
+    /// </summary>
+    public HashSet<string> OutgoingInterfaceNames
     {
-        get => _outgoingInterfaceName;
-        set { _outgoingInterfaceName = value; OnPropertyChanged(); }
+        get => _outgoingInterfaceNames;
+        set { _outgoingInterfaceNames = value; OnPropertyChanged(); OnPropertyChanged(nameof(OutgoingInterfaceDisplay)); }
+    }
+
+    /// <summary>PacketList Interface 컬럼 표시용 요약 문자열.</summary>
+    public string OutgoingInterfaceDisplay =>
+        _outgoingInterfaceNames.Count == 0
+            ? "(Default)"
+            : string.Join(", ", _outgoingInterfaceNames);
+
+    public void ToggleOutgoingInterface(string shortName)
+    {
+        if (!_outgoingInterfaceNames.Remove(shortName))
+            _outgoingInterfaceNames.Add(shortName);
+        OnOutgoingInterfaceChanged();
+    }
+
+    public void OnOutgoingInterfaceChanged()
+    {
+        OnPropertyChanged(nameof(OutgoingInterfaceNames));
+        OnPropertyChanged(nameof(OutgoingInterfaceDisplay));
     }
 
     public ObservableCollection<ProtocolBlock> Blocks { get; } = new();

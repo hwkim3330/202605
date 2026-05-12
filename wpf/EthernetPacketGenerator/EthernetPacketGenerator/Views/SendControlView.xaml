@@ -26,8 +26,7 @@
                                 <!-- 인터페이스 이름 -->
                                 <TextBlock Text="{Binding ShortName}" FontSize="11"
                                            Foreground="{StaticResource ForegroundBrush}"
-                                           VerticalAlignment="Center" Margin="0,0,8,0"
-                                           MaxWidth="200" TextTrimming="CharacterEllipsis"/>
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <!-- 기본 인터페이스 선택 라디오 -->
                                 <RadioButton IsChecked="{Binding IsDefault, Mode=TwoWay}"
                                              GroupName="DefaultNic"
