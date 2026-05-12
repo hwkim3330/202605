@@ -117,16 +117,28 @@
                                 <Grid>
                                     <!-- Packet row: ComboBox -->
                                     <ComboBox x:Name="IfaceCombo"
-                                              ItemsSource="{Binding DataContext.InterfaceEntries,
+                                              ItemsSource="{Binding DataContext.InterfaceOptions,
                                                             RelativeSource={RelativeSource AncestorType=ListView}}"
                                               SelectedValuePath="ShortName"
                                               SelectedValue="{Binding Packet.OutgoingInterfaceName, Mode=TwoWay}"
                                               FontSize="11" Height="20" Padding="3,1"
-                                              ToolTip="이 패킷을 전송할 인터페이스 (빈 값 = Default)">
+                                              ToolTip="이 패킷을 전송할 인터페이스&#x0a;(Default) = 체크된 전체 인터페이스, 없으면 기본 인터페이스">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate>
-                                                <TextBlock Text="{Binding ShortName}" FontSize="11"
-                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock FontSize="11" TextTrimming="CharacterEllipsis">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="{Binding ShortName}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsDefaultSentinel}" Value="True">
+                                                                    <Setter Property="Text"       Value="(Default)"/>
+                                                                    <Setter Property="FontStyle"  Value="Italic"/>
+                                                                    <Setter Property="Foreground" Value="#88CCFF"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
                                             </DataTemplate>
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>

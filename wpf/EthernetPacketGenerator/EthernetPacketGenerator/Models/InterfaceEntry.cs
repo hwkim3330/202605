@@ -13,8 +13,11 @@ public class InterfaceEntry : INotifyPropertyChanged
     private bool _isActive = false;
     private bool _isDefault;
 
-    public ILiveDevice Device { get; }
+    public ILiveDevice? Device { get; }
     public string ShortName { get; }
+
+    /// <summary>PacketList ComboBox에 "(Default)" 항목으로 표시하기 위한 sentinel 플래그.</summary>
+    public bool IsDefaultSentinel { get; init; }
 
     public bool IsActive
     {

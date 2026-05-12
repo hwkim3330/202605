@@ -18,8 +18,29 @@ public class PacketListViewModel : ViewModelBase
     public ObservableCollection<InterfaceEntry> InterfaceEntries
     {
         get => _interfaceEntries;
-        set => SetProperty(ref _interfaceEntries, value);
+        set
+        {
+            if (_interfaceEntries != null)
+                _interfaceEntries.CollectionChanged -= OnInterfaceEntriesChanged;
+            SetProperty(ref _interfaceEntries, value);
+            if (_interfaceEntries != null)
+                _interfaceEntries.CollectionChanged += OnInterfaceEntriesChanged;
+            OnPropertyChanged(nameof(InterfaceOptions));
+        }
     }
+
+    private void OnInterfaceEntriesChanged(object? sender,
+        System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => OnPropertyChanged(nameof(InterfaceOptions));
+
+    /// <summary>
+    /// PacketList ComboBox용 목록: 맨 앞에 "(Default)" sentinel 항목 포함.
+    /// ShortName = "" → OutgoingInterfaceName = null (Default 동작)
+    /// </summary>
+    public IEnumerable<InterfaceEntry> InterfaceOptions =>
+        Enumerable.Repeat(
+            new InterfaceEntry(null!, "") { IsDefaultSentinel = true }, 1)
+        .Concat(_interfaceEntries);
 
     // Convenience view of only PacketItems (for Send, HexDump, etc.)
     public IEnumerable<PacketItem> Packets => Sequence

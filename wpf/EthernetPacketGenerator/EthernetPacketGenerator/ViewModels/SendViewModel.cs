@@ -69,6 +69,29 @@ public class SendViewModel : ViewModelBase
             : InterfaceEntries.FirstOrDefault(e => e.ShortName == shortName)
               ?? InterfaceEntries.FirstOrDefault(e => e.IsDefault);
 
+    /// <summary>
+    /// 패킷을 전송할 대상 인터페이스 목록을 반환한다.
+    /// - shortName null/empty : 체크(IsActive)된 전체 인터페이스. 없으면 Default 하나만.
+    /// - shortName 지정       : 해당 인터페이스만. 없으면 Default.
+    /// </summary>
+    private IReadOnlyList<InterfaceEntry> GetSendTargets(string? shortName)
+    {
+        if (!string.IsNullOrEmpty(shortName))
+        {
+            var specific = InterfaceEntries.FirstOrDefault(e => e.ShortName == shortName)
+                        ?? InterfaceEntries.FirstOrDefault(e => e.IsDefault);
+            return specific != null ? new[] { specific } : Array.Empty<InterfaceEntry>();
+        }
+
+        // 체크된 전체 인터페이스
+        var active = InterfaceEntries.Where(e => e.IsActive).ToList();
+        if (active.Count > 0) return active;
+
+        // 체크된 것이 없으면 Default 하나
+        var def = InterfaceEntries.FirstOrDefault(e => e.IsDefault);
+        return def != null ? new[] { def } : Array.Empty<InterfaceEntry>();
+    }
+
     private void SyncLabServer()
     {
         if (System.Windows.Application.Current is not App app) return;
@@ -306,9 +329,11 @@ public class SendViewModel : ViewModelBase
 
                     if (item.Kind == SequenceItemKind.Packet && item.Packet != null)
                     {
-                        var entry = await System.Windows.Application.Current.Dispatcher
-                            .InvokeAsync(() => FindEntry(item.Packet.OutgoingInterfaceName));
-                        _sendService.SendOnce(item.Packet.FullBytes, entry?.Device);
+                        var targets = await System.Windows.Application.Current.Dispatcher
+                            .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceName));
+                        foreach (var entry in targets)
+                            if (entry.Device != null)
+                                _sendService.SendOnce(item.Packet.FullBytes, entry.Device);
                     }
                     else if (item.Kind == SequenceItemKind.Event && item.Event != null)
                     {
@@ -369,9 +394,11 @@ public class SendViewModel : ViewModelBase
 
                 if (item.Kind == SequenceItemKind.Packet && item.Packet != null)
                 {
-                    var entry = await System.Windows.Application.Current.Dispatcher
-                        .InvokeAsync(() => FindEntry(item.Packet.OutgoingInterfaceName));
-                    _sendService.SendOnce(item.Packet.FullBytes, entry?.Device);
+                    var targets = await System.Windows.Application.Current.Dispatcher
+                        .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceName));
+                    foreach (var entry in targets)
+                        if (entry.Device != null)
+                            _sendService.SendOnce(item.Packet.FullBytes, entry.Device);
                 }
                 else if (item.Kind == SequenceItemKind.Event && item.Event != null)
                 {
@@ -473,7 +500,7 @@ public class SendViewModel : ViewModelBase
     {
         // 기존 추가 인터페이스 닫기
         foreach (var e in InterfaceEntries.Where(e => !e.IsDefault))
-            _sendService.CloseExtra(e.Device);
+            if (e.Device != null) _sendService.CloseExtra(e.Device);
 
         Interfaces.Clear();
         InterfaceEntries.Clear();
@@ -487,11 +514,10 @@ public class SendViewModel : ViewModelBase
             InterfaceEntries.Add(entry);
         }
 
-        // 첫 번째를 Default + Active로 지정
+        // 첫 번째를 Default로만 지정 (IsActive는 사용자가 직접 체크)
         if (InterfaceEntries.Count > 0)
         {
             InterfaceEntries[0].IsDefault = true;
-            InterfaceEntries[0].IsActive  = true;
         }
 
         var apiStatus = "";
@@ -525,10 +551,13 @@ public class SendViewModel : ViewModelBase
 
         if (e.PropertyName == nameof(InterfaceEntry.IsActive))
         {
-            if (changed.IsActive)
-                _sendService.OpenExtra(changed.Device);
-            else
-                _sendService.CloseExtra(changed.Device);
+            if (changed.Device != null)
+            {
+                if (changed.IsActive)
+                    _sendService.OpenExtra(changed.Device);
+                else
+                    _sendService.CloseExtra(changed.Device);
+            }
             SyncLabServer();
         }
     }

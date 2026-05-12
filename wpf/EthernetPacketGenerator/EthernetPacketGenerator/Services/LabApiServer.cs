@@ -76,13 +76,52 @@ public sealed class LabApiServer : IDisposable
             {
                 using var stream = client.GetStream();
 
-                // 최대 64 KB 읽기 (헤더 + JSON 바디)
-                var buf = new byte[65536];
-                var n   = await stream.ReadAsync(buf).ConfigureAwait(false);
-                var raw = Encoding.UTF8.GetString(buf, 0, n);
+                // 헤더 + 바디 읽기. TCP 분절로 헤더와 바디가 따로 올 수 있으므로
+                // Content-Length만큼 모두 수신한 뒤 파싱한다.
+                var buf   = new byte[65536];
+                int n     = await stream.ReadAsync(buf).ConfigureAwait(false);
+                int bodyDelim = -1;
 
+                // 헤더 끝(\r\n\r\n) 탐색 — 미발견 시 추가 읽기
+                while (n < buf.Length)
+                {
+                    var headerScan = Encoding.ASCII.GetString(buf, 0, n);
+                    bodyDelim = headerScan.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                    if (bodyDelim >= 0)
+                    {
+                        // Content-Length 파싱 후 바디 완전 수신
+                        var headers = headerScan[..bodyDelim];
+                        var clm = System.Text.RegularExpressions.Regex.Match(
+                            headers, @"Content-Length:\s*(\d+)",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (clm.Success)
+                        {
+                            int contentLen = int.Parse(clm.Groups[1].Value);
+                            int bodyRecv   = n - (bodyDelim + 4);
+                            while (bodyRecv < contentLen && n < buf.Length)
+                            {
+                                int r = await stream.ReadAsync(buf, n, buf.Length - n).ConfigureAwait(false);
+                                if (r == 0) break;
+                                n       += r;
+                                bodyRecv += r;
+                            }
+                        }
+                        break;
+                    }
+                    // 헤더 끝 아직 미도착 — 추가 읽기
+                    int more = await stream.ReadAsync(buf, n, buf.Length - n).ConfigureAwait(false);
+                    if (more == 0) break;
+                    n += more;
+                }
+
+                if (bodyDelim < 0)
+                {
+                    var scan = Encoding.ASCII.GetString(buf, 0, n);
+                    bodyDelim = scan.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+                }
+
+                var raw  = Encoding.UTF8.GetString(buf, 0, n);
                 var requestLine = raw.Split('\n')[0].Trim();
-                var bodyDelim   = raw.IndexOf("\r\n\r\n", StringComparison.Ordinal);
                 var body        = bodyDelim >= 0 ? raw[(bodyDelim + 4)..].TrimEnd('\0') : string.Empty;
 
                 string responseBody;
@@ -102,16 +141,23 @@ public sealed class LabApiServer : IDisposable
 
                 if (requestLine.StartsWith("GET /api/interfaces", StringComparison.OrdinalIgnoreCase))
                 {
+                    // activeInterfaces: IsActive 체크된 항목의 OS 인터페이스 이름 (MAC 매칭)
                     var activeNames = new JsonArray();
                     foreach (var e in ActiveInterfaceEntries.Where(e => e.IsActive))
-                        activeNames.Add(JsonValue.Create(e.ShortName));
+                    {
+                        var osName = GetOsInterfaceName(e.Device) ?? e.ShortName;
+                        activeNames.Add(JsonValue.Create(osName));
+                    }
+
+                    // selectedInterface: Default 디바이스의 OS 이름 (probe 드롭다운 자동선택용)
+                    var defaultOsName = GetOsInterfaceName(ActiveDevice) ?? SelectedInterfaceName;
 
                     var payload = new JsonObject
                     {
                         ["ok"]                = true,
                         ["interfaces"]        = BuildInterfaceList(),
-                        ["selectedInterface"] = SelectedInterfaceName,   // 하위 호환
-                        ["defaultInterface"]  = SelectedInterfaceName,
+                        ["selectedInterface"] = defaultOsName,
+                        ["defaultInterface"]  = defaultOsName,
                         ["activeInterfaces"]  = activeNames
                     };
                     responseBody = payload.ToJsonString();
@@ -124,6 +170,10 @@ public sealed class LabApiServer : IDisposable
                 else if (requestLine.StartsWith("POST /api/send", StringComparison.OrdinalIgnoreCase))
                 {
                     (responseBody, status) = await HandleSendAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("POST /api/capture", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleCaptureAsync(body).ConfigureAwait(false);
                 }
                 else
                 {
@@ -182,7 +232,11 @@ public sealed class LabApiServer : IDisposable
             var profile = JsonNode.Parse(jsonBody) as JsonObject
                           ?? throw new ArgumentException("invalid JSON");
 
-            var dev = ActiveDevice
+            // profile["interface"]에 OS 인터페이스 이름이 있으면 해당 디바이스를 우선 사용,
+            // 없거나 매칭 실패 시 ActiveDevice(Default) 사용
+            var ifaceName = profile["interface"]?.GetValue<string>();
+            var dev = (ifaceName != null ? ResolveDevice(ifaceName) : null)
+                      ?? ActiveDevice
                       ?? throw new InvalidOperationException("No interface selected in the app");
 
             var count      = profile["count"]?.GetValue<int>()    ?? 1;
@@ -245,6 +299,90 @@ public sealed class LabApiServer : IDisposable
         }
     }
 
+    // ── POST /api/capture ─────────────────────────────────────────────────────
+    // {interface?, filter?, count, timeoutMs?}
+
+    private async Task<(string body, int status)> HandleCaptureAsync(string jsonBody)
+    {
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject
+                      ?? throw new ArgumentException("invalid JSON");
+
+            var ifName    = req["interface"]?.GetValue<string>();
+            var filter    = req["filter"]?.GetValue<string>()    ?? string.Empty;
+            var count     = Math.Clamp(req["count"]?.GetValue<int>()     ?? 10, 1, 1000);
+            var timeoutMs = req["timeoutMs"]?.GetValue<int>()             ?? 5000;
+
+            var dev = (ifName != null ? ResolveDevice(ifName) : null)
+                      ?? ActiveDevice
+                      ?? throw new InvalidOperationException("인터페이스가 선택되지 않았습니다.");
+
+            var packets = new System.Collections.Concurrent.ConcurrentQueue<JsonObject>();
+            using var cts    = new CancellationTokenSource(timeoutMs);
+            using var signal = new SemaphoreSlim(0, count + 1);
+            int seq = 0;
+
+            void OnArrival(object _, PacketCapture e)
+            {
+                try
+                {
+                    var raw  = e.GetPacket();
+                    var data = raw.Data.ToArray();
+                    int s    = System.Threading.Interlocked.Increment(ref seq);
+                    packets.Enqueue(new JsonObject
+                    {
+                        ["seq"]         = s,
+                        ["timestampNs"] = LabPacketService.HighResNs(),
+                        ["length"]      = data.Length,
+                        ["hex"]         = Convert.ToHexString(data).ToLower()
+                    });
+                    signal.Release();
+                    if (s >= count) cts.Cancel();
+                }
+                catch { }
+            }
+
+            try
+            {
+                dev.Open(DeviceModes.None, timeoutMs);
+                if (!string.IsNullOrWhiteSpace(filter))
+                    try { dev.Filter = filter; } catch { }
+                dev.OnPacketArrival += OnArrival;
+                dev.StartCapture();
+
+                for (int i = 0; i < count && !cts.Token.IsCancellationRequested; i++)
+                {
+                    try { await signal.WaitAsync(cts.Token).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { break; }
+                }
+            }
+            finally
+            {
+                dev.OnPacketArrival -= OnArrival;
+                try { dev.StopCapture(); dev.Close(); } catch { }
+            }
+
+            var pktArr = new JsonArray();
+            while (packets.TryDequeue(out var p)) pktArr.Add(p);
+
+            var result = new JsonObject
+            {
+                ["ok"]     = true,
+                ["stdout"] = new JsonObject
+                {
+                    ["captured"] = pktArr.Count,
+                    ["packets"]  = pktArr
+                }
+            };
+            return (result.ToJsonString(), 200);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+
     // ── Delay helper (짧은 인터벌은 SpinWait, 긴 것은 Task.Delay) ─────────────
 
     private static Task PreciseDelayAsync(double ms)
@@ -260,6 +398,84 @@ public sealed class LabApiServer : IDisposable
             while (Stopwatch.GetTimestamp() - start < target)
                 Thread.SpinWait(50);
         });
+    }
+
+    // ── SharpPcap 디바이스 → OS 인터페이스 이름 ──────────────────────────────
+
+    /// <summary>MAC 매칭으로 SharpPcap 디바이스에 해당하는 OS NIC 이름을 반환한다.</summary>
+    private static string? GetOsInterfaceName(ILiveDevice? dev)
+    {
+        if (dev == null) return null;
+        try
+        {
+            var macBytes = dev.MacAddress?.GetAddressBytes();
+            if (macBytes?.Length != 6) return null;
+            return NetworkInterface.GetAllNetworkInterfaces()
+                .FirstOrDefault(n =>
+                {
+                    var b = n.GetPhysicalAddress().GetAddressBytes();
+                    return b.Length == 6 && b.SequenceEqual(macBytes);
+                })?.Name;
+        }
+        catch { return null; }
+    }
+
+    // ── 인터페이스 이름 → SharpPcap 디바이스 해석 ────────────────────────────
+
+    /// <summary>
+    /// OS 인터페이스 이름(예: "Ethernet 2")으로 MAC을 찾고,
+    /// ActiveInterfaceEntries에서 동일 MAC인 SharpPcap 디바이스를 반환한다.
+    /// 없거나 열리지 않은 경우 열기를 시도하고 반환; 실패 시 null.
+    /// </summary>
+    private ILiveDevice? ResolveDevice(string osIfaceName)
+    {
+        if (string.IsNullOrWhiteSpace(osIfaceName)) return null;
+
+        // OS NIC 이름 → MAC
+        var nic = NetworkInterface.GetAllNetworkInterfaces()
+            .FirstOrDefault(n => n.Name.Equals(osIfaceName, StringComparison.OrdinalIgnoreCase));
+        if (nic == null) return null;
+
+        var macBytes = nic.GetPhysicalAddress().GetAddressBytes();
+        if (macBytes.Length != 6) return null;
+
+        // 1차: ActiveInterfaceEntries에서 MAC 매칭
+        var entry = ActiveInterfaceEntries.FirstOrDefault(e =>
+        {
+            try
+            {
+                var devMac = e.Device?.MacAddress?.GetAddressBytes();
+                return devMac?.Length == 6 && devMac.SequenceEqual(macBytes);
+            }
+            catch { return false; }
+        });
+
+        if (entry?.Device != null)
+        {
+            try { entry.Device.Open(DeviceModes.None); } catch { }
+            return entry.Device;
+        }
+
+        // 2차 폴백: 등록되지 않은(IsActive=false 등) 인터페이스도 포함해 전체 SharpPcap 디바이스 검색
+        try
+        {
+            foreach (var dev in SharpPcap.CaptureDeviceList.Instance)
+            {
+                try
+                {
+                    var devMac = dev.MacAddress?.GetAddressBytes();
+                    if (devMac?.Length == 6 && devMac.SequenceEqual(macBytes))
+                    {
+                        dev.Open(DeviceModes.None);
+                        return dev;
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     // ── /api/interfaces 헬퍼 ─────────────────────────────────────────────────

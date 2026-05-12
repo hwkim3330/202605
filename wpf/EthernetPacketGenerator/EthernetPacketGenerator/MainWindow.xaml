@@ -47,11 +47,9 @@
             </StatusBarItem>
         </StatusBar>
 
-        <!-- Tabs: Build & Send | Live Capture -->
+        <!-- Root TabControl -->
         <TabControl x:Name="MainTabs">
-            <TabItem Header="Build &amp; Send">
-
-        <!-- Root: work area | protocol palette -->
+        <TabItem Header="Build &amp; Send">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"   MinWidth="900"/>
@@ -164,12 +162,13 @@
                                         DataContext="{Binding PacketListVM}"/>
             </Grid>
         </Grid>
+        </TabItem>
 
-            </TabItem>
+        <!-- ═══ Live Capture ═══════════════════════════════════════════════════ -->
+        <TabItem Header="Live Capture">
+            <views:CaptureView DataContext="{Binding CaptureVM}"/>
+        </TabItem>
 
-            <TabItem Header="Live Capture">
-                <views:CaptureView DataContext="{Binding CaptureVM}"/>
-            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

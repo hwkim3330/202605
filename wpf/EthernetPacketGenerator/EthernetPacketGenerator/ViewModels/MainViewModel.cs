@@ -48,17 +48,16 @@ public class MainViewModel : ViewModelBase
         // Share interface entries with PacketListVM for per-packet interface dropdown
         PacketListVM.InterfaceEntries = SendVM.InterfaceEntries;
 
-        if (PacketListVM.SelectedPacket != null)
-            OnSelectedPacketChanged(PacketListVM.SelectedPacket);
-
-        // Wire the Capture tab to the same NIC the user picked for sending,
-        // so 'Send' and 'Capture' agree without a separate device dropdown.
+        // CaptureVM follows selected interface
         SendVM.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SendViewModel.SelectedInterface))
                 CaptureVM.SetDevice(SendVM.SelectedInterface);
         };
         CaptureVM.SetDevice(SendVM.SelectedInterface);
+
+        if (PacketListVM.SelectedPacket != null)
+            OnSelectedPacketChanged(PacketListVM.SelectedPacket);
     }
 
     private void OnSelectedPacketChanged(PacketItem? packet)
