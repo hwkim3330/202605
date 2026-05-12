@@ -1998,3 +1998,23 @@ pre {
   margin-left: 6px; font-size: 11px; color: var(--muted);
   display: inline-flex; align-items: center; gap: 4px;
 }
+
+/* Multi-interface checkbox picker (replaces single <select> in toolbar) */
+.ifaceChecks {
+  display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  max-width: 720px; padding: 2px 6px; border: 1px solid var(--line);
+  border-radius: 6px; background: #fff; min-height: 28px;
+}
+.ifaceChecks label {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px;
+  border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;
+}
+.ifaceChecks label:hover { background: var(--soft); }
+.ifaceChecks label.checked { background: var(--accent); color: #fff; }
+.ifaceChecks label.checked .ifaceState { color: rgba(255,255,255,.8); }
+.ifaceChecks input[type=checkbox] { margin: 0; }
+.ifaceChecks .ifaceState { color: var(--muted); font-size: 11px; }
+.ifaceChecks .ifaceCount {
+  margin-left: 6px; color: var(--muted); font-size: 11px;
+  border-left: 1px solid var(--line); padding-left: 8px;
+}

@@ -958,11 +958,64 @@ async function loadInterfaces() {
     };
     return score(a) - score(b) || a.name.localeCompare(b.name);
   });
-  $('interfaceSelect').innerHTML = state.interfaces
+  // Hidden <select multiple> stays so legacy callers reading .value still work
+  // (it always reflects the first checked checkbox).
+  const sel = $('interfaceSelect');
+  sel.multiple = true;
+  sel.innerHTML = state.interfaces
     .map((iface) => `<option value="${iface.name}">${iface.name} (${iface.state})</option>`)
     .join('');
+  // Default: pick the first 'up' non-virtual NIC so the UI starts with one
+  // checked, matching the old single-select default behaviour.
+  if (!Array.from(sel.options).some((o) => o.selected)) {
+    const def = state.interfaces.find((i) => i.state === 'up' && !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(i.name))
+             || state.interfaces[0];
+    if (def) {
+      const opt = Array.from(sel.options).find((o) => o.value === def.name);
+      if (opt) opt.selected = true;
+    }
+  }
+  renderInterfaceCheckboxes();
   updateInterfaceInfo();
   setStatus(`${state.interfaces.length} interfaces loaded`);
+}
+
+function renderInterfaceCheckboxes() {
+  const host = $('interfaceCheckboxes');
+  if (!host) return;
+  if (!state.interfaces.length) { host.textContent = '— no interfaces —'; return; }
+  const checked = new Set(selectedInterfaceNames());
+  host.innerHTML = state.interfaces.map((iface) => {
+    const isChecked = checked.has(iface.name);
+    return `<label class="${isChecked ? 'checked' : ''}" data-iface="${iface.name}">
+      <input type="checkbox" value="${iface.name}"${isChecked ? ' checked' : ''}>
+      <span>${iface.name}</span>
+      <span class="ifaceState">${iface.state || ''}</span>
+    </label>`;
+  }).join('') + `<span class="ifaceCount" id="ifaceChecksCount">${checked.size}/${state.interfaces.length} selected</span>`;
+  host.querySelectorAll('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => syncCheckboxesToSelect());
+  });
+}
+
+function syncCheckboxesToSelect() {
+  const sel = $('interfaceSelect');
+  if (!sel) return;
+  const names = Array.from(document.querySelectorAll('#interfaceCheckboxes input[type=checkbox]:checked')).map((c) => c.value);
+  // Update the hidden multi-select so legacy `.value` reads return the first
+  // checked NIC, and `selectedOptions` returns all of them.
+  Array.from(sel.options).forEach((o) => { o.selected = names.includes(o.value); });
+  sel.value = names[0] || '';
+  // Visual highlight on the label
+  document.querySelectorAll('#interfaceCheckboxes label').forEach((lab) => {
+    const cb = lab.querySelector('input[type=checkbox]');
+    lab.classList.toggle('checked', !!cb?.checked);
+  });
+  const count = $('ifaceChecksCount');
+  if (count) count.textContent = `${names.length}/${state.interfaces.length} selected`;
+  // Fire change so all the other listeners (interfaceInfo, persist to
+  // localStorage, etc.) react as if a normal <select change> happened.
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function updateInterfaceInfo() {
@@ -1471,19 +1524,6 @@ $('refreshInterfaces').addEventListener('click', () => loadInterfaces().catch((e
   toastError(err);
 }));
 $('interfaceSelect').addEventListener('change', updateInterfaceInfo);
-$('interfaceMulti')?.addEventListener('change', (e) => {
-  const sel = $('interfaceSelect');
-  const prev = sel.value;
-  sel.multiple = e.target.checked;
-  if (e.target.checked) {
-    sel.size = Math.min(6, Math.max(3, state.interfaces.length));
-    if (prev) Array.from(sel.options).forEach((o) => { if (o.value === prev) o.selected = true; });
-  } else {
-    sel.size = 1;
-    if (prev) sel.value = prev;
-  }
-  updateInterfaceInfo();
-});
 $('build').addEventListener('click', () => build().catch((err) => {
   toastError(err);
 }));
@@ -2655,7 +2695,8 @@ $('senderNodeInterface').addEventListener('change', () => {
   if (state.localRole === 'sender') {
     const name = $('senderNodeInterface').value;
     if (state.interfaces.find((i) => i.name === name)) {
-      $('interfaceSelect').value = name;
+      Array.from($('interfaceSelect').options).forEach((o) => { o.selected = (o.value === name); });
+      renderInterfaceCheckboxes();
       localStorage.setItem('localInterface', name);
       updateInterfaceInfo();
       renderLinkStrip();
@@ -2675,7 +2716,8 @@ $('receiverNodeInterface').addEventListener('change', () => {
   if (state.localRole === 'receiver') {
     const name = $('receiverNodeInterface').value;
     if (state.interfaces.find((i) => i.name === name)) {
-      $('interfaceSelect').value = name;
+      Array.from($('interfaceSelect').options).forEach((o) => { o.selected = (o.value === name); });
+      renderInterfaceCheckboxes();
       localStorage.setItem('localInterface', name);
       updateInterfaceInfo();
       renderLinkStrip();
@@ -2753,7 +2795,8 @@ await loadTestCases();
 await loadInterfaces();
 const savedLocalIf = localStorage.getItem('localInterface');
 if (savedLocalIf && state.interfaces.find((i) => i.name === savedLocalIf)) {
-  $('interfaceSelect').value = savedLocalIf;
+  Array.from($('interfaceSelect').options).forEach((o) => { o.selected = (o.value === savedLocalIf); });
+  renderInterfaceCheckboxes();
   updateInterfaceInfo();
 }
 $('peerUrlPin').value = state.peer.url;
