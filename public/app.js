@@ -149,8 +149,13 @@ function currentPayload() {
 function getProfile() {
   const protocol = $('protocol').value;
   const targetFrameLength = $('targetFrameLength').value;
+  // Resolve the interface name from the active picker (Sender selection by
+  // default). selectedInterfaceNames() returns all of them; we pick the first
+  // because /api/build / /api/send takes one interface — multi-NIC fan-out
+  // happens in send() by overriding `interface` per iteration.
+  const ifaceName = selectedInterfaceNames()[0] || '';
   const profile = {
-    interface: $('interfaceSelect').value,
+    interface: ifaceName,
     protocol,
     dstMac: $('dstMac').value.trim(),
     srcMac: $('srcMac').value.trim(),
@@ -1084,8 +1089,11 @@ function mirrorIfaceSelectionToHiddenSelect() {
   if (!sel) return;
   const scope = ifacePickerScope();
   const names = Array.from(ifaceSel[scope]);
+  // IMPORTANT: don't `sel.value = names[0]` here. On a <select multiple>, the
+  // .value setter de-selects every other option, undoing what we just set on
+  // o.selected. Reading sel.value after this still returns the first selected
+  // option (which is what getProfile() needs).
   Array.from(sel.options).forEach((o) => { o.selected = names.includes(o.value); });
-  sel.value = names[0] || '';
   sel.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
@@ -1141,7 +1149,7 @@ async function loadExamples() {
 function validateProfileFields() {
   const p = $('protocol').value;
   if (p === 'arp' || p === 'udp' || p === 'icmp') {
-    if (!$('srcMac').value || !$('dstMac').value) return 'Source / Destination MAC is empty. Lock the peer in the top link strip, or fill manually.';
+    if (!$('srcMac').value || !$('dstMac').value) return 'Source / Destination MAC is empty. Pick a NIC above to autofill Source, then type Destination MAC.';
     if (p !== 'arp' && (!$('srcIp').value || !$('dstIp').value)) return 'Source / Destination IP is empty.';
   }
   return null;
