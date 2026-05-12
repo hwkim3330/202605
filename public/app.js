@@ -336,7 +336,8 @@ function buildPacketRow(packet) {
   tr.dataset.idx = String(idx);
   tr.className = rowProtoClass(decoded);
   // No per-row listener — tbody-level delegation handles clicks.
-  tr.innerHTML = `<td class="colNum">${idx + 1}</td><td class="colTime">${tStr}</td><td>${src}</td><td>${dst}</td><td class="colProto">${proto}</td><td class="colLen">${packet.length}</td><td>${packetInfo(decoded)}</td>`;
+  const iface = packet._iface || '';
+  tr.innerHTML = `<td class="colNum">${idx + 1}</td><td class="colTime">${tStr}</td><td class="colIface">${iface}</td><td class="colSrc">${src}</td><td class="colDst">${dst}</td><td class="colProto">${proto}</td><td class="colLen">${packet.length}</td><td>${packetInfo(decoded)}</td>`;
   return tr;
 }
 
@@ -1031,6 +1032,9 @@ async function loadInterfaces() {
   }
   renderInterfacePickers();
   updateInterfaceInfo();
+  // Now that we know which NIC is picked, push srcMac/srcIp into the form
+  // (loadExamples ran first and already loaded a template's dst values).
+  autofillSenderFromPickedIface();
   setStatus(`${state.interfaces.length} interfaces loaded`);
 }
 
