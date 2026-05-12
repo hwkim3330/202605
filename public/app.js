@@ -1311,6 +1311,13 @@ function selectedControlInterfaces(role) {
   return fallback ? [fallback] : [];
 }
 
+function isControlLabInterface(iface) {
+  const ip = iface?.ipv4?.find((addr) => addr.local && !addr.local.includes(':'))?.local || '';
+  return iface?.state === 'up'
+    && ip.startsWith('169.254.')
+    && !/^(lo|docker|veth|br|virbr|tap|wlan|wlp|wlx)/.test(iface.name);
+}
+
 function updateControlInterfaceState(role) {
   const selected = selectedControlInterfaces(role);
   const count = $(controlCountId(role));
@@ -1343,8 +1350,13 @@ function renderControlInterfacePicker(role, interfaces, preferredName = '') {
   let selected = new Set([...previous].filter((name) => validNames.has(name)));
   if (!selected.size && preferredName && validNames.has(preferredName)) selected.add(preferredName);
   if (!selected.size) {
-    const firstUp = interfaces.find((iface) => iface.state === 'up' && iface.name !== 'lo' && !iface.name.startsWith('docker'));
-    if (firstUp) selected.add(firstUp.name);
+    const labIfaces = interfaces.filter(isControlLabInterface);
+    if (labIfaces.length) {
+      selected = new Set(labIfaces.map((iface) => iface.name));
+    } else {
+      const firstUp = interfaces.find((iface) => iface.state === 'up' && iface.name !== 'lo' && !iface.name.startsWith('docker'));
+      if (firstUp) selected.add(firstUp.name);
+    }
   }
   list.innerHTML = interfaces.map((iface) => {
     const ip = iface.ipv4?.[0]?.local || '';
