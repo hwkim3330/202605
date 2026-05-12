@@ -1311,8 +1311,22 @@ function updateControlInterfaceState(role) {
   if (count) count.textContent = `${selected.length} selected`;
   const select = $(controlSelectId(role));
   if (select && selected[0]) select.value = selected[0];
+  updateControlPairMode();
   renderNodeGrid();
   renderPairCard();
+}
+
+function updateControlPairMode() {
+  const senderCount = selectedControlInterfaces('sender').length;
+  const receiverCount = selectedControlInterfaces('receiver').length;
+  const el = $('controlPairMode');
+  if (!el) return;
+  if (!senderCount || !receiverCount) {
+    el.textContent = 'no pair';
+    return;
+  }
+  const pairCount = senderCount === receiverCount ? senderCount : senderCount * receiverCount;
+  el.textContent = senderCount === receiverCount ? `${pairCount} pair${pairCount > 1 ? 's' : ''} · 1:1` : `${pairCount} combos`;
 }
 
 function renderControlInterfacePicker(role, interfaces, preferredName = '') {
@@ -1331,20 +1345,15 @@ function renderControlInterfacePicker(role, interfaces, preferredName = '') {
     const isChecked = selected.has(iface.name);
     const stateCls = iface.state === 'up' ? 'up' : 'down';
     return `
-      <label class="ifaceItem ${isChecked ? 'checked' : ''}" data-iface="${iface.name}">
+      <label class="controlIfaceChip ${isChecked ? 'checked' : ''}" data-iface="${iface.name}" title="${iface.name} / ${iface.mac || '-'}${ip ? ` / ${ip}` : ''}">
         <span class="ifaceCheck"></span>
         <input type="checkbox" value="${iface.name}"${isChecked ? ' checked' : ''}>
-        <div class="ifaceMain">
-          <div class="ifaceNameLine">
-            <span class="ifaceName">${iface.name}</span>
-            <span class="ifaceState ${stateCls}">${iface.state || '?'}</span>
-          </div>
-          <div class="ifaceMac">${iface.mac || '-'}</div>
-          ${ip ? `<div class="ifaceExtras">${ip}</div>` : ''}
-        </div>
+        <span class="controlIfaceChipState ${stateCls}"></span>
+        <span class="controlIfaceChipName">${iface.name}</span>
+        ${ip ? `<span class="controlIfaceChipIp">${ip}</span>` : ''}
       </label>`;
   }).join('');
-  list.querySelectorAll('.ifaceItem').forEach((label) => {
+  list.querySelectorAll('.controlIfaceChip').forEach((label) => {
     const input = label.querySelector('input[type=checkbox]');
     const sync = () => {
       label.classList.toggle('checked', input.checked);
@@ -1366,7 +1375,7 @@ function setControlSingleSelection(role, name) {
   if (!list || !name) return;
   list.querySelectorAll('input[type=checkbox]').forEach((input) => {
     input.checked = input.value === name;
-    input.closest('.ifaceItem')?.classList.toggle('checked', input.checked);
+    input.closest('.controlIfaceChip')?.classList.toggle('checked', input.checked);
   });
   updateControlInterfaceState(role);
 }
@@ -2999,16 +3008,18 @@ $('interfaceSelect').addEventListener('change', () => {
 // linkStrip local NIC dropdown (Control tab quick-pick). Mirrors the Sender
 // picker — picking here flips ifaceSel.sender to a single NIC.
 function syncLocalInterfacePin() {
-  const sel = $('localInterfacePin');
-  if (!sel) return;
-  const current = Array.from(ifaceSel.sender)[0] || '';
-  if (sel.options.length !== state.interfaces.length) {
-    sel.innerHTML = state.interfaces.map((i) =>
-      `<option value="${i.name}">${i.name} — ${i.mac || '?'}${i.state==='up' ? ' · up':''}</option>`
-    ).join('');
-  }
-  if (current) sel.value = current;
-}
+	  const sel = $('localInterfacePin');
+	  if (!sel) return;
+	  const current = Array.from(ifaceSel.sender)[0] || '';
+	  if (sel.options.length !== state.interfaces.length) {
+	    sel.innerHTML = state.interfaces.map((i) =>
+	      `<option value="${i.name}">${i.name} — ${i.mac || '?'}${i.state==='up' ? ' · up':''}</option>`
+	    ).join('');
+	  }
+	  if (current) sel.value = current;
+	  const localUrl = $('localUrlPin');
+	  if (localUrl) localUrl.value = window.location.origin;
+	}
 $('localInterfacePin')?.addEventListener('change', () => {
   const name = $('localInterfacePin').value;
   if (!name) return;

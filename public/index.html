@@ -98,13 +98,12 @@
         <div class="linkSide localSide">
           <div class="linkLabel">This PC <span class="roleTag" id="localRoleTag">SENDER</span></div>
           <div class="linkInputs">
-            <select id="localInterfacePin" title="이 PC의 송신 NIC"></select>
+            <input id="localUrlPin" readonly autocomplete="off" value="http://localhost:8080">
           </div>
-          <div class="linkLine">
-            <span id="localIfName" class="strong">-</span>
-            <span id="localIp" class="muted">-</span>
-            <code id="localMac" class="mac">--:--:--:--:--:--</code>
-          </div>
+          <select id="localInterfacePin" title="이 PC의 송신 NIC" hidden></select>
+          <span id="localIfName" hidden>-</span>
+          <span id="localIp" hidden>-</span>
+          <code id="localMac" class="mac" hidden>--:--:--:--:--:--</code>
         </div>
         <div class="linkCenter">
           <div class="linkArrow" id="linkArrow" title="Click to swap roles">⇄</div>
@@ -114,15 +113,13 @@
           <div class="linkLabel">Peer PC <span class="roleTag" id="peerRoleTag">RECEIVER</span></div>
           <div class="linkInputs">
             <input id="peerUrlPin" placeholder="http://169.254.5.7:8080" autocomplete="off">
-            <select id="peerInterfacePin"><option value="">probe peer first</option></select>
             <button id="peerProbeBtn" class="ghostBtn" title="Probe peer interfaces">Probe</button>
           </div>
-          <div class="linkLine">
-            <span id="peerIfName" class="strong">-</span>
-            <span id="peerIp" class="muted">-</span>
-            <code id="peerMac" class="mac">--:--:--:--:--:--</code>
-            <button id="useMacBtn" class="ghostBtn small" title="Fill Sender's destination MAC/IP from peer">Lock to Peer</button>
-          </div>
+          <select id="peerInterfacePin" hidden><option value="">probe peer first</option></select>
+          <span id="peerIfName" hidden>-</span>
+          <span id="peerIp" hidden>-</span>
+          <code id="peerMac" class="mac" hidden>--:--:--:--:--:--</code>
+          <button id="useMacBtn" class="ghostBtn small" hidden title="Fill Sender's destination MAC/IP from peer">Lock to Peer</button>
         </div>
       </section>
 
@@ -474,20 +471,25 @@
             </div>
             <div id="pairWarning" class="pairWarning hidden">Set the Peer URL in the top link strip and Probe before running tests.</div>
 
-            <div class="controlIfaceMatrix">
-              <div class="ifacePicker ifacePickerHoriz">
-                <div class="ifacePickerHead">
-                  <strong>Control Sender Interfaces</strong>
+            <div class="controlPairPicker">
+              <div class="controlPairHead">
+                <div>
+                  <strong>Interface Pairs</strong>
+                  <span>같은 개수면 순서대로 1:1, 개수가 다르면 전체 조합으로 테스트</span>
+                </div>
+                <code id="controlPairMode">1 pair</code>
+              </div>
+              <div class="controlPairRows">
+                <div class="controlPairRow">
+                  <span class="controlPairLabel">Sender</span>
+                  <div class="controlIfaceChips" id="controlSenderIfaceList">— probe to load —</div>
                   <span id="controlSenderIfaceCount" class="ifacePickerCount">0 selected</span>
                 </div>
-                <div class="ifacePickerList ifacePickerListHoriz" id="controlSenderIfaceList">— probe to load —</div>
-              </div>
-              <div class="ifacePicker ifacePickerHoriz">
-                <div class="ifacePickerHead">
-                  <strong>Control Receiver Interfaces</strong>
+                <div class="controlPairRow">
+                  <span class="controlPairLabel receiverTag">Receiver</span>
+                  <div class="controlIfaceChips" id="controlReceiverIfaceList">— probe to load —</div>
                   <span id="controlReceiverIfaceCount" class="ifacePickerCount">0 selected</span>
                 </div>
-                <div class="ifacePickerList ifacePickerListHoriz" id="controlReceiverIfaceList">— probe to load —</div>
               </div>
             </div>
 
