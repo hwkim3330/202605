@@ -1462,8 +1462,8 @@ function renderControlTopology() {
     const y = laneYs[index];
     const cls = index % 2 ? 'alt' : '';
     return `
-      <path class="topoLink ${cls}" d="M250 ${y} C330 ${y}, 330 130, 410 130"></path>
-      <path class="topoLink ${cls}" d="M510 130 C590 130, 590 ${y}, 670 ${y}"></path>
+      <path data-topo-index="${index}" class="topoLink ${cls}" d="M250 ${y} C330 ${y}, 330 130, 410 130"></path>
+      <path data-topo-index="${index}" class="topoLink ${cls}" d="M510 130 C590 130, 590 ${y}, 670 ${y}"></path>
     `;
   }).join('');
   const senderPorts = pairs.map((pair, index) => {
@@ -1530,6 +1530,14 @@ function updateControlRunCard(index, status, metrics = {}, error = '') {
     errEl.textContent = error || '';
     errEl.classList.toggle('hidden', !error);
   }
+  updateTopologyLinkStatus(index, status);
+}
+
+function updateTopologyLinkStatus(index, status) {
+  document.querySelectorAll(`[data-topo-index="${index}"]`).forEach((item) => {
+    item.classList.remove('running', 'ok', 'fail');
+    if (['running', 'ok', 'fail'].includes(status)) item.classList.add(status);
+  });
 }
 
 function packetProtocol(decoded) {

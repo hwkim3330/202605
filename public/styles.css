@@ -1371,10 +1371,26 @@ body.serialMode .serialPane {
   stroke: #0f6f78;
   stroke-width: 4;
   stroke-linecap: round;
+  transition: stroke .18s ease, stroke-width .18s ease, opacity .18s ease;
 }
 
 .topoLink.alt {
   stroke: #b9651a;
+}
+
+.topoLink.running {
+  stroke: #f59e0b;
+  stroke-width: 6;
+}
+
+.topoLink.ok {
+  stroke: #22c55e;
+  stroke-width: 6;
+}
+
+.topoLink.fail {
+  stroke: #dc2626;
+  stroke-width: 6;
 }
 
 .topoText {
