@@ -169,11 +169,6 @@
             <views:CaptureView DataContext="{Binding CaptureVM}"/>
         </TabItem>
 
-        <!-- ═══ Validation ═════════════════════════════════════════════════════ -->
-        <TabItem Header="Validation">
-            <views:ValidationView DataContext="{Binding ValidationVM}"/>
-        </TabItem>
-
         </TabControl>
     </DockPanel>
 </Window>

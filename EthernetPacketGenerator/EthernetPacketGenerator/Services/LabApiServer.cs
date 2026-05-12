@@ -171,10 +171,6 @@ public sealed class LabApiServer : IDisposable
                 {
                     (responseBody, status) = await HandleSendAsync(body).ConfigureAwait(false);
                 }
-                else if (requestLine.StartsWith("POST /api/validate", StringComparison.OrdinalIgnoreCase))
-                {
-                    (responseBody, status) = await HandleValidateAsync(body).ConfigureAwait(false);
-                }
                 else if (requestLine.StartsWith("POST /api/capture", StringComparison.OrdinalIgnoreCase))
                 {
                     (responseBody, status) = await HandleCaptureAsync(body).ConfigureAwait(false);
@@ -293,91 +289,6 @@ public sealed class LabApiServer : IDisposable
                     ["elapsedSec"]      = sw.Elapsed.TotalSeconds,
                     ["decoded"]         = lastDecoded,
                     ["txRecords"]       = txRecords
-                }
-            };
-            return (result.ToJsonString(), 200);
-        }
-        catch (Exception ex)
-        {
-            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
-        }
-    }
-
-    // ── POST /api/validate ────────────────────────────────────────────────────
-    // {txInterface?, rxInterface?, count?, timeoutMs?, interPacketMs?, matchMode?, rxFilter?, ...packet profile}
-
-    private async Task<(string body, int status)> HandleValidateAsync(string jsonBody)
-    {
-        try
-        {
-            var req = JsonNode.Parse(jsonBody) as JsonObject
-                      ?? throw new ArgumentException("invalid JSON");
-
-            var txName = req["txInterface"]?.GetValue<string>();
-            var rxName = req["rxInterface"]?.GetValue<string>() ?? txName;
-
-            var txDev = (txName != null ? ResolveDevice(txName) : null)
-                        ?? ActiveDevice
-                        ?? throw new InvalidOperationException("TX 인터페이스를 찾을 수 없습니다.");
-            var rxDev = (rxName != null ? ResolveDevice(rxName) : null)
-                        ?? ActiveDevice
-                        ?? throw new InvalidOperationException("RX 인터페이스를 찾을 수 없습니다.");
-
-            var count         = req["count"]?.GetValue<int>()        ?? 1;
-            var timeoutMs     = req["timeoutMs"]?.GetValue<int>()     ?? 2000;
-            var interPacketMs = req["interPacketMs"]?.GetValue<int>() ?? 10;
-            var rxFilter      = req["rxFilter"]?.GetValue<string>()   ?? string.Empty;
-            var matchModeStr  = req["matchMode"]?.GetValue<string>()  ?? "exact";
-
-            var matchMode = matchModeStr.ToLowerInvariant() switch
-            {
-                "payload"          => EthernetPacketGenerator.Models.ValidationMatchMode.Payload,
-                "dstmacandpayload" => EthernetPacketGenerator.Models.ValidationMatchMode.DstMacAndPayload,
-                _                  => EthernetPacketGenerator.Models.ValidationMatchMode.Exact
-            };
-
-            var (frame, _) = LabPacketService.BuildFrame(req);
-
-            var config = new EthernetPacketGenerator.Models.ValidationConfig
-            {
-                Count         = count,
-                TimeoutMs     = timeoutMs,
-                InterPacketMs = interPacketMs,
-                MatchMode     = matchMode,
-                RxFilter      = rxFilter
-            };
-
-            var svc = new PacketValidationService();
-            var (summary, records) = await svc.RunAsync(txDev, rxDev, new[] { frame }, config)
-                                              .ConfigureAwait(false);
-
-            var recArr = new JsonArray();
-            foreach (var r in records)
-                recArr.Add(new JsonObject
-                {
-                    ["index"]     = r.Index,
-                    ["status"]    = r.Status.ToString().ToLower(),
-                    ["sentLen"]   = r.SentLength,
-                    ["recvLen"]   = r.ReceivedLength,
-                    ["latencyMs"] = r.LatencyMs,
-                    ["note"]      = r.Note
-                });
-
-            var result = new JsonObject
-            {
-                ["ok"]     = true,
-                ["stdout"] = new JsonObject
-                {
-                    ["txCount"]       = summary.TxCount,
-                    ["rxCount"]       = summary.RxCount,
-                    ["matchCount"]    = summary.MatchCount,
-                    ["mismatchCount"] = summary.MismatchCount,
-                    ["lostCount"]     = summary.LostCount,
-                    ["lossRate"]      = Math.Round(summary.LossRate,  2),
-                    ["matchRate"]     = Math.Round(summary.MatchRate, 2),
-                    ["elapsedMs"]     = Math.Round(summary.ElapsedMs, 1),
-                    ["avgLatencyMs"]  = Math.Round(summary.AvgLatencyMs, 3),
-                    ["records"]       = recArr
                 }
             };
             return (result.ToJsonString(), 200);

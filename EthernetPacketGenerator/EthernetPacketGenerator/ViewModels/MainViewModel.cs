@@ -16,7 +16,6 @@ public class MainViewModel : ViewModelBase
     public TreeDecodeViewModel TreeDecodeVM { get; } = new();
     public SendViewModel SendVM { get; } = new();
     public CaptureViewModel CaptureVM { get; } = new();
-    public ValidationViewModel ValidationVM { get; } = new();
 
     public ProtocolBlock? SelectedBlock
     {
@@ -56,10 +55,6 @@ public class MainViewModel : ViewModelBase
                 CaptureVM.SetDevice(SendVM.SelectedInterface);
         };
         CaptureVM.SetDevice(SendVM.SelectedInterface);
-
-        // ValidationVM gets interfaces + sequence
-        ValidationVM.SetInterfaces(SendVM.InterfaceEntries);
-        ValidationVM.SetSequence(PacketListVM.Sequence);
 
         if (PacketListVM.SelectedPacket != null)
             OnSelectedPacketChanged(PacketListVM.SelectedPacket);
