@@ -1282,20 +1282,137 @@ function renderInterfaceOptions(selectId, interfaces) {
   }).join('');
 }
 
+function controlListId(role) {
+  return role === 'sender' ? 'controlSenderIfaceList' : 'controlReceiverIfaceList';
+}
+
+function controlCountId(role) {
+  return role === 'sender' ? 'controlSenderIfaceCount' : 'controlReceiverIfaceCount';
+}
+
+function controlSelectId(role) {
+  return role === 'sender' ? 'senderNodeInterface' : 'receiverNodeInterface';
+}
+
+function selectedControlInterfaces(role) {
+  const list = $(controlListId(role));
+  const checked = list
+    ? Array.from(list.querySelectorAll('input[type=checkbox]:checked')).map((input) => input.value)
+    : [];
+  if (list?.querySelector('input[type=checkbox]')) return checked;
+  if (checked.length) return checked;
+  const fallback = $(controlSelectId(role))?.value;
+  return fallback ? [fallback] : [];
+}
+
+function updateControlInterfaceState(role) {
+  const selected = selectedControlInterfaces(role);
+  const count = $(controlCountId(role));
+  if (count) count.textContent = `${selected.length} selected`;
+  const select = $(controlSelectId(role));
+  if (select && selected[0]) select.value = selected[0];
+  renderNodeGrid();
+  renderPairCard();
+}
+
+function renderControlInterfacePicker(role, interfaces, preferredName = '') {
+  const list = $(controlListId(role));
+  if (!list) return;
+  const previous = new Set(selectedControlInterfaces(role));
+  const validNames = new Set(interfaces.map((iface) => iface.name));
+  let selected = new Set([...previous].filter((name) => validNames.has(name)));
+  if (!selected.size && preferredName && validNames.has(preferredName)) selected.add(preferredName);
+  if (!selected.size) {
+    const firstUp = interfaces.find((iface) => iface.state === 'up' && iface.name !== 'lo' && !iface.name.startsWith('docker'));
+    if (firstUp) selected.add(firstUp.name);
+  }
+  list.innerHTML = interfaces.map((iface) => {
+    const ip = iface.ipv4?.[0]?.local || '';
+    const isChecked = selected.has(iface.name);
+    const stateCls = iface.state === 'up' ? 'up' : 'down';
+    return `
+      <label class="ifaceItem ${isChecked ? 'checked' : ''}" data-iface="${iface.name}">
+        <span class="ifaceCheck"></span>
+        <input type="checkbox" value="${iface.name}"${isChecked ? ' checked' : ''}>
+        <div class="ifaceMain">
+          <div class="ifaceNameLine">
+            <span class="ifaceName">${iface.name}</span>
+            <span class="ifaceState ${stateCls}">${iface.state || '?'}</span>
+          </div>
+          <div class="ifaceMac">${iface.mac || '-'}</div>
+          ${ip ? `<div class="ifaceExtras">${ip}</div>` : ''}
+        </div>
+      </label>`;
+  }).join('');
+  list.querySelectorAll('.ifaceItem').forEach((label) => {
+    const input = label.querySelector('input[type=checkbox]');
+    const sync = () => {
+      label.classList.toggle('checked', input.checked);
+      updateControlInterfaceState(role);
+    };
+    label.addEventListener('click', (event) => {
+      if (event.target.tagName === 'INPUT') return;
+      event.preventDefault();
+      input.checked = !input.checked;
+      sync();
+    });
+    input.addEventListener('change', sync);
+  });
+  updateControlInterfaceState(role);
+}
+
+function setControlSingleSelection(role, name) {
+  const list = $(controlListId(role));
+  if (!list || !name) return;
+  list.querySelectorAll('input[type=checkbox]').forEach((input) => {
+    input.checked = input.value === name;
+    input.closest('.ifaceItem')?.classList.toggle('checked', input.checked);
+  });
+  updateControlInterfaceState(role);
+}
+
+function selectedControlPairs() {
+  const senderUrl = $('senderNodeUrl').value;
+  const receiverUrl = $('receiverNodeUrl').value;
+  const senderIfs = selectedControlInterfaces('sender');
+  const receiverIfs = selectedControlInterfaces('receiver');
+  if (!senderUrl || !receiverUrl || !senderIfs.length || !receiverIfs.length) {
+    throw new Error(`Missing pair: sender ${senderUrl || '?'}/${senderIfs.join(',') || '?'} -> receiver ${receiverUrl || '?'}/${receiverIfs.join(',') || '?'}`);
+  }
+  if (senderIfs.length === receiverIfs.length) {
+    return senderIfs.map((senderIf, index) => ({
+      senderUrl,
+      receiverUrl,
+      senderIf,
+      receiverIf: receiverIfs[index],
+      label: `${senderIf} -> ${receiverIfs[index]}`
+    }));
+  }
+  return senderIfs.flatMap((senderIf) => receiverIfs.map((receiverIf) => ({
+    senderUrl,
+    receiverUrl,
+    senderIf,
+    receiverIf,
+    label: `${senderIf} -> ${receiverIf}`
+  })));
+}
+
 function renderNodeGrid() {
   const sender = state.nodes.sender;
   const receiver = state.nodes.receiver;
-  const senderIface = sender?.interfaces?.find((iface) => iface.name === $('senderNodeInterface').value);
-  const receiverIface = receiver?.interfaces?.find((iface) => iface.name === $('receiverNodeInterface').value);
+  const senderIfs = selectedControlInterfaces('sender');
+  const receiverIfs = selectedControlInterfaces('receiver');
+  const senderIface = sender?.interfaces?.find((iface) => iface.name === senderIfs[0]);
+  const receiverIface = receiver?.interfaces?.find((iface) => iface.name === receiverIfs[0]);
   $('nodeGrid').innerHTML = `
     <div>
       <span>Sender</span>
-      <strong>${senderIface?.name || '-'}</strong>
+      <strong>${senderIfs.length > 1 ? `${senderIfs[0]} +${senderIfs.length - 1}` : senderIface?.name || '-'}</strong>
       <small>${sender?.url || '-'} ${senderIface?.ipv4?.[0]?.local || ''}</small>
     </div>
     <div>
       <span>Receiver</span>
-      <strong>${receiverIface?.name || '-'}</strong>
+      <strong>${receiverIfs.length > 1 ? `${receiverIfs[0]} +${receiverIfs.length - 1}` : receiverIface?.name || '-'}</strong>
       <small>${receiver?.url || '-'} ${receiverIface?.ipv4?.[0]?.local || ''}</small>
     </div>
   `;
@@ -1308,6 +1425,7 @@ async function probeNode(url, role) {
   });
   state.nodes[role] = { url: result.url, interfaces: result.interfaces };
   renderInterfaceOptions(role === 'sender' ? 'senderNodeInterface' : 'receiverNodeInterface', result.interfaces);
+  renderControlInterfacePicker(role, result.interfaces, $(controlSelectId(role))?.value || '');
 }
 
 async function probeNodes() {
@@ -1355,30 +1473,35 @@ async function runE2E() {
   try {
     await ensurePeerReady();
     syncControlFromPeer();
-    const senderUrl = $('senderNodeUrl').value;
-    const receiverUrl = $('receiverNodeUrl').value;
-    const senderIf = $('senderNodeInterface').value;
-    const receiverIf = $('receiverNodeInterface').value;
-    if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) throw new Error('Missing pair (peer not set?)');
+    const pairs = selectedControlPairs();
     const burst = Number($('e2eBurst').value || 5);
     const e2eInterval = Number($('e2eInterval').value || 200);
     const profile = { ...getProfile(), count: burst, intervalMs: e2eInterval };
-    const result = await api('/api/e2e-test', {
-      method: 'POST',
-      body: JSON.stringify({
-        senderUrl, receiverUrl,
-        senderInterface: senderIf,
-        receiverInterface: receiverIf,
-        profile,
-        timeoutSec: Math.max(5, Math.ceil((burst * e2eInterval) / 1000) + 3),
-        maxFrames: Math.max(50, burst + 20)
-      })
-    });
-    renderE2EReport(result.report);
-    const txCount = result.report.sent?.framesSent ?? burst;
-    setActionStatus('statusE2E', result.report.ok ? 'ok' : 'fail', `tx ${txCount} · rx ${result.report.matchCount}`);
-    prog.finish();
-    setStatus(`E2E ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.matchCount} matching frame(s)`, !result.report.ok);
+    prog.start(7 * pairs.length);
+    const results = [];
+    for (const [index, pair] of pairs.entries()) {
+      setStatus(`Running E2E ${index + 1}/${pairs.length}: ${pair.label}`);
+      const result = await api('/api/e2e-test', {
+        method: 'POST',
+        body: JSON.stringify({
+          senderUrl: pair.senderUrl,
+          receiverUrl: pair.receiverUrl,
+          senderInterface: pair.senderIf,
+          receiverInterface: pair.receiverIf,
+          profile,
+          timeoutSec: Math.max(5, Math.ceil((burst * e2eInterval) / 1000) + 3),
+          maxFrames: Math.max(50, burst + 20)
+        })
+      });
+      results.push({ pair, report: result.report });
+      renderE2EReport(result.report);
+    }
+    const pass = results.filter((item) => item.report.ok).length;
+    const matches = results.reduce((sum, item) => sum + Number(item.report.matchCount || 0), 0);
+    const ok = pass === results.length;
+    setActionStatus('statusE2E', ok ? 'ok' : 'fail', `${pass}/${results.length} pairs · ${matches} match`);
+    if (ok) prog.finish(); else prog.fail();
+    setStatus(`E2E ${ok ? 'PASS' : 'FAIL'}: ${pass}/${results.length} pair(s), ${matches} matching frame(s)`, !ok);
   } catch (err) {
     setActionStatus('statusE2E', 'fail', 'fail');
     prog.fail();
@@ -1398,24 +1521,35 @@ async function runReport() {
   try {
     await ensurePeerReady();
     syncControlFromPeer();
-    const result = await api('/api/wire-validation', {
-      method: 'POST',
-      body: JSON.stringify({
-        senderUrl: $('senderNodeUrl').value,
-        receiverUrl: $('receiverNodeUrl').value,
-        senderInterface: $('senderNodeInterface').value,
-        receiverInterface: $('receiverNodeInterface').value,
-        count: 2,
-        intervalMs: 100
-      })
-    });
-    const fail = result.report.summary.failed;
+    const pairs = selectedControlPairs();
+    prog.start(25 * pairs.length);
+    const results = [];
+    for (const [index, pair] of pairs.entries()) {
+      setStatus(`Running wire validation ${index + 1}/${pairs.length}: ${pair.label}`);
+      const result = await api('/api/wire-validation', {
+        method: 'POST',
+        body: JSON.stringify({
+          senderUrl: pair.senderUrl,
+          receiverUrl: pair.receiverUrl,
+          senderInterface: pair.senderIf,
+          receiverInterface: pair.receiverIf,
+          count: 2,
+          intervalMs: 100
+        })
+      });
+      results.push({ pair, report: result.report });
+    }
+    const lastReport = results.at(-1).report;
+    const failedPairs = results.filter((item) => !item.report.ok).length;
+    const framesSent = results.reduce((sum, item) => sum + Number(item.report.summary.framesSent || 0), 0);
+    const matched = results.reduce((sum, item) => sum + Number(item.report.summary.matched || 0), 0);
     $('reportSummary').innerHTML = `
-      <div><span>Status</span><strong>${result.report.ok ? 'PASS' : 'FAIL'}</strong></div>
-      <div><span>Sent</span><strong>${result.report.summary.framesSent}</strong></div>
-      <div><span>Matched</span><strong>${result.report.summary.matched}</strong></div>
+      <div><span>Status</span><strong>${failedPairs === 0 ? 'PASS' : 'FAIL'}</strong></div>
+      <div><span>Pairs</span><strong>${results.length - failedPairs}/${results.length}</strong></div>
+      <div><span>Sent</span><strong>${framesSent}</strong></div>
+      <div><span>Matched</span><strong>${matched}</strong></div>
     `;
-    $('reportRows').innerHTML = result.report.steps.map((step, index) => `
+    $('reportRows').innerHTML = lastReport.steps.map((step, index) => `
       <tr>
         <td>${index + 1}</td>
         <td>Wire</td>
@@ -1428,9 +1562,9 @@ async function runReport() {
     `).join('');
     $('openReport')?.classList.remove('disabled');
     $('openCaseReport')?.classList.remove('disabled');
-    setActionStatus('statusReport', fail === 0 ? 'ok' : 'fail', `${result.report.summary.matched}/${result.report.summary.framesSent}`);
-    prog.finish();
-    setStatus(`Wire validation ${result.report.ok ? 'PASS' : 'FAIL'}: ${result.report.summary.matched}/${result.report.summary.framesSent} matched`, fail > 0);
+    setActionStatus('statusReport', failedPairs === 0 ? 'ok' : 'fail', `${results.length - failedPairs}/${results.length} pairs`);
+    if (failedPairs === 0) prog.finish(); else prog.fail();
+    setStatus(`Wire validation ${failedPairs === 0 ? 'PASS' : 'FAIL'}: ${results.length - failedPairs}/${results.length} pair(s), ${matched}/${framesSent} matched`, failedPairs > 0);
   } catch (err) {
     setActionStatus('statusReport', 'fail', 'fail');
     prog.fail();
@@ -2389,44 +2523,47 @@ async function runBenchmark() {
   try {
     await ensurePeerReady();
     syncControlFromPeer();
-    const senderUrl = $('senderNodeUrl').value;
-    const receiverUrl = $('receiverNodeUrl').value;
-    const senderIf = $('senderNodeInterface').value;
-    const receiverIf = $('receiverNodeInterface').value;
-    if (!senderUrl || !receiverUrl || !senderIf || !receiverIf) {
-      throw new Error(`Missing pair: sender ${senderUrl || '?'}/${senderIf || '?'} -> receiver ${receiverUrl || '?'}/${receiverIf || '?'}`);
+    const pairs = selectedControlPairs();
+    prog.start(estSec * pairs.length);
+    const results = [];
+    for (const [index, pair] of pairs.entries()) {
+      setStatus(`Running benchmark ${index + 1}/${pairs.length}: ${pair.label}`);
+      const data = await api('/api/benchmark', {
+        method: 'POST',
+        body: JSON.stringify({
+          senderUrl: pair.senderUrl,
+          receiverUrl: pair.receiverUrl,
+          senderInterface: pair.senderIf,
+          receiverInterface: pair.receiverIf,
+          profile: getProfile(),
+          count: Number($('benchCount').value || 500),
+          intervalMs: Number($('benchInterval').value || 1),
+          payloadSize: Number($('benchPayloadSize').value || 64)
+        })
+      });
+      results.push({ pair, report: data.report });
     }
-    const res = await fetch('/api/benchmark', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        senderUrl, receiverUrl,
-        senderInterface: senderIf,
-        receiverInterface: receiverIf,
-        profile: getProfile(),
-        count: Number($('benchCount').value || 500),
-        intervalMs: Number($('benchInterval').value || 1),
-        payloadSize: Number($('benchPayloadSize').value || 64)
-      })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    const s = data.report.stats;
+    const last = results.at(-1).report;
+    const s = last.stats;
+    const pass = results.filter((item) => item.report.stats.rxCount > 0).length;
+    const totalRx = results.reduce((sum, item) => sum + Number(item.report.stats.rxCount || 0), 0);
+    const totalTx = results.reduce((sum, item) => sum + Number(item.report.stats.txCount || 0), 0);
     $('reportSummary').innerHTML = `
-      <div><span>Sent</span><strong>${s.txCount}</strong></div>
-      <div><span>Recv</span><strong>${s.rxCount}</strong></div>
-      <div><span>Loss</span><strong>${s.lossPct.toFixed(2)}%</strong></div>
+      <div><span>Pairs</span><strong>${pass}/${results.length}</strong></div>
+      <div><span>Sent</span><strong>${totalTx}</strong></div>
+      <div><span>Recv</span><strong>${totalRx}</strong></div>
+      <div><span>Last Loss</span><strong>${s.lossPct.toFixed(2)}%</strong></div>
       <div><span>Tx Mbps</span><strong>${s.throughputMbps.toFixed(2)}</strong></div>
       <div><span>Lat p95 µs (skew-adj.)</span><strong>${(s.latencyAdjustedUs?.p95||0).toFixed(1)}</strong></div>
       <div><span>Jitter µs</span><strong>${(s.jitterUs.mean||0).toFixed(2)}</strong></div>
     `;
-    const okFlag = s.rxCount > 0;
-    setActionStatus('statusBench', okFlag ? 'ok' : 'fail', `${s.rxCount}/${s.txCount} · ${s.throughputMbps.toFixed(1)}Mbps`);
+    const okFlag = pass === results.length;
+    setActionStatus('statusBench', okFlag ? 'ok' : 'fail', `${pass}/${results.length} pairs · ${totalRx}/${totalTx}`);
     if (okFlag) prog.finish(); else prog.fail();
-    setStatus(`Benchmark done: ${s.rxCount}/${s.txCount} rx, ${s.throughputMbps.toFixed(2)} Mbps`, !okFlag);
+    setStatus(`Benchmark done: ${pass}/${results.length} pair(s), ${totalRx}/${totalTx} rx`, !okFlag);
     if (okFlag) window.open('/reports/benchmark-latest.html', '_blank');
     else {
-      toast(`Benchmark received 0 packets — check link & peer.\n\nChecklist:\n - Wire/link between ${senderIf} and ${receiverIf} is up\n - Peer agent is reachable at ${receiverUrl}\n - Sender MAC ${state.interfaces.find(i=>i.name===senderIf)?.mac} matches what the peer expects\n\nThe benchmark always uses UDP+IPv4 internally regardless of the profile selected on the Sender tab.`);
+      toast(`One or more benchmark pairs received 0 packets. Check cable/link, selected Sender/Receiver NIC pairing, and peer agent reachability.\n\nThe benchmark always uses UDP+IPv4 internally regardless of the Sender-tab profile.`);
     }
   } catch (err) {
     setActionStatus('statusBench', 'fail', 'fail');
@@ -2452,23 +2589,31 @@ async function runRfc2544() {
   try {
     await ensurePeerReady();
     syncControlFromPeer();
-    const result = await api('/api/rfc2544', {
-      method: 'POST',
-      body: JSON.stringify({
-        senderUrl: $('senderNodeUrl').value,
-        receiverUrl: $('receiverNodeUrl').value,
-        senderInterface: $('senderNodeInterface').value,
-        receiverInterface: $('receiverNodeInterface').value,
-        trialDurationSec: trial,
-        linkRateMbps: link,
-        tolerancePps: tol
-      })
-    });
-    const sizes = result.report.results.length;
-    const avgUtil = (result.report.results.reduce((s, r) => s + (r.utilizationPct || 0), 0) / sizes).toFixed(1);
-    setActionStatus('statusRfc', 'ok', `${sizes} sizes · avg ${avgUtil}% util`);
+    const pairs = selectedControlPairs();
+    prog.start(estSec * pairs.length);
+    const results = [];
+    for (const [index, pair] of pairs.entries()) {
+      setStatus(`Running RFC 2544 ${index + 1}/${pairs.length}: ${pair.label}`);
+      const result = await api('/api/rfc2544', {
+        method: 'POST',
+        body: JSON.stringify({
+          senderUrl: pair.senderUrl,
+          receiverUrl: pair.receiverUrl,
+          senderInterface: pair.senderIf,
+          receiverInterface: pair.receiverIf,
+          trialDurationSec: trial,
+          linkRateMbps: link,
+          tolerancePps: tol
+        })
+      });
+      results.push({ pair, report: result.report });
+    }
+    const last = results.at(-1).report;
+    const sizes = last.results.length;
+    const avgUtil = (last.results.reduce((sum, r) => sum + (r.utilizationPct || 0), 0) / sizes).toFixed(1);
+    setActionStatus('statusRfc', 'ok', `${results.length} pair(s) · last avg ${avgUtil}%`);
     prog.finish();
-    setStatus(`RFC 2544 done: ${sizes} sizes, avg ${avgUtil}% utilization`);
+    setStatus(`RFC 2544 done: ${results.length} pair(s), last ${sizes} sizes, avg ${avgUtil}% utilization`);
     window.open('/reports/rfc2544-latest.html', '_blank');
   } catch (err) {
     setActionStatus('statusRfc', 'fail', 'fail');
@@ -2496,20 +2641,27 @@ async function runSweep() {
   try {
     await ensurePeerReady();
     syncControlFromPeer();
-    const result = await api('/api/sweep', {
-      method: 'POST',
-      body: JSON.stringify({
-        senderUrl: $('senderNodeUrl').value,
-        receiverUrl: $('receiverNodeUrl').value,
-        senderInterface: $('senderNodeInterface').value,
-        receiverInterface: $('receiverNodeInterface').value,
-        count, intervalMs
-      })
-    });
-    const sizes = result.report.results.length;
-    setActionStatus('statusSweep', 'ok', `${sizes} sizes`);
+    const pairs = selectedControlPairs();
+    prog.start(estSec * pairs.length);
+    const results = [];
+    for (const [index, pair] of pairs.entries()) {
+      setStatus(`Running sweep ${index + 1}/${pairs.length}: ${pair.label}`);
+      const result = await api('/api/sweep', {
+        method: 'POST',
+        body: JSON.stringify({
+          senderUrl: pair.senderUrl,
+          receiverUrl: pair.receiverUrl,
+          senderInterface: pair.senderIf,
+          receiverInterface: pair.receiverIf,
+          count, intervalMs
+        })
+      });
+      results.push({ pair, report: result.report });
+    }
+    const sizes = results.at(-1).report.results.length;
+    setActionStatus('statusSweep', 'ok', `${results.length} pair(s) · ${sizes} sizes`);
     prog.finish();
-    setStatus(`Sweep done: ${sizes} sizes`);
+    setStatus(`Sweep done: ${results.length} pair(s), ${sizes} sizes each`);
     window.open('/reports/sweep-latest.html', '_blank');
   } catch (err) {
     setActionStatus('statusSweep', 'fail', 'fail');
@@ -2704,22 +2856,26 @@ function renderPairCard() {
   const localUrl = window.location.origin;
   const peerUrl = state.peer.url || '';
   const senderIs = state.localRole === 'sender';
-  const sender = senderIs ? local : peer;
-  const receiver = senderIs ? peer : local;
+  const senderIfs = selectedControlInterfaces('sender');
+  const receiverIfs = selectedControlInterfaces('receiver');
+  const senderNode = state.nodes.sender;
+  const receiverNode = state.nodes.receiver;
+  const sender = senderNode?.interfaces?.find((iface) => iface.name === senderIfs[0]) || (senderIs ? local : peer);
+  const receiver = receiverNode?.interfaces?.find((iface) => iface.name === receiverIfs[0]) || (senderIs ? peer : local);
   const sUrl = senderIs ? localUrl : peerUrl;
   const rUrl = senderIs ? peerUrl : localUrl;
   const fmtMac = (m) => m || '--:--:--:--:--:--';
   const fmtIp = (i) => i?.ipv4?.[0]?.local || '-';
   if ($('ctrlSenderName')) {
-    $('ctrlSenderName').textContent = sender?.name || '— set in Interface picker —';
+    $('ctrlSenderName').textContent = senderIfs.length > 1 ? `${senderIfs[0]} +${senderIfs.length - 1}` : sender?.name || '— set in Interface picker —';
     $('ctrlSenderMac').textContent = fmtMac(sender?.mac);
     $('ctrlSenderIp').textContent = fmtIp(sender);
     $('ctrlSenderUrl').textContent = sUrl || '(this PC)';
-    $('ctrlReceiverName').textContent = receiver?.name || '— probe peer in the link strip above —';
+    $('ctrlReceiverName').textContent = receiverIfs.length > 1 ? `${receiverIfs[0]} +${receiverIfs.length - 1}` : receiver?.name || '— probe peer in the link strip above —';
     $('ctrlReceiverMac').textContent = fmtMac(receiver?.mac);
     $('ctrlReceiverIp').textContent = fmtIp(receiver);
     $('ctrlReceiverUrl').textContent = rUrl || '(peer not set)';
-    const ready = sender && receiver && sUrl && rUrl;
+    const ready = senderIfs.length && receiverIfs.length && sUrl && rUrl;
     $('pairWarning').classList.toggle('hidden', Boolean(ready));
     document.querySelector('.pairCard')?.classList.toggle('pairIncomplete', !ready);
   }
@@ -2746,10 +2902,12 @@ function syncControlFromPeer() {
   if (state.nodes.sender) {
     renderInterfaceOptions('senderNodeInterface', state.nodes.sender.interfaces);
     $('senderNodeInterface').value = state.localRole === 'sender' ? localIfName : peerIfName;
+    renderControlInterfacePicker('sender', state.nodes.sender.interfaces, $('senderNodeInterface').value);
   }
   if (state.nodes.receiver) {
     renderInterfaceOptions('receiverNodeInterface', state.nodes.receiver.interfaces);
     $('receiverNodeInterface').value = state.localRole === 'sender' ? peerIfName : localIfName;
+    renderControlInterfacePicker('receiver', state.nodes.receiver.interfaces, $('receiverNodeInterface').value);
   }
   renderNodeGrid();
   renderPairCard();
@@ -2779,6 +2937,8 @@ async function probePeer() {
   } else if (state.peer.interface && sorted.find((i) => i.name === state.peer.interface)) {
     sel.value = state.peer.interface;
   }
+  state.peer.interface = sel.value;
+  localStorage.setItem('peerInterface', state.peer.interface);
   state.peer.iface = sorted.find((i) => i.name === sel.value) || null;
   if (state.localRole === 'sender') state.nodes.receiver = { url, interfaces: result.interfaces };
   else state.nodes.sender = { url, interfaces: result.interfaces };
@@ -2859,6 +3019,7 @@ $('localInterfacePin')?.addEventListener('change', () => {
 });
 
 $('senderNodeInterface').addEventListener('change', () => {
+  setControlSingleSelection('sender', $('senderNodeInterface').value);
   if (state.localRole === 'sender') {
     const name = $('senderNodeInterface').value;
     if (state.interfaces.find((i) => i.name === name)) {
@@ -2880,6 +3041,7 @@ $('senderNodeInterface').addEventListener('change', () => {
 });
 
 $('receiverNodeInterface').addEventListener('change', () => {
+  setControlSingleSelection('receiver', $('receiverNodeInterface').value);
   if (state.localRole === 'receiver') {
     const name = $('receiverNodeInterface').value;
     if (state.interfaces.find((i) => i.name === name)) {

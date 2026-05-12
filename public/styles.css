@@ -1129,6 +1129,17 @@ body.serialMode .serialPane {
   box-shadow: 0 0 0 3px rgba(185, 101, 26, 0.08);
 }
 
+.controlIfaceMatrix {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+
+.controlIfaceMatrix .ifacePicker {
+  margin: 0;
+}
+
 .pairFlow {
   background: linear-gradient(135deg, #0ea5e9, #0f6f78);
   -webkit-background-clip: text;
@@ -1137,6 +1148,10 @@ body.serialMode .serialPane {
 }
 
 @media (max-width: 880px) {
+  .controlIfaceMatrix {
+    grid-template-columns: 1fr;
+  }
+
   .linkStrip {
     grid-template-columns: 1fr;
   }
