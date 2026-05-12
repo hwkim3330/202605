@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const DEFAULT_PEER_URL = 'http://169.254.5.7:8080';
 
 const state = {
   examples: {},
@@ -11,7 +12,7 @@ const state = {
     receiver: null
   },
   peer: {
-    url: localStorage.getItem('peerUrl') || '',
+    url: localStorage.getItem('peerUrl') || DEFAULT_PEER_URL,
     interface: localStorage.getItem('peerInterface') || '',
     interfaces: [],
     iface: null
@@ -1482,7 +1483,7 @@ function expandEscapes(s) {
     .replace(/\\r/g, '\r')
     .replace(/\\n/g, '\n')
     .replace(/\\t/g, '\t')
-    .replace(/\\0/g, ' ')
+    .replace(/\\0/g, '\0')
     .replace(HEX_ESCAPE_RE, (_m, h) => String.fromCharCode(parseInt(h, 16)));
 }
 
@@ -2573,6 +2574,14 @@ function firstV4(iface) {
   return iface?.ipv4?.find((a) => a.local && !a.local.includes(':'))?.local || '';
 }
 
+function hostFromUrl(value) {
+  try {
+    return new URL(value.startsWith('http') ? value : `http://${value}`).hostname;
+  } catch {
+    return '';
+  }
+}
+
 // Lock-to-peer was making srcMac/srcIp/dstMac/dstIp readOnly, which blocked
 // Send when the picker / form combo didn't match the peer-locked state.
 // Killed in favour of the new Sender interface picker (which auto-fills
@@ -2763,7 +2772,11 @@ async function probePeer() {
     const ip = i.ipv4?.[0]?.local || '';
     return `<option value="${i.name}">${i.name} (${i.state})${ip ? ' - ' + ip : ''}</option>`;
   }).join('');
-  if (state.peer.interface && sorted.find((i) => i.name === state.peer.interface)) {
+  const urlHost = hostFromUrl(url);
+  const urlMatchedInterface = sorted.find((i) => (i.ipv4 || []).some((addr) => addr.local === urlHost));
+  if (urlMatchedInterface) {
+    sel.value = urlMatchedInterface.name;
+  } else if (state.peer.interface && sorted.find((i) => i.name === state.peer.interface)) {
     sel.value = state.peer.interface;
   }
   state.peer.iface = sorted.find((i) => i.name === sel.value) || null;
