@@ -26,6 +26,7 @@ const state = {
     steps: []
   },
   selectedStep: -1,
+  controlFrames: [],
   localRole: localStorage.getItem('localRole') || 'sender',
   locked: false
 };
@@ -1561,7 +1562,8 @@ function renderControlPackets(frames, pairLabel = '') {
   const panel = $('controlPacketPanel');
   const rows = $('controlPacketRows');
   if (!panel || !rows) return;
-  const sample = (frames || []).slice(0, 80);
+  state.controlFrames = (frames || []).map((frame) => ({ ...frame, pairLabel: pairLabel || frame.pairLabel || '-' }));
+  const sample = state.controlFrames.slice(0, 80);
   rows.innerHTML = sample.map((frame, index) => {
     const decoded = frame.decoded || {};
     return `
@@ -1577,7 +1579,9 @@ function renderControlPackets(frames, pairLabel = '') {
       </tr>`;
   }).join('') || '<tr><td colspan="8" class="empty">No captured frames available for this run</td></tr>';
   $('controlPacketSummary').textContent = `${frames?.length || 0} frame(s)${frames?.length > sample.length ? ` · showing ${sample.length}` : ''}`;
+  panel.dataset.frameCount = String(frames?.length || 0);
   panel.classList.remove('hidden');
+  renderControlPacketCharts();
 }
 
 function appendControlPackets(frames, pairLabel = '') {
@@ -1589,7 +1593,9 @@ function appendControlPackets(frames, pairLabel = '') {
   const panel = $('controlPacketPanel');
   const rows = $('controlPacketRows');
   const currentCount = Number(panel.dataset.frameCount || existing);
-  const sample = (frames || []).slice(0, 40);
+  const tagged = (frames || []).map((frame) => ({ ...frame, pairLabel: pairLabel || frame.pairLabel || '-' }));
+  state.controlFrames.push(...tagged);
+  const sample = tagged.slice(0, 40);
   rows.insertAdjacentHTML('beforeend', sample.map((frame, offset) => {
     const decoded = frame.decoded || {};
     return `
@@ -1606,6 +1612,41 @@ function appendControlPackets(frames, pairLabel = '') {
   }).join(''));
   panel.dataset.frameCount = String(currentCount + (frames?.length || 0));
   $('controlPacketSummary').textContent = `${panel.dataset.frameCount} frame(s)`;
+  renderControlPacketCharts();
+}
+
+function renderControlPacketCharts() {
+  const frames = state.controlFrames || [];
+  renderMiniBarChart('controlProtocolChart', countBy(frames, (frame) => packetProtocol(frame.decoded || {})));
+  renderMiniBarChart('controlPairChart', countBy(frames, (frame) => frame.pairLabel || '-'));
+}
+
+function countBy(items, getKey) {
+  const out = new Map();
+  for (const item of items) {
+    const key = getKey(item) || '-';
+    out.set(key, (out.get(key) || 0) + 1);
+  }
+  return [...out.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+}
+
+function renderMiniBarChart(svgId, rows) {
+  const svg = $(svgId);
+  if (!svg) return;
+  if (!rows.length) {
+    svg.innerHTML = '<text x="180" y="64" text-anchor="middle" class="miniChartEmpty">No packets yet</text>';
+    return;
+  }
+  const max = Math.max(...rows.map(([, value]) => value), 1);
+  svg.innerHTML = rows.map(([label, value], index) => {
+    const y = 12 + index * 17;
+    const width = Math.max(4, Math.round((value / max) * 190));
+    return `
+      <text x="8" y="${y + 10}" class="miniChartLabel">${escapeHtml(label)}</text>
+      <rect x="130" y="${y}" width="${width}" height="11" rx="5" class="miniChartBar"></rect>
+      <text x="${136 + width}" y="${y + 10}" class="miniChartValue">${value}</text>
+    `;
+  }).join('');
 }
 
 async function apiReport(path, body) {

@@ -1604,6 +1604,54 @@ body.serialMode .serialPane {
   font-weight: 700;
 }
 
+.controlPacketViz {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfd;
+}
+
+.controlPacketViz > div {
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: #fff;
+}
+
+.controlPacketViz strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.controlPacketViz svg {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+
+.miniChartLabel {
+  fill: #62707f;
+  font: 10.5px ui-monospace, SFMono-Regular, monospace;
+}
+
+.miniChartBar {
+  fill: #0f6f78;
+}
+
+.miniChartValue {
+  fill: #18212b;
+  font: 700 10.5px ui-monospace, SFMono-Regular, monospace;
+}
+
+.miniChartEmpty {
+  fill: #94a3b8;
+  font: 12px system-ui, sans-serif;
+}
+
 .controlPacketScroll {
   max-height: 260px;
   overflow: auto;
@@ -1657,6 +1705,10 @@ body.serialMode .serialPane {
 
 @media (max-width: 880px) {
   .suiteCard {
+    grid-template-columns: 1fr;
+  }
+
+  .controlPacketViz {
     grid-template-columns: 1fr;
   }
 
