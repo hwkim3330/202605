@@ -1496,7 +1496,7 @@ function initControlRunBoard(title, pairs) {
   $('controlRunTitle').textContent = title;
   $('controlRunSummary').textContent = `${pairs.length} pair(s) queued`;
   cards.innerHTML = pairs.map((pair, index) => `
-    <div class="controlRunCard" data-run-index="${index}">
+    <div class="controlRunCard" data-run-index="${index}" data-topo-index="${pair.topoIndex ?? index}">
       <div class="controlRunPair">
         <strong>${escapeHtml(pair.label)}</strong>
         <span class="controlRunBadge">pending</span>
@@ -1531,7 +1531,7 @@ function updateControlRunCard(index, status, metrics = {}, error = '') {
     errEl.textContent = error || '';
     errEl.classList.toggle('hidden', !error);
   }
-  updateTopologyLinkStatus(index, status);
+  updateTopologyLinkStatus(card.dataset.topoIndex ?? index, status);
 }
 
 function updateTopologyLinkStatus(index, status) {
@@ -1563,13 +1563,22 @@ function renderControlPackets(frames, pairLabel = '') {
   const rows = $('controlPacketRows');
   if (!panel || !rows) return;
   state.controlFrames = (frames || []).map((frame) => ({ ...frame, pairLabel: pairLabel || frame.pairLabel || '-' }));
-  const sample = state.controlFrames.slice(0, 80);
-  rows.innerHTML = sample.map((frame, index) => {
+  paintControlPacketTable();
+}
+
+function paintControlPacketTable() {
+  const panel = $('controlPacketPanel');
+  const rows = $('controlPacketRows');
+  if (!panel || !rows) return;
+  const total = state.controlFrames.length;
+  const start = Math.max(0, total - 120);
+  const sample = state.controlFrames.slice(start);
+  rows.innerHTML = sample.map((frame, offset) => {
     const decoded = frame.decoded || {};
     return `
       <tr>
-        <td>${index + 1}</td>
-        <td>${escapeHtml(pairLabel || frame.pairLabel || '-')}</td>
+        <td>${start + offset + 1}</td>
+        <td>${escapeHtml(frame.pairLabel || '-')}</td>
         <td class="iface">${escapeHtml(frame.interface || '-')}</td>
         <td>${escapeHtml(packetProtocol(decoded))}</td>
         <td class="addr">${escapeHtml(packetSrc(decoded))}</td>
@@ -1578,41 +1587,20 @@ function renderControlPackets(frames, pairLabel = '') {
         <td class="hex" title="${escapeHtml(frame.frameHex || '')}">${escapeHtml((frame.frameHex || '').slice(0, 96))}</td>
       </tr>`;
   }).join('') || '<tr><td colspan="8" class="empty">No captured frames available for this run</td></tr>';
-  $('controlPacketSummary').textContent = `${frames?.length || 0} frame(s)${frames?.length > sample.length ? ` · showing ${sample.length}` : ''}`;
-  panel.dataset.frameCount = String(frames?.length || 0);
+  $('controlPacketSummary').textContent = `${total} frame(s)${total > sample.length ? ` · showing latest ${sample.length}` : ''}`;
+  panel.dataset.frameCount = String(total);
   panel.classList.remove('hidden');
   renderControlPacketCharts();
 }
 
 function appendControlPackets(frames, pairLabel = '') {
-  const existing = Array.from($('controlPacketRows')?.querySelectorAll('tr') || []).length;
-  if (!existing || $('controlPacketPanel')?.classList.contains('hidden')) {
+  if ($('controlPacketPanel')?.classList.contains('hidden')) {
     renderControlPackets(frames, pairLabel);
     return;
   }
-  const panel = $('controlPacketPanel');
-  const rows = $('controlPacketRows');
-  const currentCount = Number(panel.dataset.frameCount || existing);
   const tagged = (frames || []).map((frame) => ({ ...frame, pairLabel: pairLabel || frame.pairLabel || '-' }));
   state.controlFrames.push(...tagged);
-  const sample = tagged.slice(0, 40);
-  rows.insertAdjacentHTML('beforeend', sample.map((frame, offset) => {
-    const decoded = frame.decoded || {};
-    return `
-      <tr>
-        <td>${currentCount + offset + 1}</td>
-        <td>${escapeHtml(pairLabel || frame.pairLabel || '-')}</td>
-        <td class="iface">${escapeHtml(frame.interface || '-')}</td>
-        <td>${escapeHtml(packetProtocol(decoded))}</td>
-        <td class="addr">${escapeHtml(packetSrc(decoded))}</td>
-        <td class="addr">${escapeHtml(packetDst(decoded))}</td>
-        <td>${escapeHtml(frame.length ?? '-')}</td>
-        <td class="hex" title="${escapeHtml(frame.frameHex || '')}">${escapeHtml((frame.frameHex || '').slice(0, 96))}</td>
-      </tr>`;
-  }).join(''));
-  panel.dataset.frameCount = String(currentCount + (frames?.length || 0));
-  $('controlPacketSummary').textContent = `${panel.dataset.frameCount} frame(s)`;
-  renderControlPacketCharts();
+  paintControlPacketTable();
 }
 
 function renderControlPacketCharts() {
@@ -3119,9 +3107,10 @@ async function runFullSuite() {
     await ensurePeerReady();
     syncControlFromPeer();
     const pairs = selectedControlPairs();
-    const suiteItems = pairs.flatMap((pair) => controlSuiteStages(pair).map((stage) => ({
+    const suiteItems = pairs.flatMap((pair, pairIndex) => controlSuiteStages(pair).map((stage) => ({
       ...pair,
       stage,
+      topoIndex: pairIndex,
       label: `${stage.name}: ${pair.label}`
     })));
     initControlRunBoard('Full Lab Suite Progress', suiteItems);

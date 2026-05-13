@@ -1217,6 +1217,10 @@ async function runWireValidation(reqBody) {
     });
     steps.push({ kind: 'delay', name: 'Guard 100 ms', delayMs: 100 });
   }
+  const framesPerProfile = Math.max(1, Number(reqBody.count || 2));
+  const expectedFrames = steps
+    .filter((step) => step.kind === 'packet' && step.enabled !== false)
+    .reduce((sum, step) => sum + Math.max(1, Number(step.count || framesPerProfile)), 0);
   return runTestCase({
     ...reqBody,
     testCase: {
@@ -1225,7 +1229,8 @@ async function runWireValidation(reqBody) {
       description: 'On-wire ARP, ICMP, UDP, payload integrity, frame-size, VLAN, and PCP validation.',
       steps
     },
-    maxFrames: Number(reqBody.maxFrames || 500)
+    captureLeadMs: Number(reqBody.captureLeadMs || 250),
+    maxFrames: Number(reqBody.maxFrames || Math.max(2000, expectedFrames + 500))
   });
 }
 
