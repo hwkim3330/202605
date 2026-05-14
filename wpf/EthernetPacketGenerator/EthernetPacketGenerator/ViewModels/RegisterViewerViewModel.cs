@@ -6,6 +6,7 @@ namespace EthernetPacketGenerator.ViewModels;
 public class RegisterViewerViewModel : ViewModelBase
 {
     private readonly RegisterService _reg;
+    private readonly FdbService _fdbService;
 
     public SysControlViewModel  SysCtrl      { get; }
     public InterruptViewModel   Interrupt    { get; }
@@ -52,8 +53,24 @@ public class RegisterViewerViewModel : ViewModelBase
         Timestamp   = new TimestampViewModel(_reg);
         LedClock    = new LedClockViewModel(_reg);
         TestData    = new TestDataViewModel(_reg);
-        Fdb         = new FdbViewModel(new FdbService(_reg));
+        _fdbService = new FdbService(_reg);
+        Fdb         = new FdbViewModel(_fdbService);
         CountViewer = new CountViewerViewModel(serial);
         Mdio        = new MdioViewModel(new MdioService(_reg));
     }
+
+    public async Task<uint> ReadRegisterForApiAsync(uint offset) => await _reg.ReadAsync(offset);
+
+    public async Task WriteRegisterForApiAsync(uint offset, uint value) => await _reg.WriteAsync(offset, value);
+
+    public async Task<object?> FdbReadByMacForApiAsync(string mac, bool vlanValid, int vlanId) =>
+        await _fdbService.ReadEntryByMacAsync(mac, vlanValid, vlanId);
+
+    public async Task FdbWriteByMacForApiAsync(string mac, bool vlanValid, int vlanId, int port) =>
+        await _fdbService.WriteEntryByHashAsync(mac, vlanValid, vlanId, port);
+
+    public async Task FdbDeleteByMacForApiAsync(string mac, bool vlanValid, int vlanId) =>
+        await _fdbService.DeleteEntryByMacAsync(mac, vlanValid, vlanId);
+
+    public async Task FdbFlushForApiAsync() => await _fdbService.FlushAllAsync();
 }

@@ -23,6 +23,7 @@ public class FdbService
     private const uint OFF_MCU_PORT   = FDB_BASE + 0x24;   // 0xA24  [8:0]=Port
     private const uint OFF_MCU_BUCKET = FDB_BASE + 0x28;   // 0xA28  [9:0]=Bucket [19:16]=SlotBitmap
     private const uint OFF_MCU_CMD    = FDB_BASE + 0x2C;   // 0xA2C  [7:4]=Table [3:0]=Cmd
+    private const uint OFF_FDB_STATUS = FDB_BASE + 0x40;   // 0xA40  [0]=done_mac_table_init
     private const uint OFF_CMD_STATUS = FDB_BASE + 0x44;   // 0xA44  [2]=WR [1]=RD-Flood [0]=RD-MAC
     private const uint OFF_RD_BUCKET  = FDB_BASE + 0x48;   // 0xA48  [9:0]=Bucket [15:12]=Slot
     private const uint OFF_RD_PORT    = FDB_BASE + 0x4C;   // 0xA4C  [8:0]=Port
@@ -38,8 +39,9 @@ public class FdbService
     private const uint CMD_HASH_DELETE  = 0x16;   // MCU_MAC-Hash: MAC 주소로 해시 삭제
     private const uint CMD_FLUSH_ALL    = 0x70;   // 전체 MAC 테이블 초기화
 
-    private const uint STATUS_RD_MAC = 0x1;   // [0] RD-MAC-Table Result Valid
-    private const uint STATUS_WR_MAC = 0x4;   // [2] WR-MAC-Table Result Valid
+    private const uint STATUS_RD_MAC       = 0x1;   // 0xA44 [0] RD-MAC-Table Result Valid
+    private const uint STATUS_WR_MAC       = 0x4;   // 0xA44 [2] WR-MAC-Table Command Result Valid
+    private const uint STATUS_INIT_DONE    = 0x1;   // 0xA40 [0] done_mac_table_init
 
     public FdbService(RegisterService reg) => _reg = reg;
 
@@ -178,14 +180,15 @@ public class FdbService
     }
 
     // ── 전체 MAC 테이블 초기화 (CMD=0x70) ────────────────────────────────────
+    // 완료 판정: 0xA40 FDB_STATUS bit[0] done_mac_table_init 가 1 이 될 때까지 폴링
     public async Task FlushAllAsync(CancellationToken ct = default)
     {
         await _reg.WriteAsync(OFF_MCU_CMD, CMD_FLUSH_ALL);
         ct.ThrowIfCancellationRequested();
-        await PollStatusAsync(STATUS_WR_MAC, ct);
+        await PollFdbStatusAsync(STATUS_INIT_DONE, ct, timeoutMs: 2000);
     }
 
-    // ── CMD_STATUS 폴링 ───────────────────────────────────────────────────────
+    // ── 0xA44 CMD_STATUS 폴링 (Read/Write 명령 완료 대기) ────────────────────
     private async Task PollStatusAsync(uint bitMask, CancellationToken ct, int timeoutMs = 500)
     {
         var deadline = DateTime.Now.AddMilliseconds(timeoutMs);
@@ -196,7 +199,21 @@ public class FdbService
             if ((status & bitMask) != 0) return;
             await Task.Delay(10, ct);
         }
-        throw new TimeoutException("CMD_STATUS 폴링 타임아웃");
+        throw new TimeoutException($"CMD_STATUS(0xA44) 폴링 타임아웃 (mask=0x{bitMask:X})");
+    }
+
+    // ── 0xA40 FDB_STATUS 폴링 (Initialize 명령 완료 대기) ────────────────────
+    private async Task PollFdbStatusAsync(uint bitMask, CancellationToken ct, int timeoutMs = 2000)
+    {
+        var deadline = DateTime.Now.AddMilliseconds(timeoutMs);
+        while (DateTime.Now < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            var status = await _reg.ReadAsync(OFF_FDB_STATUS);
+            if ((status & bitMask) != 0) return;
+            await Task.Delay(10, ct);
+        }
+        throw new TimeoutException($"FDB_STATUS(0xA40) 폴링 타임아웃 (done_mac_table_init 미세트)");
     }
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────

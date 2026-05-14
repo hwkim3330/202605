@@ -56,20 +56,6 @@
     </Window.Resources>
 
     <DockPanel>
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_File">
-                <MenuItem Header="_New Packet" Command="{Binding PacketListVM.AddPacketCommand}"/>
-                <Separator/>
-                <MenuItem Header="_Save..." Command="{Binding SaveCommand}"/>
-                <MenuItem Header="_Open..." Command="{Binding LoadCommand}"/>
-                <Separator/>
-                <MenuItem Header="E_xit" Click="MenuExit_Click"/>
-            </MenuItem>
-            <MenuItem Header="_Tools">
-                <MenuItem Header="Refresh Interfaces" Command="{Binding SendVM.RefreshInterfacesCommand}"/>
-            </MenuItem>
-        </Menu>
-
         <StatusBar DockPanel.Dock="Bottom" Height="22">
             <StatusBarItem>
                 <TextBlock Text="{Binding SendVM.StartTime}" FontSize="11"/>
@@ -106,7 +92,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" MinHeight="400"/>
                             <RowDefinition Height="5"/>
-                            <RowDefinition Height="Auto" MinHeight="110"/>
+                            <RowDefinition Height="320" MinHeight="220"/>
                         </Grid.RowDefinitions>
 
                         <!-- BlockBuilder + HexDump / TreeDecode -->
@@ -145,7 +131,10 @@
                         </Grid>
 
                         <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
-                        <views:SendControlView Grid.Row="2" DataContext="{Binding SendVM}"/>
+
+                        <!-- PacketList — Send 버튼 없이 패킷 조작만 -->
+                        <views:PacketListView Grid.Row="2" DataContext="{Binding PacketListVM}"
+                                              ShowSendControls="False"/>
                     </Grid>
 
                     <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
@@ -164,22 +153,142 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="  Scenario Lab  " Style="{StaticResource NavTabItem}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="580" MinWidth="380"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*" MinWidth="380"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Test Cases panel -->
+                    <views:TestCaseManagerView Grid.Column="0" DataContext="{Binding TestCaseMgrVM}"/>
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{StaticResource BorderBrush}"/>
+
+                    <!-- Test Sequence + Terminal (Send 버튼은 PacketListView 툴바에 통합) -->
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="200"/>
+                            <RowDefinition Height="6"/>
+                            <RowDefinition Height="460" MinHeight="240"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Test Sequence list (Send 버튼 포함) -->
+                        <views:PacketListView Grid.Row="0" DataContext="{Binding PacketListVM}"/>
+
+                        <!-- GridSplitter handle -->
+                        <GridSplitter Grid.Row="1"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      Background="{StaticResource SurfaceAltBrush}"
+                                      BorderBrush="{StaticResource BorderBrush}"
+                                      ResizeDirection="Rows"
+                                      ResizeBehavior="PreviousAndNext"
+                                      Cursor="SizeNS">
+                            <GridSplitter.Template>
+                                <ControlTemplate TargetType="GridSplitter">
+                                    <Border Background="{StaticResource SurfaceAltBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="0,1">
+                                        <TextBlock Text="· · · · ·"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource BorderBrush}"
+                                                   FontSize="9"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </GridSplitter.Template>
+                        </GridSplitter>
+
+                        <!-- Terminal -->
+                        <Border Grid.Row="2"
+                                Background="{StaticResource SurfaceBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="0,1,0,0"
+                                ClipToBounds="True">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- 헤더 + Clear -->
+                                <DockPanel Grid.Row="0"
+                                           Background="{StaticResource SurfaceAltBrush}"
+                                           LastChildFill="False">
+                                    <TextBlock DockPanel.Dock="Left"
+                                               Text="TERMINAL"
+                                               Style="{StaticResource PanelHeader}"/>
+                                    <Button DockPanel.Dock="Right"
+                                            Content="Clear" Width="50"
+                                            Margin="4,2"
+                                            Command="{Binding ClearSequenceTerminalCommand}"/>
+                                </DockPanel>
+
+                                <!-- 출력 텍스트 -->
+                                <ScrollViewer Grid.Row="1"
+                                              x:Name="SequenceTerminalScroller"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Auto">
+                                    <TextBox Text="{Binding SequenceTerminalLog, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             TextWrapping="NoWrap"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             FontFamily="Consolas"
+                                             FontSize="12"
+                                             Foreground="{StaticResource ForegroundBrush}"
+                                             Padding="6"/>
+                                </ScrollViewer>
+
+                                <!-- 입력 바 -->
+                                <Border Grid.Row="2"
+                                        Background="{StaticResource SurfaceBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="0,1,0,0"
+                                        Padding="4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="&gt;"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   FontFamily="Consolas" FontSize="13"
+                                                   VerticalAlignment="Center" Margin="4,0,6,0"/>
+                                        <TextBox Grid.Column="1"
+                                                 x:Name="ScenarioInputBox"
+                                                 Text="{Binding HyperTerminalVM.InputText, UpdateSourceTrigger=PropertyChanged}"
+                                                 BorderThickness="0"
+                                                 Background="Transparent"
+                                                 VerticalAlignment="Center"
+                                                 KeyDown="ScenarioInputBox_KeyDown"/>
+                                        <Button Grid.Column="2" Content="전송" Width="60" Margin="4,0,0,0"
+                                                Command="{Binding HyperTerminalVM.SendLineCommand}"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="  Capture Address  " Style="{StaticResource NavTabItem}">
+                <views:NdjsonBridgeView DataContext="{Binding NdjsonBridgeVM}"/>
+            </TabItem>
+
             <!-- ── Tab 1: Capture (Wireshark-style) ─────────────────── -->
             <TabItem Header="  Capture  " Style="{StaticResource NavTabItem}">
                 <views:CaptureView DataContext="{Binding CaptureVM}"/>
             </TabItem>
 
-            <!-- ── Tab 2: Automation ─────────────────────────────────── -->
-            <TabItem Header="  Automation  " Style="{StaticResource NavTabItem}">
-                <views:AutomationView DataContext="{Binding AutomationVM}"/>
-            </TabItem>
-
-            <!-- ── Tab 3: HyperTerminal ──────────────────────────────── -->
+            <!-- ── Tab 2: HyperTerminal ──────────────────────────────── -->
             <TabItem Header="  HyperTerminal  " Style="{StaticResource NavTabItem}">
                 <views:HyperTerminalView DataContext="{Binding HyperTerminalVM}"/>
             </TabItem>
 
-            <!-- ── Tab 4: Settings (placeholder) ────────────────────── -->
+            <!-- ── Tab 3: Settings (placeholder) ────────────────────── -->
             <TabItem Header="  Settings  " Style="{StaticResource NavTabItem}">
                 <Border Background="{StaticResource BackgroundBrush}" Padding="24">
                     <StackPanel>

@@ -37,6 +37,9 @@ public sealed class LabApiServer : IDisposable
 
     /// <summary>App.xaml.cs 에서 주입 — /api/auto/* 엔드포인트에서 사용</summary>
     public AutomationViewModel? AutomationVm { get; set; }
+    public CaptureViewModel? CaptureVm { get; set; }
+    public HyperTerminalViewModel? HyperTerminalVm { get; set; }
+    public MainViewModel? MainVm { get; set; }
 
     // ── Packet Flow Monitor 상태 ──────────────────────────────────────────────
     private readonly PacketFlowMonitorService _pfm = new();
@@ -172,7 +175,7 @@ public sealed class LabApiServer : IDisposable
                 }
 
                 // CORS preflight
-                if (requestLine.StartsWith("OPTIONS", StringComparison.OrdinalIgnoreCase))
+                else if (requestLine.StartsWith("OPTIONS", StringComparison.OrdinalIgnoreCase))
                 {
                     var pre = "HTTP/1.1 204 No Content\r\n" +
                               "Access-Control-Allow-Origin: *\r\n" +
@@ -183,7 +186,7 @@ public sealed class LabApiServer : IDisposable
                     return;
                 }
 
-                if (requestLine.StartsWith("GET /api/interfaces", StringComparison.OrdinalIgnoreCase))
+                else if (requestLine.StartsWith("GET /api/interfaces", StringComparison.OrdinalIgnoreCase))
                 {
                     // activeInterfaces: IsActive 체크된 항목의 OS 인터페이스 이름 (MAC 매칭)
                     var activeNames = new JsonArray();
@@ -281,6 +284,124 @@ public sealed class LabApiServer : IDisposable
                 else if (requestLine.StartsWith("GET /api/auto/results", StringComparison.OrdinalIgnoreCase))
                 {
                     (responseBody, status) = HandleAutoResults();
+                }
+                else if (requestLine.StartsWith("GET /api/capture/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleCaptureStatus();
+                }
+                else if (requestLine.StartsWith("POST /api/capture/start", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleCaptureStart(body);
+                }
+                else if (requestLine.StartsWith("POST /api/capture/stop", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleCaptureStop();
+                }
+                else if (requestLine.StartsWith("POST /api/capture/clear", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleCaptureClear();
+                }
+                else if (requestLine.StartsWith("GET /api/capture/packets", StringComparison.OrdinalIgnoreCase))
+                {
+                    var path = requestLine.Split(' ')[1];
+                    (responseBody, status) = HandleCapturePackets(path);
+                }
+                else if (requestLine.StartsWith("GET /api/serial/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleSerialStatus();
+                }
+                else if (requestLine.StartsWith("POST /api/serial/connect", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleSerialConnect(body);
+                }
+                else if (requestLine.StartsWith("POST /api/serial/disconnect", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleSerialDisconnect();
+                }
+                else if (requestLine.StartsWith("POST /api/serial/send", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleSerialSend(body);
+                }
+                else if (requestLine.StartsWith("POST /api/serial/clear", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleSerialClear();
+                }
+                else if (requestLine.StartsWith("GET /api/register/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleRegisterStatus();
+                }
+                else if (requestLine.StartsWith("POST /api/register/read", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleRegisterReadAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("POST /api/register/write", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleRegisterWriteAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("POST /api/fdb/read", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleFdbReadAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("POST /api/fdb/write", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleFdbWriteAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("POST /api/fdb/delete", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleFdbDeleteAsync(body).ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("POST /api/fdb/flush", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = await HandleFdbFlushAsync().ConfigureAwait(false);
+                }
+                else if (requestLine.StartsWith("GET /api/app/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleAppStatus();
+                }
+                else if (requestLine.StartsWith("GET /api/testcases/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleTestCasesStatus();
+                }
+                else if (requestLine.StartsWith("POST /api/testcases/add-group", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleTestCasesAddGroup(body);
+                }
+                else if (requestLine.StartsWith("POST /api/testcases/add", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleTestCasesAdd(body);
+                }
+                else if (requestLine.StartsWith("POST /api/testcases/select", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleTestCasesSelect(body);
+                }
+                else if (requestLine.StartsWith("POST /api/testcases/save-current", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleTestCasesSaveCurrent();
+                }
+                else if (requestLine.StartsWith("POST /api/testcases/delete", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleTestCasesDelete(body);
+                }
+                else if (requestLine.StartsWith("GET /api/sequence/status", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandleSequenceStatus();
+                }
+                // ── Peer PC 프록시 ─────────────────────────────────────────────────
+                else if (requestLine.StartsWith("POST /api/peer/url", StringComparison.OrdinalIgnoreCase))
+                {
+                    (responseBody, status) = HandlePeerSetUrl(body);
+                }
+                else if (requestLine.StartsWith("GET /api/peer/url", StringComparison.OrdinalIgnoreCase))
+                {
+                    responseBody = System.Text.Json.JsonSerializer.Serialize(new { ok = true, url = _peerUrl });
+                    status = 200;
+                }
+                else if (urlPath.StartsWith("/api/peer/", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 나머지 /api/peer/** 는 모두 peer PC로 프록시
+                    var peerPath = "/api/" + urlPath["/api/peer/".Length..];
+                    var method = requestLine.Split(' ')[0];
+                    (responseBody, status) = await ProxyToPeerAsync(peerPath, method, body).ConfigureAwait(false);
                 }
                 else
                 {
@@ -943,6 +1064,480 @@ public sealed class LabApiServer : IDisposable
     }
 
     // ── Static file serving ───────────────────────────────────────────────────
+    private (string body, int status) HandleCaptureStatus()
+    {
+        if (CaptureVm == null)
+            return ("{\"ok\":false,\"error\":\"Capture not available\"}", 503);
+
+        bool running = false;
+        int total = 0;
+        string statusText = string.Empty;
+        var ifaceArray = new JsonArray();
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            running = CaptureVm.IsCapturing;
+            total = CaptureVm.TotalPackets;
+            statusText = CaptureVm.StatusText;
+            foreach (dynamic i in CaptureVm.GetInterfaceSnapshot())
+            {
+                ifaceArray.Add(new JsonObject
+                {
+                    ["name"] = i.Name,
+                    ["description"] = i.Description,
+                    ["displayName"] = i.DisplayName,
+                    ["state"] = i.State,
+                    ["selected"] = i.IsSelected
+                });
+            }
+        });
+
+        return (new JsonObject
+        {
+            ["ok"] = true,
+            ["running"] = running,
+            ["totalPackets"] = total,
+            ["statusText"] = statusText,
+            ["interfaces"] = ifaceArray
+        }.ToJsonString(), 200);
+    }
+
+    private (string body, int status) HandleCaptureStart(string jsonBody)
+    {
+        if (CaptureVm == null)
+            return ("{\"ok\":false,\"error\":\"Capture not available\"}", 503);
+
+        try
+        {
+            var req = JsonNode.Parse(string.IsNullOrWhiteSpace(jsonBody) ? "{}" : jsonBody) as JsonObject ?? new JsonObject();
+            var names = req["interfaces"]?.AsArray()
+                .Select(n => n?.GetValue<string>() ?? string.Empty)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList() ?? new List<string>();
+
+            System.Windows.Application.Current.Dispatcher.Invoke(() => CaptureVm.StartCapture(names));
+            return ("{\"ok\":true,\"status\":\"started\"}", 200);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+
+    private (string body, int status) HandleCaptureStop()
+    {
+        if (CaptureVm == null)
+            return ("{\"ok\":false,\"error\":\"Capture not available\"}", 503);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() => CaptureVm.StopCapture());
+        return ("{\"ok\":true,\"status\":\"stopped\"}", 200);
+    }
+
+    private (string body, int status) HandleCaptureClear()
+    {
+        if (CaptureVm == null)
+            return ("{\"ok\":false,\"error\":\"Capture not available\"}", 503);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() => CaptureVm.ClearCapture());
+        return ("{\"ok\":true,\"status\":\"cleared\"}", 200);
+    }
+
+    private (string body, int status) HandleCapturePackets(string path)
+    {
+        if (CaptureVm == null)
+            return ("{\"ok\":false,\"error\":\"Capture not available\"}", 503);
+
+        int limit = 500;
+        var qIndex = path.IndexOf('?');
+        if (qIndex >= 0)
+        {
+            foreach (var part in path[(qIndex + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length == 2 && kv[0].Equals("limit", StringComparison.OrdinalIgnoreCase) && int.TryParse(kv[1], out var parsed))
+                    limit = Math.Clamp(parsed, 1, 5000);
+            }
+        }
+
+        List<EthernetPacketGenerator.Models.CaptureRow> rows = new();
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            rows = CaptureVm.GetPacketsSnapshot(limit);
+        });
+
+        var arr = new JsonArray();
+        foreach (var r in rows)
+        {
+            arr.Add(new JsonObject
+            {
+                ["no"] = r.No,
+                ["time"] = r.Time,
+                ["interfaceName"] = r.InterfaceName,
+                ["srcMac"] = r.SrcMac,
+                ["dstMac"] = r.DstMac,
+                ["source"] = r.Source,
+                ["destination"] = r.Destination,
+                ["protocol"] = r.Protocol,
+                ["length"] = r.Length,
+                ["info"] = r.Info,
+                ["detailText"] = r.DetailText,
+                ["hexDump"] = r.HexDump
+            });
+        }
+
+        return (new JsonObject { ["ok"] = true, ["rows"] = arr }.ToJsonString(), 200);
+    }
+
+    private (string body, int status) HandleSerialStatus()
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Serial terminal not available\"}", 503);
+
+        object snapshot = new();
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            snapshot = HyperTerminalVm.GetSnapshot();
+        });
+
+        return (System.Text.Json.JsonSerializer.Serialize(new { ok = true, terminal = snapshot }), 200);
+    }
+
+    private (string body, int status) HandleSerialConnect(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Serial terminal not available\"}", 503);
+
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var port = req["port"]?.GetValue<string>() ?? string.Empty;
+            var baud = req["baudRate"]?.GetValue<int>() ?? 115200;
+            System.Windows.Application.Current.Dispatcher.Invoke(() => HyperTerminalVm.ConnectForApi(port, baud));
+            return ("{\"ok\":true,\"status\":\"connected\"}", 200);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+
+    private (string body, int status) HandleSerialDisconnect()
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Serial terminal not available\"}", 503);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() => HyperTerminalVm.DisconnectForApi());
+        return ("{\"ok\":true,\"status\":\"disconnected\"}", 200);
+    }
+
+    private (string body, int status) HandleSerialSend(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Serial terminal not available\"}", 503);
+
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var text = req["text"]?.GetValue<string>() ?? string.Empty;
+            System.Windows.Application.Current.Dispatcher.Invoke(() => HyperTerminalVm.SendForApi(text));
+            return ("{\"ok\":true,\"status\":\"sent\"}", 200);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+
+    private (string body, int status) HandleSerialClear()
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Serial terminal not available\"}", 503);
+
+        System.Windows.Application.Current.Dispatcher.Invoke(() => HyperTerminalVm.ClearForApi());
+        return ("{\"ok\":true,\"status\":\"cleared\"}", 200);
+    }
+
+    private (string body, int status) HandleRegisterStatus()
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Register viewer not available\"}", 503);
+
+        string baseAddress = string.Empty;
+        bool connected = false;
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            baseAddress = HyperTerminalVm.RegisterViewerVM.BaseAddressHex;
+            connected = HyperTerminalVm.IsConnected;
+        });
+
+        return (new JsonObject
+        {
+            ["ok"] = true,
+            ["serialConnected"] = connected,
+            ["baseAddress"] = baseAddress
+        }.ToJsonString(), 200);
+    }
+
+    private async Task<(string body, int status)> HandleRegisterReadAsync(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Register viewer not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var offset = ParseUInt(req["offset"]?.GetValue<string>() ?? "0");
+            uint value = 0;
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                value = await HyperTerminalVm.RegisterViewerVM.ReadRegisterForApiAsync(offset);
+            });
+            return (new JsonObject { ["ok"] = true, ["offset"] = $"0x{offset:X}", ["value"] = $"0x{value:X8}", ["valueDec"] = value }.ToJsonString(), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private async Task<(string body, int status)> HandleRegisterWriteAsync(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"Register viewer not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var offset = ParseUInt(req["offset"]?.GetValue<string>() ?? "0");
+            var value = ParseUInt(req["value"]?.GetValue<string>() ?? "0");
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await HyperTerminalVm.RegisterViewerVM.WriteRegisterForApiAsync(offset, value);
+            });
+            return ("{\"ok\":true,\"status\":\"written\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private async Task<(string body, int status)> HandleFdbReadAsync(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"FDB not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var mac = req["mac"]?.GetValue<string>() ?? string.Empty;
+            var vlanValid = req["vlanValid"]?.GetValue<bool>() ?? false;
+            var vlanId = req["vlanId"]?.GetValue<int>() ?? 0;
+            object? entry = null;
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                entry = await HyperTerminalVm.RegisterViewerVM.FdbReadByMacForApiAsync(mac, vlanValid, vlanId);
+            });
+            return (System.Text.Json.JsonSerializer.Serialize(new { ok = true, found = entry != null, entry }), 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private async Task<(string body, int status)> HandleFdbWriteAsync(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"FDB not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var mac = req["mac"]?.GetValue<string>() ?? string.Empty;
+            var vlanValid = req["vlanValid"]?.GetValue<bool>() ?? false;
+            var vlanId = req["vlanId"]?.GetValue<int>() ?? 0;
+            var port = req["port"]?.GetValue<int>() ?? 1;
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await HyperTerminalVm.RegisterViewerVM.FdbWriteByMacForApiAsync(mac, vlanValid, vlanId, port);
+            });
+            return ("{\"ok\":true,\"status\":\"fdb-written\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private async Task<(string body, int status)> HandleFdbDeleteAsync(string jsonBody)
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"FDB not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var mac = req["mac"]?.GetValue<string>() ?? string.Empty;
+            var vlanValid = req["vlanValid"]?.GetValue<bool>() ?? false;
+            var vlanId = req["vlanId"]?.GetValue<int>() ?? 0;
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await HyperTerminalVm.RegisterViewerVM.FdbDeleteByMacForApiAsync(mac, vlanValid, vlanId);
+            });
+            return ("{\"ok\":true,\"status\":\"fdb-deleted\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private async Task<(string body, int status)> HandleFdbFlushAsync()
+    {
+        if (HyperTerminalVm == null)
+            return ("{\"ok\":false,\"error\":\"FDB not available\"}", 503);
+        try
+        {
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                await HyperTerminalVm.RegisterViewerVM.FdbFlushForApiAsync();
+            });
+            return ("{\"ok\":true,\"status\":\"fdb-flushed\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private static uint ParseUInt(string value)
+    {
+        var text = value.Trim();
+        return text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? Convert.ToUInt32(text[2..], 16)
+            : Convert.ToUInt32(text, 10);
+    }
+
+    private (string body, int status) HandleAppStatus()
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"App not available\"}", 503);
+
+        object payload = new();
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            payload = new
+            {
+                ok = true,
+                selectedTabIndex = MainVm.SelectedTabIndex,
+                packetCount = MainVm.PacketListVM.Sequence.Count,
+                capture = new { MainVm.CaptureVM.IsCapturing, MainVm.CaptureVM.TotalPackets },
+                serial = new { MainVm.HyperTerminalVM.IsConnected, MainVm.HyperTerminalVM.ConnectionStatus }
+            };
+        });
+
+        return (System.Text.Json.JsonSerializer.Serialize(payload), 200);
+    }
+
+    private (string body, int status) HandleTestCasesStatus()
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Test cases not available\"}", 503);
+
+        object snapshot = new();
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            snapshot = MainVm.TestCaseMgrVM.GetSnapshotForApi();
+        });
+        return (System.Text.Json.JsonSerializer.Serialize(new { ok = true, testCases = snapshot }), 200);
+    }
+
+    private (string body, int status) HandleTestCasesAddGroup(string jsonBody)
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Test cases not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(string.IsNullOrWhiteSpace(jsonBody) ? "{}" : jsonBody) as JsonObject ?? new JsonObject();
+            var name = req["name"]?.GetValue<string>();
+            System.Windows.Application.Current.Dispatcher.Invoke(() => MainVm.TestCaseMgrVM.AddGroupForApi(name));
+            return ("{\"ok\":true,\"status\":\"group-added\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private (string body, int status) HandleTestCasesAdd(string jsonBody)
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Test cases not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var groupIndex = req["groupIndex"]?.GetValue<int>() ?? 0;
+            var name = req["name"]?.GetValue<string>();
+            System.Windows.Application.Current.Dispatcher.Invoke(() => MainVm.TestCaseMgrVM.AddTestCaseForApi(groupIndex, name));
+            return ("{\"ok\":true,\"status\":\"testcase-added\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private (string body, int status) HandleTestCasesSelect(string jsonBody)
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Test cases not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var groupIndex = req["groupIndex"]?.GetValue<int>() ?? 0;
+            var testCaseIndex = req["testCaseIndex"]?.GetValue<int>() ?? 0;
+            System.Windows.Application.Current.Dispatcher.Invoke(() => MainVm.TestCaseMgrVM.SelectTestCaseForApi(groupIndex, testCaseIndex));
+            return ("{\"ok\":true,\"status\":\"testcase-selected\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private (string body, int status) HandleTestCasesSaveCurrent()
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Test cases not available\"}", 503);
+        try
+        {
+            System.Windows.Application.Current.Dispatcher.Invoke(() => MainVm.TestCaseMgrVM.SaveCurrentToSelectedForApi());
+            return ("{\"ok\":true,\"status\":\"current-saved\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private (string body, int status) HandleTestCasesDelete(string jsonBody)
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Test cases not available\"}", 503);
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var groupIndex = req["groupIndex"]?.GetValue<int>() ?? 0;
+            if (req["testCaseIndex"] is JsonNode tcNode)
+            {
+                var testCaseIndex = tcNode.GetValue<int>();
+                System.Windows.Application.Current.Dispatcher.Invoke(() => MainVm.TestCaseMgrVM.DeleteTestCaseForApi(groupIndex, testCaseIndex));
+            }
+            else
+            {
+                System.Windows.Application.Current.Dispatcher.Invoke(() => MainVm.TestCaseMgrVM.DeleteGroupForApi(groupIndex));
+            }
+            return ("{\"ok\":true,\"status\":\"deleted\"}", 200);
+        }
+        catch (Exception ex) { return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400); }
+    }
+
+    private (string body, int status) HandleSequenceStatus()
+    {
+        if (MainVm == null)
+            return ("{\"ok\":false,\"error\":\"Sequence not available\"}", 503);
+
+        object payload = new();
+        System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            payload = new
+            {
+                ok = true,
+                count = MainVm.PacketListVM.Sequence.Count,
+                items = MainVm.PacketListVM.Sequence.Select(s => new
+                {
+                    s.Index,
+                    kind = s.Kind.ToString(),
+                    s.IsChecked,
+                    name = s.DisplayName,
+                    source = s.DisplaySrcMac,
+                    destination = s.DisplayDstMac,
+                    protocol = s.DisplayProtocol,
+                    description = s.DisplayDescription,
+                    iface = s.DisplayInterface
+                }).ToList()
+            };
+        });
+
+        return (System.Text.Json.JsonSerializer.Serialize(payload), 200);
+    }
+
     private async Task ServeStaticAsync(NetworkStream stream, string urlPath)
     {
         string filePath;
@@ -996,6 +1591,52 @@ public sealed class LabApiServer : IDisposable
         ".svg"  => "image/svg+xml",
         _       => "application/octet-stream"
     };
+
+    // ── Peer PC 프록시 (두 PC 상호제어) ──────────────────────────────────────
+    private string _peerUrl = string.Empty;
+    private static readonly System.Net.Http.HttpClient _httpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(10)
+    };
+
+    private (string body, int status) HandlePeerSetUrl(string jsonBody)
+    {
+        try
+        {
+            var req = JsonNode.Parse(jsonBody) as JsonObject ?? new JsonObject();
+            var url = req["url"]?.GetValue<string>() ?? string.Empty;
+            _peerUrl = url.TrimEnd('/');
+            return (System.Text.Json.JsonSerializer.Serialize(new { ok = true, url = _peerUrl }), 200);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 400);
+        }
+    }
+
+    private async Task<(string body, int status)> ProxyToPeerAsync(string peerPath, string method, string body)
+    {
+        if (string.IsNullOrWhiteSpace(_peerUrl))
+            return ("{\"ok\":false,\"error\":\"Peer URL not set. Call POST /api/peer/url first.\"}", 400);
+
+        try
+        {
+            var url = _peerUrl + peerPath;
+            using var req = new System.Net.Http.HttpRequestMessage(
+                new System.Net.Http.HttpMethod(method), url);
+
+            if (method != "GET" && !string.IsNullOrWhiteSpace(body))
+                req.Content = new System.Net.Http.StringContent(body, Encoding.UTF8, "application/json");
+
+            using var resp = await _httpClient.SendAsync(req).ConfigureAwait(false);
+            var respBody = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            return (respBody, (int)resp.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            return ($"{{\"ok\":false,\"error\":{System.Text.Json.JsonSerializer.Serialize(ex.Message)}}}", 502);
+        }
+    }
 
     public void Dispose()
     {

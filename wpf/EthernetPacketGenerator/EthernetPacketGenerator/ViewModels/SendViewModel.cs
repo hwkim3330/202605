@@ -17,6 +17,7 @@ public class SendViewModel : ViewModelBase
     private readonly RegisterService    _reg;
     private readonly FdbService         _fdb;
     private Action<string>?             _logCallback;
+    private Func<PacketItem, CancellationToken, Task<string?>>? _packetValidationCallback;
     private ILiveDevice? _selectedInterface;
     private ObservableCollection<SequenceItem>? _sequence;
 
@@ -104,7 +105,7 @@ public class SendViewModel : ViewModelBase
 
     private void SyncLabServer()
     {
-        if (System.Windows.Application.Current is not App app) return;
+        if (System.Windows.Application.Current is not App app || app.LabServer == null) return;
         var def = InterfaceEntries.FirstOrDefault(e => e.IsDefault);
         app.LabServer.SelectedInterfaceName  = GetShortName(def?.Device ?? _selectedInterface);
         app.LabServer.ActiveDevice           = def?.Device ?? _selectedInterface;
@@ -216,6 +217,8 @@ public class SendViewModel : ViewModelBase
     public ICommand RefreshInterfacesCommand { get; }
 
     public void SetLogCallback(Action<string> log) => _logCallback = log;
+    public void SetPacketValidationCallback(Func<PacketItem, CancellationToken, Task<string?>> callback) =>
+        _packetValidationCallback = callback;
 
     public SendViewModel(SerialPortService serial)
     {
@@ -234,11 +237,11 @@ public class SendViewModel : ViewModelBase
                 StartTime = $"Error: {msg}");
 
         SendSelectedCommand = new RelayCommand(ToggleSendSelected,
-            () => !IsSendingList && SelectedInterface != null &&
-                  (_sequence?.Any(s => s.IsChecked && s.Kind == SequenceItemKind.Packet) ?? false));
+            () => IsSendingSelected ||
+                  (_serial.IsOpen && (_sequence?.Any() ?? false)));
         SendListCommand = new RelayCommand(ToggleSendList,
-            () => !IsSendingSelected && SelectedInterface != null &&
-                  (_sequence?.Any(s => s.Kind == SequenceItemKind.Packet) ?? false));
+            () => IsSendingList ||
+                  (_serial.IsOpen && (_sequence?.Any() ?? false)));
         RefreshInterfacesCommand = new RelayCommand(LoadInterfaces);
 
         LoadInterfaces();
@@ -265,6 +268,9 @@ public class SendViewModel : ViewModelBase
         if (e.OldItems != null) foreach (SequenceItem i in e.OldItems) UnsubscribeItem(i);
         if (e.NewItems != null) foreach (SequenceItem i in e.NewItems) SubscribeItem(i);
         RecalcEstimatedTime();
+        System.Windows.Application.Current?.Dispatcher.InvokeAsync(
+            CommandManager.InvalidateRequerySuggested,
+            System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void SubscribeItem(SequenceItem item)
@@ -282,7 +288,13 @@ public class SendViewModel : ViewModelBase
     }
 
     private void OnSequenceItemChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        => RecalcEstimatedTime();
+    {
+        RecalcEstimatedTime();
+        if (e.PropertyName == nameof(SequenceItem.IsChecked))
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(
+                CommandManager.InvalidateRequerySuggested,
+                System.Windows.Threading.DispatcherPriority.Background);
+    }
 
     private void OnPacketChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -344,14 +356,10 @@ public class SendViewModel : ViewModelBase
 
                     if (item.Kind == SequenceItemKind.Packet && item.Packet != null)
                     {
-                        var targets = await System.Windows.Application.Current.Dispatcher
-                            .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceNames));
-                        foreach (var entry in targets)
-                            if (entry.Device != null)
-                                _sendService.SendOnce(item.Packet.FullBytes, entry.Device);
+                        await SendPacketWithValidationAsync(item.Packet, token).ConfigureAwait(false);
                     }
                     else if (item.Kind == SequenceItemKind.Event && item.Event != null)
-                        cancelled = !await ExecuteEventAsync(item.Event, token);
+                        cancelled = !await ExecuteEventWithTerminalLogAsync(item.Event, token);
                 }
 
             } while (!cancelled && RepeatEnabled && !token.IsCancellationRequested);
@@ -406,16 +414,12 @@ public class SendViewModel : ViewModelBase
 
                 if (item.Kind == SequenceItemKind.Packet && item.Packet != null)
                 {
-                    var targets = await System.Windows.Application.Current.Dispatcher
-                        .InvokeAsync(() => GetSendTargets(item.Packet.OutgoingInterfaceNames));
-                    foreach (var entry in targets)
-                        if (entry.Device != null)
-                            _sendService.SendOnce(item.Packet.FullBytes, entry.Device);
+                    await SendPacketWithValidationAsync(item.Packet, token).ConfigureAwait(false);
                 }
                 else if (item.Kind == SequenceItemKind.Event && item.Event != null)
                 {
-                    try { await Task.Delay(item.Event.DelayMs, token).ConfigureAwait(false); }
-                    catch (OperationCanceledException) { cancelled = true; break; }
+                    cancelled = !await ExecuteEventWithTerminalLogAsync(item.Event, token).ConfigureAwait(false);
+                    if (cancelled) break;
                 }
             }
 
@@ -464,6 +468,240 @@ public class SendViewModel : ViewModelBase
             IsSendingList = false;
             EndSendStats();
         });
+    }
+
+    private async Task SendPacketWithValidationAsync(PacketItem packet, CancellationToken token)
+    {
+        var targets = await System.Windows.Application.Current.Dispatcher
+            .InvokeAsync(() => GetSendTargets(packet.OutgoingInterfaceNames));
+        var sentTargets = new List<string>();
+
+        foreach (var entry in targets)
+        {
+            if (entry.Device == null) continue;
+            _sendService.SendOnce(packet.FullBytes, entry.Device);
+            sentTargets.Add(entry.ShortName);
+        }
+
+        Log($"[Packet TX] name={packet.Name}, dst={packet.DstMac}, len={packet.TotalLength}, iface={string.Join(", ", sentTargets)}");
+
+        if (_packetValidationCallback == null) return;
+
+        try
+        {
+            var validation = await _packetValidationCallback(packet, token).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(validation))
+                Log(validation);
+        }
+        catch (OperationCanceledException)
+        {
+            Log($"[PacketCheck STOP] name={packet.Name}, canceled");
+        }
+        catch (Exception ex)
+        {
+            Log($"[PacketCheck FAIL] name={packet.Name}, error={ex.Message}");
+        }
+    }
+
+    private async Task<bool> ExecuteEventWithTerminalLogAsync(SequenceEvent ev, CancellationToken token)
+    {
+        switch (ev.EventType)
+        {
+            case SequenceEventType.Delay:
+                Log($"[Delay START] {ev.DelayMs} ms");
+                try
+                {
+                    await Task.Delay(ev.DelayMs, token).ConfigureAwait(false);
+                    Log($"[Delay PASS] {ev.DelayMs} ms");
+                    return true;
+                }
+                catch (OperationCanceledException)
+                {
+                    Log("[Delay STOP] canceled");
+                    return false;
+                }
+
+            case SequenceEventType.RegWrite:
+                if (!EnsureSerialOpen("RegWrite")) return true;
+                try
+                {
+                    Log($"[RegWrite START] addr=0x{ev.Address:X8}, value=0x{ev.Value:X8}");
+                    var r = await _serial.SendCommandAsync($"write 0x{ev.Address:X} 0x{ev.Value:X8}");
+                    Log($"[RegWrite PASS] addr=0x{ev.Address:X8}, value=0x{ev.Value:X8}, response={r}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"[RegWrite FAIL] addr=0x{ev.Address:X8}, error={ex.Message}");
+                }
+                return true;
+
+            case SequenceEventType.RegRead:
+                if (!EnsureSerialOpen("RegRead")) return true;
+                try
+                {
+                    Log($"[RegRead START] addr=0x{ev.Address:X8}");
+                    var r = await _serial.SendCommandAsync($"read 0x{ev.Address:X}");
+                    Log($"[RegRead PASS] addr=0x{ev.Address:X8}, response={r}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"[RegRead FAIL] addr=0x{ev.Address:X8}, error={ex.Message}");
+                }
+                return true;
+
+            case SequenceEventType.RegWaitFor:
+                if (!EnsureSerialOpen("RegWait")) return true;
+                return await WaitRegisterConditionAsync(
+                    "RegWait",
+                    ev.Address,
+                    ev.Mask,
+                    ev.Expected,
+                    ev.TimeoutMs,
+                    token).ConfigureAwait(false);
+
+            case SequenceEventType.FdbWrite:
+                if (!EnsureSerialOpen("FdbWrite")) return true;
+                try
+                {
+                    var portBits = Convert.ToString(ev.Port, 2).PadLeft(4, '0');
+                    Log($"[FdbWrite START] mac={ev.MacAddress}, port=0b{portBits}, vlan={(ev.VlanValid ? ev.VlanId.ToString() : "none")}");
+                    await _fdb.WriteEntryByHashAsync(ev.MacAddress, ev.VlanValid, ev.VlanId, ev.Port, token);
+                    Log($"[FdbWrite PASS] mac={ev.MacAddress}, port=0b{portBits}");
+                }
+                catch (OperationCanceledException)
+                {
+                    Log("[FdbWrite STOP] canceled");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    Log($"[FdbWrite FAIL] mac={ev.MacAddress}, error={ex.Message}");
+                }
+                return true;
+
+            case SequenceEventType.FdbRead:
+                if (!EnsureSerialOpen("FdbRead")) return true;
+                try
+                {
+                    Log($"[FdbRead START] mac={ev.MacAddress}, vlan={(ev.VlanValid ? ev.VlanId.ToString() : "none")}");
+                    var entry = await _fdb.ReadEntryByMacAsync(ev.MacAddress, ev.VlanValid, ev.VlanId, token);
+                    if (entry != null)
+                    {
+                        var portBits = Convert.ToString(entry.Port, 2).PadLeft(4, '0');
+                        Log($"[FdbRead PASS] mac={ev.MacAddress}, port=0b{portBits}, static={entry.StaticDisplay}");
+                    }
+                    else
+                    {
+                        Log($"[FdbRead MISS] mac={ev.MacAddress}, entry not found");
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    Log("[FdbRead STOP] canceled");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    Log($"[FdbRead FAIL] mac={ev.MacAddress}, error={ex.Message}");
+                }
+                return true;
+
+            case SequenceEventType.FdbWaitFor:
+                if (!EnsureSerialOpen("FdbWait")) return true;
+                return await WaitRegisterConditionAsync(
+                    "FdbWait",
+                    ev.Address,
+                    ev.Mask,
+                    ev.Expected,
+                    ev.TimeoutMs,
+                    token).ConfigureAwait(false);
+
+            case SequenceEventType.FdbFlush:
+                if (!EnsureSerialOpen("FdbFlush")) return true;
+                try
+                {
+                    Log("[FdbFlush START] clear all FDB entries");
+                    await _fdb.FlushAllAsync(token);
+                    Log("[FdbFlush PASS] all FDB entries cleared");
+                }
+                catch (OperationCanceledException)
+                {
+                    Log("[FdbFlush STOP] canceled");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    Log($"[FdbFlush FAIL] error={ex.Message}");
+                }
+                return true;
+
+            default:
+                Log($"[Event SKIP] unsupported event type: {ev.EventType}");
+                return true;
+        }
+    }
+
+    private async Task<bool> WaitRegisterConditionAsync(
+        string tag,
+        uint address,
+        uint mask,
+        uint expected,
+        int timeoutMs,
+        CancellationToken token)
+    {
+        var deadline = DateTime.Now.AddMilliseconds(timeoutMs);
+        uint? lastValue = null;
+        Log($"[{tag} START] addr=0x{address:X8}, mask=0x{mask:X8}, expected=0x{expected:X8}, timeout={timeoutMs}ms");
+
+        while (DateTime.Now < deadline)
+        {
+            if (token.IsCancellationRequested)
+            {
+                Log($"[{tag} STOP] canceled");
+                return false;
+            }
+
+            try
+            {
+                var r = await _serial.SendCommandAsync($"read 0x{address:X}");
+                if (r.StartsWith("OK "))
+                {
+                    var val = Convert.ToUInt32(r[3..].Trim(), 16);
+                    lastValue = val;
+                    if ((val & mask) == expected)
+                    {
+                        Log($"[{tag} PASS] addr=0x{address:X8}, value=0x{val:X8}");
+                        return true;
+                    }
+                }
+                else
+                {
+                    Log($"[{tag} READ] addr=0x{address:X8}, response={r}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[{tag} RETRY] addr=0x{address:X8}, error={ex.Message}");
+            }
+
+            try { await Task.Delay(200, token).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                Log($"[{tag} STOP] canceled");
+                return false;
+            }
+        }
+
+        var last = lastValue.HasValue ? $"0x{lastValue.Value:X8}" : "no valid read";
+        Log($"[{tag} FAIL] addr=0x{address:X8}, timeout={timeoutMs}ms, last={last}");
+        return false;
+    }
+
+    private bool EnsureSerialOpen(string tag)
+    {
+        if (_serial.IsOpen) return true;
+        Log($"[{tag} FAIL] serial port is not open. Connect HyperTerminal first.");
+        return false;
     }
 
     /// <summary>이벤트 실행. 정상완료=true, 취소/타임아웃중단=false</summary>
@@ -674,7 +912,7 @@ public class SendViewModel : ViewModelBase
         }
 
         var apiStatus = "";
-        if (System.Windows.Application.Current is App app)
+        if (System.Windows.Application.Current is App app && app.LabServer != null)
             apiStatus = app.LabServer.IsRunning
                 ? $" | API :{app.LabServer.Port} ●"
                 : " | API 시작 실패 ✕";

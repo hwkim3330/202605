@@ -112,11 +112,70 @@ public class CaptureRow
 {
     public int    No       { get; init; }
     public string Time     { get; init; } = string.Empty;
+    public string InterfaceName { get; init; } = string.Empty;
     public string SrcMac   { get; init; } = string.Empty;
     public string DstMac   { get; init; } = string.Empty;
+    public string Source   { get; init; } = string.Empty;
+    public string Destination { get; init; } = string.Empty;
     public string Protocol { get; init; } = string.Empty;
     public int    Length   { get; init; }
     public string Info     { get; init; } = string.Empty;
+    public string DetailText { get; init; } = string.Empty;
+    public string HexDump { get; init; } = string.Empty;
+    public byte[] RawData { get; init; } = Array.Empty<byte>();
+    public string HexPreview => RawData.Length == 0
+        ? string.Empty
+        : string.Join(" ", RawData.Take(Math.Min(32, RawData.Length)).Select(b => b.ToString("X2")));
+    public string SearchText =>
+        $"{No} {Time} {InterfaceName} {SrcMac} {DstMac} {Source} {Destination} {Protocol} {Length} {Info} {HexPreview}".ToLowerInvariant();
+}
+
+public class CaptureInterfaceItem : INotifyPropertyChanged
+{
+    private bool _isSelected;
+
+    public ILiveDevice Device { get; init; } = null!;
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string State { get; init; } = string.Empty;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+public class CaptureInterfaceFilterItem : INotifyPropertyChanged
+{
+    private bool _isChecked = true;
+
+    public string InterfaceName { get; init; } = string.Empty;
+
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (_isChecked == value) return;
+            _isChecked = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
 // ── HTTP DTO types ────────────────────────────────────────────────────────────

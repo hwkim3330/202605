@@ -43,6 +43,9 @@ public class HyperTerminalViewModel : ViewModelBase
         {
             SetProperty(ref _isConnected, value);
             OnPropertyChanged(nameof(ConnectLabel));
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(
+                System.Windows.Input.CommandManager.InvalidateRequerySuggested,
+                System.Windows.Threading.DispatcherPriority.Background);
         }
     }
 
@@ -172,5 +175,58 @@ public class HyperTerminalViewModel : ViewModelBase
     {
         var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
         TerminalOutput += $"[{timestamp}]  {line}\n";
+    }
+
+    public void RefreshPortsForApi() => RefreshPorts();
+
+    public void ConnectForApi(string portName, int baudRate)
+    {
+        RefreshPorts();
+        SelectedPortInfo = PortInfos.FirstOrDefault(p =>
+            p.PortName.Equals(portName, StringComparison.OrdinalIgnoreCase));
+        SelectedBaudRate = baudRate;
+
+        if (SelectedPortInfo == null || SelectedPortInfo == NoPortItem)
+            throw new InvalidOperationException($"Port not found: {portName}");
+
+        if (IsConnected)
+            _serial.Close();
+
+        _serial.Open(SelectedPortInfo.PortName, SelectedBaudRate, Parity.None, 8, StopBits.One);
+        IsConnected = true;
+        ConnectionStatus = $"{SelectedPortInfo.PortName}  {SelectedBaudRate}bps";
+        AppendTerminal($"[connected: {SelectedPortInfo.DisplayName} @ {SelectedBaudRate}bps]");
+    }
+
+    public void DisconnectForApi()
+    {
+        _serial.Close();
+        IsConnected = false;
+        ConnectionStatus = "Disconnected";
+        AppendTerminal("[disconnected]");
+    }
+
+    public void SendForApi(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        AppendTerminal($"> {text}");
+        _serial.SendLine(text);
+    }
+
+    public void ClearForApi() => TerminalOutput = string.Empty;
+
+    public object GetSnapshot()
+    {
+        RefreshPorts();
+        return new
+        {
+            ports = PortInfos.Select(p => new { p.PortName, p.DisplayName }).ToList(),
+            baudRates = BaudRates.ToList(),
+            selectedPort = SelectedPortInfo?.PortName ?? string.Empty,
+            selectedBaudRate = SelectedBaudRate,
+            isConnected = IsConnected,
+            connectionStatus = ConnectionStatus,
+            terminalOutput = TerminalOutput
+        };
     }
 }

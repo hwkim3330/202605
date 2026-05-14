@@ -13,17 +13,34 @@
 
         <!-- ── 하단 툴바 ─────────────────────────────────────────────── -->
         <StackPanel DockPanel.Dock="Bottom" Margin="4,2,4,4">
+            <!-- 그룹/TC 조작 -->
             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                 <Button Content="+ Group" Height="22" Padding="6,0"
                         ToolTip="새 그룹 추가" Command="{Binding AddGroupCommand}"/>
                 <Button Content="−" Width="26" Height="22" Margin="3,0,0,0"
                         ToolTip="선택한 TC 또는 그룹 삭제" Command="{Binding DeleteCommand}"/>
-                <Button Content="열기" Height="22" Padding="6,0" Margin="3,0,0,0"
-                        ToolTip="TC 파일 열기" Command="{Binding LoadFileCommand}"/>
-                <Button Content="저장" Height="22" Padding="6,0" Margin="3,0,0,0"
-                        ToolTip="TC 파일로 저장" Command="{Binding SaveFileCommand}"/>
             </StackPanel>
-            <Button Content="SAVE TC" Height="22"
+            <!-- 파일 조작 -->
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                <Button Content="Open .tcs" Height="22" Padding="6,0"
+                        ToolTip="TC 파일 열기" Command="{Binding LoadFileCommand}"/>
+                <Button Content="Save .tcs" Height="22" Padding="6,0" Margin="3,0,0,0"
+                        ToolTip="TC 파일로 저장" Command="{Binding SaveFileCommand}"/>
+                <Button Content="Open CSV" Height="22" Padding="6,0" Margin="3,0,0,0"
+                        ToolTip="시나리오 CSV 열기" Command="{Binding LoadScenarioSheetCommand}"/>
+                <Button Content="Save CSV" Height="22" Padding="6,0" Margin="3,0,0,0"
+                        ToolTip="시나리오 CSV 저장" Command="{Binding SaveScenarioSheetCommand}"/>
+            </StackPanel>
+            <!-- TC CSV 임포트 -->
+            <Button Content="Import TC CSV" Height="22" Padding="6,0"
+                    HorizontalAlignment="Stretch"
+                    ToolTip="TC.csv / TC1.csv 파일을 TC로 임포트 (TC_Packets.csv 자동 연결)"
+                    Command="{Binding ImportTcCsvCommand}"/>
+            <!-- 현재 시퀀스 저장 -->
+            <Button Content="Save Sequence → TC" Height="26"
+                    HorizontalAlignment="Stretch"
+                    Padding="6,2"
+                    FontSize="11"
                     ToolTip="현재 PACKET LIST를 선택한 TC에 저장"
                     Command="{Binding SaveTcCommand}"/>
         </StackPanel>
@@ -34,6 +51,73 @@
                    Margin="4,0,4,2" TextTrimming="CharacterEllipsis"/>
 
         <!-- ── 그룹 목록 ─────────────────────────────────────────────── -->
+        <Border DockPanel.Dock="Bottom"
+                Height="300"
+                Margin="4,2,4,4"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="6">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <DockPanel Grid.Row="0" Margin="0,0,0,4">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="SCENARIO RX RESULT"
+                               FontWeight="SemiBold"
+                               FontSize="11"
+                               Foreground="{StaticResource AccentBrush}"
+                               VerticalAlignment="Center"/>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="FDB Sheet" Height="22" Padding="6,0" Margin="2,0"
+                                Command="{Binding LoadFdbScenarioSheetCommand}"/>
+                        <Button Content="Add" Height="22" Padding="6,0" Margin="2,0"
+                                Command="{Binding AddScenarioRowCommand}"/>
+                        <Button Content="Del" Height="22" Padding="6,0" Margin="2,0"
+                                Command="{Binding DeleteScenarioRowCommand}"/>
+                        <Button Content="Apply" Height="22" Padding="6,0" Margin="2,0"
+                                Command="{Binding ApplyScenarioSheetCommand}"/>
+                        <Button Content="Validate RX" Height="22" Padding="6,0" Margin="2,0"
+                                Command="{Binding ValidateCaptureCommand}"/>
+                    </StackPanel>
+                </DockPanel>
+
+                <TextBlock Grid.Row="1"
+                           Text="{Binding RxPortMappingText}"
+                           Foreground="{StaticResource MutedForeground}"
+                           FontSize="10"
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,0,0,4"/>
+
+                <DataGrid Grid.Row="2"
+                          ItemsSource="{Binding ScenarioRows}"
+                          SelectedItem="{Binding SelectedScenarioRow, Mode=TwoWay}"
+                          AutoGenerateColumns="False"
+                          CanUserAddRows="False"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="Horizontal"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          RowHeight="26">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="TC" Binding="{Binding TC_ID}" Width="42"/>
+                        <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="42"/>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="150"/>
+                        <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="78"/>
+                        <DataGridTextColumn Header="Dst/Value" Binding="{Binding Value}" Width="122"/>
+                        <DataGridTextColumn Header="Expected" Binding="{Binding Expected}" Width="90"/>
+                        <DataGridTextColumn Header="RX Observed" Binding="{Binding Observed}" Width="*"/>
+                        <DataGridTextColumn Header="Result" Binding="{Binding Result}" Width="72"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
         <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding Groups}"

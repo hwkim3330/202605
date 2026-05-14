@@ -224,7 +224,7 @@
                             <TextBlock Text="Raw Payload" FontWeight="Bold"
                                        Foreground="{StaticResource AccentBrush}" Margin="0,0,0,8"/>
                             <Label Content="Data (hex)"/>
-                            <TextBox Text="{Binding DataHex, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox Text="{Binding DataHex, UpdateSourceTrigger=LostFocus}"
                                      Height="80" TextWrapping="Wrap" AcceptsReturn="True"/>
                         </StackPanel>
                     </DataTemplate>

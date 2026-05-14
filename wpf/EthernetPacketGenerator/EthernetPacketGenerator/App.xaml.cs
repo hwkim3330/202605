@@ -8,7 +8,9 @@ namespace EthernetPacketGenerator;
 
 public partial class App : Application
 {
-    public LabApiServer LabServer { get; } = new(8080);
+    private const int ApiPort = 8080;
+
+    public LabApiServer? LabServer { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -19,19 +21,25 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
 
-        // 방화벽 규칙 확인은 백그라운드에서 — UI 블로킹 방지
-        Task.Run(() => EnsureFirewallRule("EthernetPacketGenerator API", 8080));
+        // 방화벽 규칙은 백그라운드에서 처리 (UI 블로킹 방지)
+        Task.Run(() => EnsureFirewallRule("EthernetPacketGenerator API", ApiPort));
 
-        try { LabServer.Start(); }
+        LabServer = new LabApiServer(ApiPort);
+        try
+        {
+            LabServer.Start();
+        }
         catch (Exception ex)
         {
-            // 포트 충돌이면 기존 프로세스가 이미 8080을 점유 중
             MessageBox.Show(
-                $"포트 8080을 바인드할 수 없습니다:\n{ex.Message}\n\n이전 EthernetPacketGenerator 인스턴스가 실행 중일 수 있습니다.",
-                "서버 시작 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                $"포트 {ApiPort}을 바인드할 수 없습니다:\n{ex.Message}\n\n다른 프로그램이 이미 해당 포트를 사용 중일 수 있습니다.",
+                "서버 시작 오류",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            LabServer.Dispose();
+            LabServer = null;
         }
 
-        // MainWindow 직접 생성 (StartupUri 제거)
         MainWindow mainWindow;
         try
         {
@@ -41,7 +49,9 @@ public partial class App : Application
         {
             MessageBox.Show(
                 $"앱 초기화 오류:\n{ex.Message}\n\n{ex.StackTrace}",
-                "시작 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                "시작 오류",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
             Shutdown(1);
             return;
         }
@@ -49,63 +59,54 @@ public partial class App : Application
         MainWindow = mainWindow;
         mainWindow.Show();
 
-        if (mainWindow.DataContext is ViewModels.MainViewModel vm)
+        if (LabServer != null && mainWindow.DataContext is ViewModels.MainViewModel vm)
+        {
+            LabServer.MainVm = vm;
             LabServer.AutomationVm = vm.AutomationVM;
+            LabServer.CaptureVm = vm.CaptureVM;
+            LabServer.HyperTerminalVm = vm.HyperTerminalVM;
+        }
     }
 
-    // 방화벽 인바운드 규칙이 없을 때만 UAC 프롬프트를 띄워 한 번 추가한다.
     private static void EnsureFirewallRule(string ruleName, int port)
     {
         try
         {
-            // 규칙 존재 여부 확인 (관리자 권한 불필요)
-            var check = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName               = "netsh",
-                    Arguments              = $"advfirewall firewall show rule name=\"{ruleName}\"",
-                    UseShellExecute        = false,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow         = true
-                }
-            };
-            check.Start();
-            check.StandardOutput.ReadToEnd();
-            check.WaitForExit();
+            var check = new ProcessStartInfo("netsh",
+                $"advfirewall firewall show rule name=\"{ruleName}\"")
+            { CreateNoWindow = true, UseShellExecute = false, RedirectStandardOutput = true };
+            using var p = Process.Start(check);
+            p?.WaitForExit(3000);
+            if (p?.ExitCode == 0) return;
 
-            if (check.ExitCode == 0) return; // 이미 규칙 있음
-
-            // 규칙 없음 → UAC 권한 상승으로 추가 (최초 1회)
-            Process.Start(new ProcessStartInfo
-            {
-                FileName        = "netsh",
-                Arguments       = $"advfirewall firewall add rule name=\"{ruleName}\" " +
-                                  $"dir=in action=allow protocol=TCP localport={port}",
-                UseShellExecute = true,
-                Verb            = "runas",
-                CreateNoWindow  = true
-            })?.WaitForExit();
+            var add = new ProcessStartInfo("netsh",
+                $"advfirewall firewall add rule name=\"{ruleName}\" protocol=TCP dir=in localport={port} action=allow")
+            { CreateNoWindow = true, UseShellExecute = true, Verb = "runas" };
+            using var p2 = Process.Start(add);
+            p2?.WaitForExit(5000);
         }
-        catch { /* 방화벽 추가 실패 시 무시 — 수동 허용 필요 */ }
+        catch { }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        LabServer.Dispose();
+        LabServer?.Dispose();
         base.OnExit(e);
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        MessageBox.Show($"오류가 발생했습니다:\n{e.Exception.Message}\n\n{e.Exception.StackTrace}",
-            "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+        MessageBox.Show(
+            $"Unhandled error:\n{e.Exception.Message}\n\n{e.Exception.StackTrace}",
+            "Error",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
         e.Handled = true;
     }
 
     private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         if (e.ExceptionObject is Exception ex)
-            MessageBox.Show($"심각한 오류:\n{ex.Message}", "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Fatal error:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
     }
 }

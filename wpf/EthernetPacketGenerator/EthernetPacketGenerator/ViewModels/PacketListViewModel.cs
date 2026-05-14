@@ -92,11 +92,12 @@ public class PacketListViewModel : ViewModelBase
         }
     }
 
-    public ICommand AddPacketCommand       { get; }
-    public ICommand DeleteItemCommand      { get; }
-    public ICommand DuplicatePacketCommand { get; }
-    public ICommand MoveUpCommand          { get; }
-    public ICommand MoveDownCommand        { get; }
+    public ICommand AddPacketCommand          { get; }
+    public ICommand DeleteItemCommand         { get; }
+    public ICommand DeleteCheckedItemsCommand { get; }
+    public ICommand DuplicatePacketCommand    { get; }
+    public ICommand MoveUpCommand             { get; }
+    public ICommand MoveDownCommand           { get; }
     public ICommand AddDelayEventCommand    { get; }
     public ICommand AddRegWriteCommand      { get; }
     public ICommand AddRegReadCommand       { get; }
@@ -108,9 +109,10 @@ public class PacketListViewModel : ViewModelBase
 
     public PacketListViewModel()
     {
-        AddPacketCommand       = new RelayCommand(AddPacket);
-        DeleteItemCommand      = new RelayCommand(DeleteItem,      () => SelectedSequenceItem != null);
-        DuplicatePacketCommand = new RelayCommand(DuplicatePacket, () => SelectedPacket != null);
+        AddPacketCommand          = new RelayCommand(AddPacket);
+        DeleteItemCommand         = new RelayCommand(DeleteItem,         () => SelectedSequenceItem != null);
+        DeleteCheckedItemsCommand = new RelayCommand(DeleteCheckedItems, () => Sequence.Any(s => s.IsChecked));
+        DuplicatePacketCommand    = new RelayCommand(DuplicatePacket,    () => SelectedPacket != null);
         MoveUpCommand          = new RelayCommand(MoveUp,          CanMoveUp);
         MoveDownCommand        = new RelayCommand(MoveDown,        CanMoveDown);
         AddDelayEventCommand    = new RelayCommand(AddDelayEvent);
@@ -167,6 +169,21 @@ public class PacketListViewModel : ViewModelBase
 
         if (Sequence.Count > 0)
             SelectedSequenceItem = Sequence[Math.Max(0, idx - 1)];
+        else
+            SelectedSequenceItem = null;
+    }
+
+    private void DeleteCheckedItems()
+    {
+        var toRemove = Sequence.Where(s => s.IsChecked).ToList();
+        if (toRemove.Count == 0) return;
+
+        int firstIdx = Sequence.IndexOf(toRemove[0]);
+        foreach (var item in toRemove)
+            Sequence.Remove(item);
+
+        if (Sequence.Count > 0)
+            SelectedSequenceItem = Sequence[Math.Min(firstIdx, Sequence.Count - 1)];
         else
             SelectedSequenceItem = null;
     }
